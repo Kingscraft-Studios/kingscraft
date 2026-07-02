@@ -10,6 +10,8 @@
 #include <memory>
 #include <glm/glm.hpp>
 
+#include "Vulkan/App.hpp"
+
 namespace lve {
 
     class WorldScreen : public Screen {
@@ -36,7 +38,7 @@ namespace lve {
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
         std::unique_ptr<Pipeline> pipeline_;
 
-        std::unique_ptr<World> world_;
+        World* world_ = App::get().getWorld();
 
         Camera camera_;
         UiFpsCounter fpsCounter_;

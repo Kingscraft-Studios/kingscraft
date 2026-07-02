@@ -12,10 +12,16 @@ namespace lve {
         // World / terrain
         int renderDistance = 10;
 
+        int chunkSize = 16;
+        int worldHeight = 24;
+        
+        // Derived
+        float farPlaneCalc = renderDistance * chunkSize;
+
         // Camera
         float fov = 70.0f;
         float nearPlane = 0.1f;
-        float farPlane = 1000.0f;
+        float farPlane = farPlaneCalc * 1.5f;
 
         // Performance toggles
         bool vsync = false;

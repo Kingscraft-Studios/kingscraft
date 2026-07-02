@@ -14,6 +14,8 @@
 #include "Core/KeyBindHandler.hpp"
 #include <memory>
 
+#include "Core/World/World.hpp"
+#include "Renderer/RendererSettings.hpp"
 #include "Util/TimeUtil.hpp"
 
 namespace lve {
@@ -52,6 +54,7 @@ namespace lve {
         KeyBindHandler& getKeyBindHandler() { return *keybinds_; }
         PostProcessing& getPostProcessor() { return *postProcessor_; }
         TextureCache& getTextureCache() { return *textureCache_; }
+        World* getWorld() { return world_.get(); }
         VkExtent2D getExtent() { return window.getExtent(); }
         double getCpuFrameTimeMs() const { return cpuFrameTimeMs_; }
         double getCpuTickMs() const { return cpuTickMs_; }
@@ -73,6 +76,7 @@ namespace lve {
         std::unique_ptr<UiWrapper> uiSystem = std::make_unique<UiWrapper>();
         std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
         std::unique_ptr<KeyBindHandler> keybinds_ = std::make_unique<KeyBindHandler>();
+        std::unique_ptr<World> world_ = std::make_unique<World>(device, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
         static constexpr double TICK_RATE = 100.0;
         static constexpr double TICK_INTERVAL = 1.0 / TICK_RATE;
 

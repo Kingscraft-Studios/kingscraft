@@ -59,6 +59,8 @@ namespace lve {
         void setWindowClose() {glfwSetWindowShouldClose(window, GLFW_TRUE);}
         void setIcon(unsigned char* pixels, int width, int height);
 
+        void setCursorType(int mode, int value) { glfwSetInputMode(window, mode, value); }
+
     private:
         static void framebufferResizeCallback(GLFWwindow *window, int width, int height);
 

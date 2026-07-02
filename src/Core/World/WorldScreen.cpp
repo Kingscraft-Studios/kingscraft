@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <cassert>
 #include <thread>
+#include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace lve {
@@ -40,15 +41,12 @@ namespace lve {
         lastDisableTextures_ = RendererSettings::get().disableTextures;
         createPipeline(lastDisableTextures_);
 
-        // Create world (chunks will load on first tick)
-        world_ = std::make_unique<World>(device, 16, 24);
-
         float aspect = static_cast<float>(extent_.width) / static_cast<float>(extent_.height);
         camera_.setAspectRatio(aspect);
         camera_.setPosition({67.5f, 15.0f, 67.5f});
         camera_.setRotation(0.0f, -35.0f);
 
-        glfwSetInputMode(window.getGLFWWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        window.setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         keybinds.setLayerEnabled(BindLayer::UI, false);
         fpsCounter_.init(App::get().getUiSystem());
         App::get().getUiSystem().resize(static_cast<int>(extent_.width),
@@ -119,6 +117,7 @@ namespace lve {
 
         float chunkSize = static_cast<float>(world_->getChunkSize() - 1);
         float worldHeight = static_cast<float>(world_->getHeight());
+        glm::vec3 halfExtents(chunkSize * 0.5f, worldHeight * 0.5f, chunkSize * 0.5f);
 
         // Terrain GPU timestamp start
         uint32_t qi = ctx.frameIndex * 4;
@@ -127,8 +126,17 @@ namespace lve {
         double frustumTime = 0.0;
         double drawTime = 0.0;
 
+        // Collect visible chunks
+        std::vector<Chunk*> visible;
+        visible.reserve(world_->getLoadedChunks().size());
+
         if (settings.enableFrustumCulling) {
-            struct FrustumPlane { glm::vec3 normal; float d; };
+
+            struct FrustumPlane {
+                glm::vec3 normal;
+                float d;
+            };
+
             auto extractPlanes = [](const glm::mat4& m) -> std::array<FrustumPlane, 6> {
                 std::array<FrustumPlane, 6> p;
                 p[0] = {glm::vec3(m[0][3] + m[0][0], m[1][3] + m[1][0], m[2][3] + m[2][0]), m[3][3] + m[3][0]};
@@ -152,7 +160,7 @@ namespace lve {
                 glm::vec3 min = origin;
                 glm::vec3 max = origin + glm::vec3(chunkSize, worldHeight, chunkSize);
 
-                bool visible = true;
+                bool inside = true;
                 for (const auto& plane : frustum) {
                     glm::vec3 pv{
                         plane.normal.x >= 0 ? max.x : min.x,
@@ -160,20 +168,38 @@ namespace lve {
                         plane.normal.z >= 0 ? max.z : min.z,
                     };
                     if (glm::dot(plane.normal, pv) + plane.d < 0) {
-                        visible = false;
+                        inside = false;
                         break;
                     }
                 }
-                if (!visible) continue;
-
-                double drawStart = TimeUtil::uptimeSeconds();
-                chunk->bindAndDraw(ctx.cmd);
-                drawTime += TimeUtil::uptimeSeconds() - drawStart;
+                if (!inside) continue;
+                if (chunk->getIndexCount() == 0) continue;
+                visible.push_back(chunk);
             }
-            frustumTime = TimeUtil::uptimeSeconds() - frustumStart - drawTime;
+            frustumTime = TimeUtil::uptimeSeconds() - frustumStart;
         } else {
-            auto drawStart = TimeUtil::uptimeSeconds();
             for (Chunk* chunk : world_->getLoadedChunks()) {
+                if (chunk->getIndexCount() == 0) continue;
+                visible.push_back(chunk);
+            }
+        }
+
+        // Sort front-to-back by center distance (squared, no sqrt needed)
+        if (!visible.empty()) {
+            glm::vec3 camPos = camera_.getPosition();
+            std::sort(visible.begin(), visible.end(),
+                [camPos, halfExtents](Chunk* a, Chunk* b) {
+                    glm::vec3 da = (a->getWorldOrigin() + halfExtents) - camPos;
+                    glm::vec3 db = (b->getWorldOrigin() + halfExtents) - camPos;
+                    return da.x * da.x + da.y * da.y + da.z * da.z <
+                           db.x * db.x + db.y * db.y + db.z * db.z;
+                });
+        }
+
+        // Draw sorted
+        {
+            auto drawStart = TimeUtil::uptimeSeconds();
+            for (Chunk* chunk : visible) {
                 chunk->bindAndDraw(ctx.cmd);
             }
             drawTime = TimeUtil::uptimeSeconds() - drawStart;
@@ -203,7 +229,6 @@ namespace lve {
             glfwSetInputMode(App::get().getWindow().getGLFWWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             cursorCaptured_ = false;
         }
-        world_.reset();
         pipeline_.reset();
         if (pipelineLayout_ != VK_NULL_HANDLE) {
             vkDestroyPipelineLayout(App::get().getDevice().device(), pipelineLayout_, nullptr);

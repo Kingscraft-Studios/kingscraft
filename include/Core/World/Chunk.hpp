@@ -51,6 +51,7 @@ namespace lve {
 
         std::vector<ChunkVertex>& vertices() { return vertices_; }
         std::vector<uint16_t>& indices() { return indices_; }
+        uint32_t getIndexCount() const { return indexCount_; }
 
         void upload();
         void bindAndDraw(VkCommandBuffer cmd);
