@@ -5,6 +5,26 @@
 #include <cmath>
 #include <cstdint>
 
+namespace {
+
+    std::vector<uint8_t> extractEdgeStrip(const std::vector<uint8_t>& src, int N, int h, int edgeDir) {
+        std::vector<uint8_t> strip(static_cast<size_t>(h) * N, 0);
+        if (edgeDir < 2) {
+            int x = (edgeDir == 0) ? 0 : (N - 1);
+            for (int y = 0; y < h; ++y)
+                for (int z = 0; z < N; ++z)
+                    strip[static_cast<size_t>(y) * N + z] = src[static_cast<size_t>(y) * N * N + z * N + x];
+        } else {
+            int z = (edgeDir == 2) ? 0 : (N - 1);
+            for (int y = 0; y < h; ++y)
+                for (int xc = 0; xc < N; ++xc)
+                    strip[static_cast<size_t>(y) * N + xc] = src[static_cast<size_t>(y) * N * N + z * N + xc];
+        }
+        return strip;
+    }
+
+} // namespace
+
 namespace lve {
 
     World::World(Device& device, int chunkSize, int height)
@@ -46,6 +66,8 @@ namespace lve {
         int N = chunkSize_;
         int h = height_;
         uint8_t grassId = static_cast<uint8_t>(Blocks::GRASS_BLOCK.getId());
+        uint8_t dirtId = static_cast<uint8_t>(Blocks::DIRT.getId());
+        uint8_t stoneId = static_cast<uint8_t>(Blocks::STONE.getId());
 
         std::vector<uint8_t> blockIds(static_cast<size_t>(N) * h * N, 0);
 
@@ -60,11 +82,38 @@ namespace lve {
                 int top = std::max(0, std::min(h - 1, static_cast<int>(surface)));
 
                 blockIds[static_cast<size_t>(top) * N * N + z * N + x] = grassId;
+                for (int dy = 1; dy <= 2 && top - dy >= 0; ++dy)
+                    blockIds[static_cast<size_t>(top - dy) * N * N + z * N + x] = dirtId;
+                for (int y = top - 3; y >= 0; --y)
+                    blockIds[static_cast<size_t>(y) * N * N + z * N + x] = stoneId;
             }
         }
 
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex_);
+            blockCache_[packKey(gridX, gridZ)] = blockIds;
+        }
+
+        std::vector<uint8_t> edgePosX, edgeNegX, edgePosZ, edgeNegZ;
+        const std::vector<uint8_t>* pEdgePosX = nullptr;
+        const std::vector<uint8_t>* pEdgeNegX = nullptr;
+        const std::vector<uint8_t>* pEdgePosZ = nullptr;
+        const std::vector<uint8_t>* pEdgeNegZ = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex_);
+            auto it = blockCache_.find(packKey(gridX + 1, gridZ));
+            if (it != blockCache_.end()) { edgePosX = extractEdgeStrip(it->second, N, h, 0); pEdgePosX = &edgePosX; }
+            it = blockCache_.find(packKey(gridX - 1, gridZ));
+            if (it != blockCache_.end()) { edgeNegX = extractEdgeStrip(it->second, N, h, 1); pEdgeNegX = &edgeNegX; }
+            it = blockCache_.find(packKey(gridX, gridZ + 1));
+            if (it != blockCache_.end()) { edgePosZ = extractEdgeStrip(it->second, N, h, 2); pEdgePosZ = &edgePosZ; }
+            it = blockCache_.find(packKey(gridX, gridZ - 1));
+            if (it != blockCache_.end()) { edgeNegZ = extractEdgeStrip(it->second, N, h, 3); pEdgeNegZ = &edgeNegZ; }
+        }
+
         auto chunk = std::make_unique<Chunk>(device_, glm::ivec2(gridX, gridZ), N, 1.0f);
-        ChunkMesher::generate(*chunk, blockIds, h);
+        ChunkMesher::generate(*chunk, blockIds, h,
+                              pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
         chunk->upload();
 
         chunks_[packKey(gridX, gridZ)] = std::move(chunk);
@@ -77,6 +126,10 @@ namespace lve {
         int idx = static_cast<int>(frameCount_ % pendingCleanup_.size());
         pendingCleanup_[idx].push_back(std::move(it->second));
         chunks_.erase(it);
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex_);
+            blockCache_.erase(packKey(gridX, gridZ));
+        }
         chunkCacheDirty_ = true;
     }
 
@@ -91,6 +144,8 @@ namespace lve {
     void World::genThreadFunc() {
         TerrainGenerator noise(1337);
         uint8_t grassId = static_cast<uint8_t>(Blocks::GRASS_BLOCK.getId());
+        uint8_t dirtId = static_cast<uint8_t>(Blocks::DIRT.getId());
+        uint8_t stoneId = static_cast<uint8_t>(Blocks::STONE.getId());
 
         while (genRunning_) {
             std::pair<int, int> task;
@@ -121,11 +176,38 @@ namespace lve {
                     float surface = 8.0f + noise.getHeight(wx, wz);
                     int top = std::max(0, std::min(h - 1, static_cast<int>(surface)));
                     blockIds[static_cast<size_t>(top) * N * N + z * N + x] = grassId;
+                    for (int dy = 1; dy <= 2 && top - dy >= 0; ++dy)
+                        blockIds[static_cast<size_t>(top - dy) * N * N + z * N + x] = dirtId;
+                    for (int y = top - 3; y >= 0; --y)
+                        blockIds[static_cast<size_t>(y) * N * N + z * N + x] = stoneId;
                 }
             }
 
+            {
+                std::lock_guard<std::mutex> lock(cacheMutex_);
+                blockCache_[packKey(gx, gz)] = blockIds;
+            }
+
+            std::vector<uint8_t> edgePosX, edgeNegX, edgePosZ, edgeNegZ;
+            const std::vector<uint8_t>* pEdgePosX = nullptr;
+            const std::vector<uint8_t>* pEdgeNegX = nullptr;
+            const std::vector<uint8_t>* pEdgePosZ = nullptr;
+            const std::vector<uint8_t>* pEdgeNegZ = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(cacheMutex_);
+                auto it = blockCache_.find(packKey(gx + 1, gz));
+                if (it != blockCache_.end()) { edgePosX = extractEdgeStrip(it->second, N, h, 0); pEdgePosX = &edgePosX; }
+                it = blockCache_.find(packKey(gx - 1, gz));
+                if (it != blockCache_.end()) { edgeNegX = extractEdgeStrip(it->second, N, h, 1); pEdgeNegX = &edgeNegX; }
+                it = blockCache_.find(packKey(gx, gz + 1));
+                if (it != blockCache_.end()) { edgePosZ = extractEdgeStrip(it->second, N, h, 2); pEdgePosZ = &edgePosZ; }
+                it = blockCache_.find(packKey(gx, gz - 1));
+                if (it != blockCache_.end()) { edgeNegZ = extractEdgeStrip(it->second, N, h, 3); pEdgeNegZ = &edgeNegZ; }
+            }
+
             Chunk tempChunk(device_, glm::ivec2(gx, gz), N, 1.0f);
-            ChunkMesher::generate(tempChunk, blockIds, h);
+            ChunkMesher::generate(tempChunk, blockIds, h,
+                                  pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
 
             ChunkGenResult result;
             result.gx = gx;

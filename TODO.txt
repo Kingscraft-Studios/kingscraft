@@ -82,3 +82,7 @@ Per block:
 Note: updateUniforms() takes one BloomElement per frame; the blur UBO
 (radius/intensity/sigma/kernelSize) is overwritten each call, so batch
 by identical blur profiles if you want distinct settings per object group.
+
+----------------------------------------------------------------------------
+
+Add a FXAA or MSAA to fix geometry Aliasing of the voxel grid itself or fade far chunks into a Fog to Hide

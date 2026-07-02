@@ -13,7 +13,7 @@ namespace lve {
         int renderDistance = 10;
 
         int chunkSize = 16;
-        int worldHeight = 24;
+        int worldHeight = 100;
         
         // Derived
         float farPlaneCalc = renderDistance * chunkSize;

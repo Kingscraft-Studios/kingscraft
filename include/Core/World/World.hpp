@@ -70,6 +70,9 @@ namespace lve {
         std::deque<ChunkGenResult> completedGen_;
         std::unordered_set<uint64_t> pendingRequests_;
 
+        std::unordered_map<uint64_t, std::vector<uint8_t>> blockCache_;
+        mutable std::mutex cacheMutex_;
+
         mutable std::vector<Chunk*> chunkCache_;
         mutable bool chunkCacheDirty_ = false;
     };

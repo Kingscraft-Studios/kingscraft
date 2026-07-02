@@ -2,6 +2,8 @@
 
 #include "Core/Blocks/AirBlock.hpp"
 #include "Core/Blocks/GrassBlock.hpp"
+#include "Core/Blocks/StoneBlock.hpp"
+#include "Core/Blocks/DirtBlock.hpp"
 #include "Core/Resources/ModelParser.hpp"
 #include "Bus/MessageBus.hpp"
 #include "Threads/Logger.hpp"
@@ -34,11 +36,21 @@ namespace lve {
 
             if (key == GRASS_BLOCK)
                 r.reg(GRASS_BLOCK, std::make_unique<GrassBlock>(std::move(model)));
+            else if (key == STONE)
+                r.reg(STONE, std::make_unique<StoneBlock>(std::move(model)));
+            else if (key == DIRT)
+                r.reg(DIRT, std::make_unique<DirtBlock>(std::move(model)));
             pending--;
         };
 
         ModelParser::loadAsync("resources/models/block/grass_block.json",
             [&onModel](BlockModel model) { onModel(Blocks::GRASS_BLOCK, std::move(model)); });
+        pending++;
+        ModelParser::loadAsync("resources/models/block/stone_block.json",
+            [&onModel](BlockModel model) { onModel(Blocks::STONE, std::move(model)); });
+        pending++;
+        ModelParser::loadAsync("resources/models/block/dirt_block.json",
+            [&onModel](BlockModel model) { onModel(Blocks::DIRT, std::move(model)); });
         pending++;
 
         while (pending > 0) {

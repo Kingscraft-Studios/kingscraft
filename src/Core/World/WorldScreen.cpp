@@ -1,4 +1,5 @@
 #include "Core/World/WorldScreen.hpp"
+#include "Core/Frustum.hpp"
 #include "Vulkan/App.hpp"
 #include "Vulkan/TextureCache.hpp"
 #include "Renderer/Renderer.hpp"
@@ -13,7 +14,6 @@
 #include <cassert>
 #include <thread>
 #include <algorithm>
-#include <glm/gtc/matrix_transform.hpp>
 
 namespace lve {
 
@@ -25,7 +25,6 @@ namespace lve {
     }
 
     void WorldScreen::init() {
-        auto& device = App::get().getDevice();
         auto& keybinds = App::get().getKeyBindHandler();
         auto& window = App::get().getWindow();
         auto& textureCache = App::get().getTextureCache();
@@ -131,48 +130,13 @@ namespace lve {
         visible.reserve(world_->getLoadedChunks().size());
 
         if (settings.enableFrustumCulling) {
-
-            struct FrustumPlane {
-                glm::vec3 normal;
-                float d;
-            };
-
-            auto extractPlanes = [](const glm::mat4& m) -> std::array<FrustumPlane, 6> {
-                std::array<FrustumPlane, 6> p;
-                p[0] = {glm::vec3(m[0][3] + m[0][0], m[1][3] + m[1][0], m[2][3] + m[2][0]), m[3][3] + m[3][0]};
-                p[1] = {glm::vec3(m[0][3] - m[0][0], m[1][3] - m[1][0], m[2][3] - m[2][0]), m[3][3] - m[3][0]};
-                p[2] = {glm::vec3(m[0][3] + m[0][1], m[1][3] + m[1][1], m[2][3] + m[2][1]), m[3][3] + m[3][1]};
-                p[3] = {glm::vec3(m[0][3] - m[0][1], m[1][3] - m[1][1], m[2][3] - m[2][1]), m[3][3] - m[3][1]};
-                p[4] = {glm::vec3(m[0][3] + m[0][2], m[1][3] + m[1][2], m[2][3] + m[2][2]), m[3][3] + m[3][2]};
-                p[5] = {glm::vec3(m[0][3] - m[0][2], m[1][3] - m[1][2], m[2][3] - m[2][2]), m[3][3] - m[3][2]};
-                for (auto& pl : p) {
-                    float len = glm::length(pl.normal);
-                    pl.normal /= len;
-                    pl.d /= len;
-                }
-                return p;
-            };
-
             auto frustumStart = TimeUtil::uptimeSeconds();
-            auto frustum = extractPlanes(viewProj);
+            Frustum frustum(viewProj);
             for (Chunk* chunk : world_->getLoadedChunks()) {
                 glm::vec3 origin = chunk->getWorldOrigin();
                 glm::vec3 min = origin;
                 glm::vec3 max = origin + glm::vec3(chunkSize, worldHeight, chunkSize);
-
-                bool inside = true;
-                for (const auto& plane : frustum) {
-                    glm::vec3 pv{
-                        plane.normal.x >= 0 ? max.x : min.x,
-                        plane.normal.y >= 0 ? max.y : min.y,
-                        plane.normal.z >= 0 ? max.z : min.z,
-                    };
-                    if (glm::dot(plane.normal, pv) + plane.d < 0) {
-                        inside = false;
-                        break;
-                    }
-                }
-                if (!inside) continue;
+                if (!frustum.isVisible(min, max)) continue;
                 if (chunk->getIndexCount() == 0) continue;
                 visible.push_back(chunk);
             }

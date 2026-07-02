@@ -1,0 +1,19 @@
+{
+    "textures": {
+        "all": "resources/textures/blocks/dirt.png"
+    },
+    "elements": [
+        {
+            "from": [0, 0, 0],
+            "to": [16, 16, 16],
+            "faces": {
+                "pos_y":  { "uv": [0, 0, 64, 64], "texture": "#all" },
+                "neg_y":  { "uv": [0, 0, 64, 64], "texture": "#all" },
+                "pos_z":  { "uv": [0, 0, 64, 64], "texture": "#all" },
+                "neg_z":  { "uv": [0, 0, 64, 64], "texture": "#all" },
+                "pos_x":  { "uv": [0, 0, 64, 64], "texture": "#all" },
+                "neg_x":  { "uv": [0, 0, 64, 64], "texture": "#all" }
+            }
+        }
+    ]
+}

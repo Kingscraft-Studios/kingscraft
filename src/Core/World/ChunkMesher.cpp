@@ -40,7 +40,11 @@ namespace {
     }
 }
 
-void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, int height) {
+void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, int height,
+                           const std::vector<uint8_t>* edgePosX,
+                           const std::vector<uint8_t>* edgeNegX,
+                           const std::vector<uint8_t>* edgePosZ,
+                           const std::vector<uint8_t>* edgeNegZ) {
     int N = chunk.getVerticesPerAxis();
     glm::vec3 origin = chunk.getWorldOrigin();
 
@@ -52,8 +56,24 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
     auto& registry = Registry<Block>::getRegistry();
 
     auto getBlock = [&](int x, int y, int z) -> uint8_t {
-        if (x < 0 || x >= N || y < 0 || y >= height || z < 0 || z >= N)
+        if (y < 0 || y >= height)
             return 0;
+        if (x < 0) {
+            if (edgeNegX) return (*edgeNegX)[static_cast<size_t>(y) * N + z];
+            return 0;
+        }
+        if (x >= N) {
+            if (edgePosX) return (*edgePosX)[static_cast<size_t>(y) * N + z];
+            return 0;
+        }
+        if (z < 0) {
+            if (edgeNegZ) return (*edgeNegZ)[static_cast<size_t>(y) * N + x];
+            return 0;
+        }
+        if (z >= N) {
+            if (edgePosZ) return (*edgePosZ)[static_cast<size_t>(y) * N + x];
+            return 0;
+        }
         return blockIds[static_cast<size_t>(y) * N * N + z * N + x];
     };
 

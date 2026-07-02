@@ -10,6 +10,8 @@ class Blocks {
 public:
     inline static const RegistryKey<Block> AIR = Registry<Block>::getRegistry().createKey();
     inline static const RegistryKey<Block> GRASS_BLOCK = Registry<Block>::getRegistry().createKey();
+    inline static const RegistryKey<Block> STONE = Registry<Block>::getRegistry().createKey();
+    inline static const RegistryKey<Block> DIRT = Registry<Block>::getRegistry().createKey();
 
     static void registerBlocks();
 };

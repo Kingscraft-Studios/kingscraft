@@ -32,7 +32,7 @@ namespace lve {
         }
 
         glm::mat4 getProjectionMatrix() const {
-            glm::mat4 proj = glm::perspective(glm::radians(fov_), aspectRatio_, near_, far_);
+            glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(fov_), aspectRatio_, near_, far_);
             proj[1][1] *= -1;
             return proj;
         }
