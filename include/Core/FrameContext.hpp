@@ -17,6 +17,10 @@ struct FrameContext {
 
     VkQueryPool gpuQueryPool = VK_NULL_HANDLE;
     PostProcessing* postProcessing = nullptr;
+
+    double cpuFrameTimeMs = 0.0;
+    double cpuTickMs = 0.0;
+    double cpuSubmitMs = 0.0;
 };
 
 } // namespace lve

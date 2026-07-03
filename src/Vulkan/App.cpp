@@ -8,10 +8,7 @@
 
 namespace lve {
 
-    App* App::instance_ = nullptr;
-
     App::App() {
-        instance_ = this;
         keybinds_->setWindow(window.getGLFWWindow());
 
         keybinds_->onPress(BindLayer::Global, {Keys::F11}, [this]() {
@@ -79,6 +76,7 @@ namespace lve {
         // Init new UI engine alongside Noesis
         uiSystem->init(device, *descriptorManager_, renderer->getExtent());
 
+        screenManager->setContext(getContext());
         screenManager->switchTo<MainMenu>(renderer->getRenderPass(), *uiSystem, renderer->getExtent());
 
         VkExtent2D extent = window.getExtent();
@@ -138,6 +136,18 @@ namespace lve {
                 }
             }
         }
+    }
+
+    AppContext App::getContext() {
+        return AppContext{
+            .window = &window,
+            .device = &device,
+            .renderer = renderer.get(),
+            .uiSystem = uiSystem.get(),
+            .keybinds = keybinds_.get(),
+            .textureCache = textureCache_.get(),
+            .world = world_.get()
+        };
     }
 
     void App::cleanup() {
@@ -203,6 +213,9 @@ namespace lve {
         frameCtx.imageIndex = imageIndex;
         frameCtx.gpuQueryPool = renderer->getGpuQueryPool();
         frameCtx.postProcessing = postProcessor_.get();
+        frameCtx.cpuFrameTimeMs = cpuFrameTimeMs_;
+        frameCtx.cpuTickMs = cpuTickMs_;
+        frameCtx.cpuSubmitMs = cpuSubmitMs_;
 
         // Pre-scene effects (glow passes, downsampling, etc.)
         if (!info.uiEnabled) {

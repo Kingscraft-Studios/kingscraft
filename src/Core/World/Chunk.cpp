@@ -1,5 +1,6 @@
 #include "Core/World/Chunk.hpp"
 #include <cstring>
+#include <stdexcept>
 
 namespace lve {
 
@@ -19,6 +20,19 @@ namespace lve {
 
     Chunk::~Chunk() {
         cleanup();
+    }
+
+    void Chunk::setBlockData(std::vector<uint8_t> data, int chunkSize, int height) {
+        blockData_ = std::move(data);
+        chunkSize_ = chunkSize;
+        height_ = height;
+    }
+
+    uint8_t Chunk::getBlock(int x, int y, int z) const {
+        if (blockData_.empty()) return 0;
+        return blockData_[static_cast<size_t>(y) * chunkSize_ * chunkSize_
+                          + static_cast<size_t>(z) * chunkSize_
+                          + static_cast<size_t>(x)];
     }
 
     void Chunk::upload() {

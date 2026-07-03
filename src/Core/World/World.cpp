@@ -1,6 +1,5 @@
 #include "Core/World/World.hpp"
 #include "Vulkan/Device.hpp"
-#include "Core/Blocks/Blocks.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -27,8 +26,8 @@ namespace {
 
 namespace lve {
 
-    World::World(Device& device, int chunkSize, int height)
-        : device_(device), chunkSize_(chunkSize), height_(height) {
+    World::World(Device& device, ITerrainGenerator& terrainGen, int chunkSize, int height)
+        : device_(device), terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height) {
         genThread_ = std::thread([this]() { genThreadFunc(); });
     }
 
@@ -65,29 +64,8 @@ namespace lve {
 
         int N = chunkSize_;
         int h = height_;
-        uint8_t grassId = static_cast<uint8_t>(Blocks::GRASS_BLOCK.getId());
-        uint8_t dirtId = static_cast<uint8_t>(Blocks::DIRT.getId());
-        uint8_t stoneId = static_cast<uint8_t>(Blocks::STONE.getId());
 
-        std::vector<uint8_t> blockIds(static_cast<size_t>(N) * h * N, 0);
-
-        float originX = static_cast<float>(gridX) * N;
-        float originZ = static_cast<float>(gridZ) * N;
-
-        for (int z = 0; z < N; ++z) {
-            for (int x = 0; x < N; ++x) {
-                float wx = originX + x;
-                float wz = originZ + z;
-                float surface = 8.0f + noise_.getHeight(wx, wz);
-                int top = std::max(0, std::min(h - 1, static_cast<int>(surface)));
-
-                blockIds[static_cast<size_t>(top) * N * N + z * N + x] = grassId;
-                for (int dy = 1; dy <= 2 && top - dy >= 0; ++dy)
-                    blockIds[static_cast<size_t>(top - dy) * N * N + z * N + x] = dirtId;
-                for (int y = top - 3; y >= 0; --y)
-                    blockIds[static_cast<size_t>(y) * N * N + z * N + x] = stoneId;
-            }
-        }
+        std::vector<uint8_t> blockIds = terrainGen_.generateBlocks(gridX, gridZ, N, h);
 
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
@@ -112,6 +90,7 @@ namespace lve {
         }
 
         auto chunk = std::make_unique<Chunk>(device_, glm::ivec2(gridX, gridZ), N, 1.0f);
+        chunk->setBlockData(blockIds, N, h);
         ChunkMesher::generate(*chunk, blockIds, h,
                               pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
         chunk->upload();
@@ -142,11 +121,6 @@ namespace lve {
     }
 
     void World::genThreadFunc() {
-        TerrainGenerator noise(1337);
-        uint8_t grassId = static_cast<uint8_t>(Blocks::GRASS_BLOCK.getId());
-        uint8_t dirtId = static_cast<uint8_t>(Blocks::DIRT.getId());
-        uint8_t stoneId = static_cast<uint8_t>(Blocks::STONE.getId());
-
         while (genRunning_) {
             std::pair<int, int> task;
             {
@@ -165,23 +139,7 @@ namespace lve {
             int N = chunkSize_;
             int h = height_;
 
-            std::vector<uint8_t> blockIds(static_cast<size_t>(N) * h * N, 0);
-            float originX = static_cast<float>(gx) * N;
-            float originZ = static_cast<float>(gz) * N;
-
-            for (int z = 0; z < N; ++z) {
-                for (int x = 0; x < N; ++x) {
-                    float wx = originX + x;
-                    float wz = originZ + z;
-                    float surface = 8.0f + noise.getHeight(wx, wz);
-                    int top = std::max(0, std::min(h - 1, static_cast<int>(surface)));
-                    blockIds[static_cast<size_t>(top) * N * N + z * N + x] = grassId;
-                    for (int dy = 1; dy <= 2 && top - dy >= 0; ++dy)
-                        blockIds[static_cast<size_t>(top - dy) * N * N + z * N + x] = dirtId;
-                    for (int y = top - 3; y >= 0; --y)
-                        blockIds[static_cast<size_t>(y) * N * N + z * N + x] = stoneId;
-                }
-            }
+            std::vector<uint8_t> blockIds = terrainGen_.generateBlocks(gx, gz, N, h);
 
             {
                 std::lock_guard<std::mutex> lock(cacheMutex_);
@@ -206,6 +164,7 @@ namespace lve {
             }
 
             Chunk tempChunk(device_, glm::ivec2(gx, gz), N, 1.0f);
+            tempChunk.setBlockData(blockIds, N, h);
             ChunkMesher::generate(tempChunk, blockIds, h,
                                   pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
 
@@ -214,6 +173,7 @@ namespace lve {
             result.gz = gz;
             result.vertices = std::move(tempChunk.vertices());
             result.indices = std::move(tempChunk.indices());
+            result.blockData = blockIds;
 
             {
                 std::lock_guard<std::mutex> lock(genMutex_);
@@ -241,6 +201,7 @@ namespace lve {
             auto chunk = std::make_unique<Chunk>(device_, glm::ivec2(r.gx, r.gz), chunkSize_, 1.0f);
             chunk->vertices() = std::move(r.vertices);
             chunk->indices() = std::move(r.indices);
+            chunk->setBlockData(std::move(r.blockData), chunkSize_, height_);
             chunk->upload();
 
             chunks_[key] = std::move(chunk);

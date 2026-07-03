@@ -10,11 +10,13 @@
 #include "Renderer/PostProcessing.hpp"
 #include "Resource/ResourceManager.hpp"
 #include "Core/ScreenManager.hpp"
+#include "Core/AppContext.hpp"
 #include "Core/Keys.hpp"
 #include "Core/KeyBindHandler.hpp"
 #include <memory>
 
 #include "Core/World/World.hpp"
+#include "Core/World/TerrainGenerator.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Util/TimeUtil.hpp"
 
@@ -30,7 +32,7 @@ namespace lve {
         App(const App &) = delete;
         App &operator=(const App &) = delete;
 
-        static App& get() { return *instance_; }
+        AppContext getContext();
 
         bool windowShouldClose() const;
         void tick();
@@ -64,8 +66,6 @@ namespace lve {
         void drawFrame();
         void recreateSwapChain();
 
-        static App* instance_;
-
         Window window{WIDTH, HEIGHT, "Kingscraft"};
         Device device{window};
         std::unique_ptr<Renderer> renderer = std::make_unique<Renderer>(device, window.getExtent());
@@ -76,7 +76,8 @@ namespace lve {
         std::unique_ptr<UiWrapper> uiSystem = std::make_unique<UiWrapper>();
         std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
         std::unique_ptr<KeyBindHandler> keybinds_ = std::make_unique<KeyBindHandler>();
-        std::unique_ptr<World> world_ = std::make_unique<World>(device, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
+        DefaultTerrainGenerator terrainGen_;
+        std::unique_ptr<World> world_ = std::make_unique<World>(device, terrainGen_, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
         static constexpr double TICK_RATE = 100.0;
         static constexpr double TICK_INTERVAL = 1.0 / TICK_RATE;
 

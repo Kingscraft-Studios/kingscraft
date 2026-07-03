@@ -53,6 +53,10 @@ namespace lve {
         std::vector<uint16_t>& indices() { return indices_; }
         uint32_t getIndexCount() const { return indexCount_; }
 
+        const std::vector<uint8_t>& getBlockData() const { return blockData_; }
+        void setBlockData(std::vector<uint8_t> data, int chunkSize, int height);
+        uint8_t getBlock(int x, int y, int z) const;
+
         void upload();
         void bindAndDraw(VkCommandBuffer cmd);
         void cleanup();
@@ -67,6 +71,10 @@ namespace lve {
         std::vector<ChunkVertex> vertices_;
         std::vector<uint16_t> indices_;
         uint32_t indexCount_ = 0;
+
+        std::vector<uint8_t> blockData_;
+        int chunkSize_ = 0;
+        int height_ = 0;
 
         std::unique_ptr<Buffer> vertexBuffer_;
         std::unique_ptr<Buffer> indexBuffer_;

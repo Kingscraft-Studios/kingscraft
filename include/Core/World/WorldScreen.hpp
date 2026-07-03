@@ -1,16 +1,13 @@
 #pragma once
 
 #include "Core/Screen.hpp"
-#include "Core/Camera.hpp"
-#include "Core/Keys.hpp"
-#include "Core/World/Chunk.hpp"
+#include "Core/AppContext.hpp"
+#include "Core/World/PlayerController.hpp"
+#include "Core/World/TerrainRenderer.hpp"
 #include "Core/World/World.hpp"
 #include "UI/Debug/UiFpsCounter.hpp"
-#include "Vulkan/Pipeline.hpp"
 #include <memory>
 #include <glm/glm.hpp>
-
-#include "Vulkan/App.hpp"
 
 namespace lve {
 
@@ -19,7 +16,7 @@ namespace lve {
         explicit WorldScreen(VkExtent2D extent);
         ~WorldScreen() override;
 
-        void init() override;
+        void init(const AppContext& ctx) override;
         void tick(double dt) override;
         void render(const FrameContext& ctx) override;
         void renderGlow(const FrameContext& ctx) override;
@@ -30,22 +27,15 @@ namespace lve {
         FrameRenderInfo getFrameRenderInfo(const Renderer& renderer, uint32_t imageIndex) const override;
 
     private:
-        void createPipelineLayout();
-        void createPipeline(bool disableTextures);
-
         VkExtent2D extent_{};
 
-        VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-        std::unique_ptr<Pipeline> pipeline_;
+        AppContext appCtx_{};
+        World* world_ = nullptr;
 
-        World* world_ = App::get().getWorld();
-
+        PlayerController playerController_;
+        TerrainRenderer terrainRenderer_;
         Camera camera_;
         UiFpsCounter fpsCounter_;
-        double lastMouseX_ = 0.0;
-        double lastMouseY_ = 0.0;
-        bool cursorCaptured_ = false;
-        bool lastDisableTextures_ = false;
     };
 
 } // namespace lve

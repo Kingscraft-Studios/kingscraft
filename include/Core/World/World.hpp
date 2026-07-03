@@ -2,7 +2,7 @@
 
 #include "Core/World/Chunk.hpp"
 #include "Core/World/ChunkMesher.hpp"
-#include "Core/World/TerrainGenerator.hpp"
+#include "Core/World/ITerrainGenerator.hpp"
 #include <vector>
 #include <array>
 #include <memory>
@@ -21,7 +21,7 @@ namespace lve {
 
     class World {
     public:
-        World(Device& device, int chunkSize, int height);
+        World(Device& device, ITerrainGenerator& terrainGen, int chunkSize, int height);
         ~World();
 
         void unloadChunk(int gridX, int gridZ);
@@ -44,6 +44,7 @@ namespace lve {
             int gz;
             std::vector<ChunkVertex> vertices;
             std::vector<uint16_t> indices;
+            std::vector<uint8_t> blockData;
         };
 
         static uint64_t packKey(int gx, int gz);
@@ -55,12 +56,12 @@ namespace lve {
         static constexpr int CLEANUP_DELAY = 4;
 
         Device& device_;
+        ITerrainGenerator& terrainGen_;
         int chunkSize_;
         int height_;
         std::unordered_map<uint64_t, std::unique_ptr<Chunk>> chunks_;
         std::array<std::vector<std::unique_ptr<Chunk>>, CLEANUP_DELAY + 1> pendingCleanup_;
         uint64_t frameCount_ = 0;
-        TerrainGenerator noise_;
 
         std::thread genThread_;
         std::atomic<bool> genRunning_{true};

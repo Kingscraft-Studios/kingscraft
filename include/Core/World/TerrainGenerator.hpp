@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core/Blocks/Blocks.hpp"
+#include "Core/World/ITerrainGenerator.hpp"
 #include "FastNoiseLite.h"
 #include <glm/glm.hpp>
 
@@ -33,6 +35,44 @@ namespace lve {
 
     private:
         FastNoiseLite noise_;
+    };
+
+    class DefaultTerrainGenerator : public ITerrainGenerator {
+    public:
+        explicit DefaultTerrainGenerator(int seed = 1337) : noise_(seed) {}
+
+        std::vector<uint8_t> generateBlocks(
+            int gridX, int gridZ, int chunkSize, int height) override
+        {
+            uint8_t grassId = static_cast<uint8_t>(Blocks::GRASS_BLOCK.getId());
+            uint8_t dirtId = static_cast<uint8_t>(Blocks::DIRT.getId());
+            uint8_t stoneId = static_cast<uint8_t>(Blocks::STONE.getId());
+
+            std::vector<uint8_t> blockIds(static_cast<size_t>(chunkSize) * height * chunkSize, 0);
+
+            float originX = static_cast<float>(gridX) * chunkSize;
+            float originZ = static_cast<float>(gridZ) * chunkSize;
+
+            for (int z = 0; z < chunkSize; ++z) {
+                for (int x = 0; x < chunkSize; ++x) {
+                    float wx = originX + x;
+                    float wz = originZ + z;
+                    float surface = 8.0f + noise_.getHeight(wx, wz);
+                    int top = std::max(0, std::min(height - 1, static_cast<int>(surface)));
+
+                    blockIds[static_cast<size_t>(top) * chunkSize * chunkSize + z * chunkSize + x] = grassId;
+                    for (int dy = 1; dy <= 2 && top - dy >= 0; ++dy)
+                        blockIds[static_cast<size_t>(top - dy) * chunkSize * chunkSize + z * chunkSize + x] = dirtId;
+                    for (int y = top - 3; y >= 0; --y)
+                        blockIds[static_cast<size_t>(y) * chunkSize * chunkSize + z * chunkSize + x] = stoneId;
+                }
+            }
+
+            return blockIds;
+        }
+
+    private:
+        TerrainGenerator noise_;
     };
 
 } // namespace lve

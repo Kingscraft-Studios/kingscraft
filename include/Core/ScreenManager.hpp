@@ -2,6 +2,7 @@
 
 #include "Core/Screen.hpp"
 #include "Core/FrameContext.hpp"
+#include "Core/AppContext.hpp"
 #include <memory>
 
 namespace lve {
@@ -10,11 +11,13 @@ namespace lve {
     public:
         ScreenManager() = default;
 
+        void setContext(const AppContext& ctx) { context_ = ctx; }
+
         template<typename T, typename... Args>
         void switchTo(Args&&... args) {
             if (currentScreen_) currentScreen_->cleanup();
             currentScreen_ = std::make_unique<T>(std::forward<Args>(args)...);
-            currentScreen_->init();
+            currentScreen_->init(context_);
         }
 
         Screen* getCurrent() { return currentScreen_.get(); }
@@ -27,6 +30,7 @@ namespace lve {
         void notifySwapChainRecreated(VkExtent2D extent) { if (currentScreen_) currentScreen_->onSwapChainRecreated(extent); }
 
     private:
+        AppContext context_{};
         std::unique_ptr<Screen> currentScreen_;
     };
 
