@@ -33,6 +33,7 @@ namespace lve {
 
         static std::unique_ptr<RenderPass> createDefault(Device& device, VkFormat colorFormat);
         static std::unique_ptr<RenderPass> createWithDepth(Device& device, VkFormat colorFormat, VkFormat depthFormat);
+        static std::unique_ptr<RenderPass> createOffscreen(Device& device, VkFormat colorFormat);
 
     private:
         Device& device_;

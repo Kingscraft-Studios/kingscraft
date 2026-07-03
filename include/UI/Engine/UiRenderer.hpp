@@ -4,6 +4,8 @@
 #include "Vulkan/DescriptorManager.hpp"
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/Pipeline.hpp"
+#include "Vulkan/RenderPass.hpp"
+#include "Vulkan/OffscreenTarget.hpp"
 #include "UI/Engine/UiBatchQueue.hpp"
 #include "UiStyle.hpp"
 #include <memory>
@@ -37,14 +39,11 @@ namespace lve {
         void uploadElementStyles(const void* data, uint32_t firstElement, uint32_t count);
 
     private:
-        void createRenderPass();
         void createPipeline();
         void createCompositePipeline(VkRenderPass renderPass);
         void createDescriptorSetLayouts();
         void createDescriptorPools();
         void allocateDescriptorSets();
-        void createOffscreenResources();
-        void destroyOffscreenResources();
         void createUniformBuffer();
         void updateUniformBuffer();
         void updateUiDescriptorSet();
@@ -56,16 +55,12 @@ namespace lve {
         bool initialized_ = false;
 
         // Offscreen resources
-        VkRenderPass offscreenRenderPass_ = VK_NULL_HANDLE;
-        VkImage offscreenImage_ = VK_NULL_HANDLE;
-        VkDeviceMemory offscreenMemory_ = VK_NULL_HANDLE;
-        VkImageView offscreenView_ = VK_NULL_HANDLE;
-        VkSampler offscreenSampler_ = VK_NULL_HANDLE;
-        VkFramebuffer offscreenFramebuffer_ = VK_NULL_HANDLE;
+        std::unique_ptr<RenderPass> offscreenRenderPass_;
+        std::unique_ptr<OffscreenTarget> offscreenTarget_;
 
         // Pipelines
         std::unique_ptr<Pipeline> uiPipeline_;
-        VkPipeline compositePipeline_ = VK_NULL_HANDLE;
+        std::unique_ptr<Pipeline> compositePipeline_;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
         VkPipelineLayout compositePipelineLayout_ = VK_NULL_HANDLE;
 
