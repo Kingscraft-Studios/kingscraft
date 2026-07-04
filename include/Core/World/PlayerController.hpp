@@ -18,6 +18,8 @@ namespace lve {
         const Camera& getCamera() const { return *camera_; }
         glm::mat4 getViewProj() const;
         bool isCursorCaptured() const { return cursorCaptured_; }
+        void setCaptured(bool captured) { cursorCaptured_ = captured; }
+        void resetMouse();
 
     private:
         Camera* camera_ = nullptr;

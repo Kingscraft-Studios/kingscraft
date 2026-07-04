@@ -10,7 +10,13 @@ class KeyBindHandler;
 class TextureCache;
 class World;
 
-struct AppContext {
+class AppContext {
+public:
+    static AppContext& get() {
+        static AppContext instance;
+        return instance;
+    }
+
     Window* window = nullptr;
     Device* device = nullptr;
     Renderer* renderer = nullptr;
@@ -18,6 +24,9 @@ struct AppContext {
     KeyBindHandler* keybinds = nullptr;
     TextureCache* textureCache = nullptr;
     World* world = nullptr;
+
+private:
+    AppContext() = default;
 };
 
 } // namespace lve

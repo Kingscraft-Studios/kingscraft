@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Core/FrameContext.hpp"
-#include "Core/AppContext.hpp"
 #include <vector>
 #include <vulkan/vulkan.h>
 
@@ -21,7 +20,7 @@ namespace lve {
     public:
         virtual ~Screen() = default;
 
-        virtual void init(const AppContext& ctx) = 0;
+        virtual void init() = 0;
         virtual void tick(double dt) = 0;
         virtual void render(const FrameContext& ctx) = 0;
         virtual void renderGlow(const FrameContext& ctx) {}

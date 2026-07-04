@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Core/Screen.hpp"
-#include "Core/AppContext.hpp"
 #include "Core/World/PlayerController.hpp"
 #include "Core/World/TerrainRenderer.hpp"
 #include "Core/World/World.hpp"
 #include "UI/Debug/UiFpsCounter.hpp"
+#include "UI/Overlay/UiHotbar.hpp"
 #include <memory>
 #include <glm/glm.hpp>
 
@@ -16,7 +16,7 @@ namespace lve {
         explicit WorldScreen(VkExtent2D extent);
         ~WorldScreen() override;
 
-        void init(const AppContext& ctx) override;
+        void init() override;
         void tick(double dt) override;
         void render(const FrameContext& ctx) override;
         void renderGlow(const FrameContext& ctx) override;
@@ -29,13 +29,15 @@ namespace lve {
     private:
         VkExtent2D extent_{};
 
-        AppContext appCtx_{};
+
         World* world_ = nullptr;
 
         PlayerController playerController_;
         TerrainRenderer terrainRenderer_;
         Camera camera_;
         UiFpsCounter fpsCounter_;
+        bool wasDebugOn_ = false;
+        UiHotbar hotbar_;
     };
 
 } // namespace lve

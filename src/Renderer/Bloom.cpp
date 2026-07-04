@@ -20,10 +20,10 @@ Bloom::Bloom(Device& device, VkExtent2D windowExtent, VkRenderPass sceneRenderPa
 Bloom::~Bloom() {
     vkDeviceWaitIdle(device_.device());
 
-    for (auto& pipe : {pipelines_.blurVert, pipelines_.blurHorz, pipelines_.glowPass}) {
-        if (pipe != VK_NULL_HANDLE)
-            vkDestroyPipeline(device_.device(), pipe, nullptr);
-    }
+    pipelines_.blurVert.reset();
+    pipelines_.blurHorz.reset();
+    pipelines_.glowPass.reset();
+
     for (auto& layout : {pipelineLayouts_.blur, pipelineLayouts_.scene}) {
         if (layout != VK_NULL_HANDLE)
             vkDestroyPipelineLayout(device_.device(), layout, nullptr);
@@ -43,8 +43,7 @@ Bloom::~Bloom() {
     if (offscreenPass_.sampler != VK_NULL_HANDLE)
         vkDestroySampler(device_.device(), offscreenPass_.sampler, nullptr);
     destroyOffscreenFramebuffers();
-    if (offscreenPass_.renderPass != VK_NULL_HANDLE)
-        vkDestroyRenderPass(device_.device(), offscreenPass_.renderPass, nullptr);
+    offscreenRenderPass_.reset();
 }
 
 void Bloom::computeOffscreenDim(VkExtent2D windowExtent, int32_t& outW, int32_t& outH) {
@@ -91,11 +90,8 @@ void Bloom::recreate(VkExtent2D windowExtent, VkRenderPass sceneRenderPass) {
 
     if (sceneRenderPass_ != sceneRenderPass) {
         sceneRenderPass_ = sceneRenderPass;
-        if (pipelines_.blurHorz != VK_NULL_HANDLE) {
-            vkDestroyPipeline(device_.device(), pipelines_.blurHorz, nullptr);
-            pipelines_.blurHorz = VK_NULL_HANDLE;
-        }
-        createBlurPipeline(sceneRenderPass_, 1, pipelines_.blurHorz);
+        pipelines_.blurHorz.reset();
+        pipelines_.blurHorz = createBlurPipeline(sceneRenderPass_, 1);
     }
 }
 
@@ -238,18 +234,23 @@ void Bloom::createOffscreen() {
     dependencies[2].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     dependencies[2].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-    VkRenderPassCreateInfo rpInfo{};
-    rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    rpInfo.pAttachments = attachments.data();
-    rpInfo.subpassCount = 1;
-    rpInfo.pSubpasses = &subpass;
-    rpInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    rpInfo.pDependencies = dependencies.data();
+    std::vector<RenderPass::AttachmentDescription> rpAttachments(2);
+    rpAttachments[0].format = attachments[0].format;
+    rpAttachments[0].loadOp = attachments[0].loadOp;
+    rpAttachments[0].storeOp = attachments[0].storeOp;
+    rpAttachments[0].initialLayout = attachments[0].initialLayout;
+    rpAttachments[0].finalLayout = attachments[0].finalLayout;
+    rpAttachments[1].format = attachments[1].format;
+    rpAttachments[1].loadOp = attachments[1].loadOp;
+    rpAttachments[1].storeOp = attachments[1].storeOp;
+    rpAttachments[1].initialLayout = attachments[1].initialLayout;
+    rpAttachments[1].finalLayout = attachments[1].finalLayout;
 
-    if (vkCreateRenderPass(device_.device(), &rpInfo, nullptr, &offscreenPass_.renderPass) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create offscreen render pass!");
-    }
+    offscreenRenderPass_ = std::make_unique<RenderPass>(
+        device_, rpAttachments,
+        std::vector<VkSubpassDescription>{subpass},
+        std::vector<VkSubpassDependency>{dependencies.begin(), dependencies.end()});
+    offscreenPass_.renderPass = offscreenRenderPass_->getHandle();
 
     VkSamplerCreateInfo sampler{};
     sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -293,16 +294,7 @@ void Bloom::createDescriptors() {
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * 4}
     };
 
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-    poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT * 4;
-
-    if (vkCreateDescriptorPool(device_.device(), &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create bloom descriptor pool!");
-    }
+    descriptorPool_ = descriptorManager_.createPool(poolSizes, MAX_FRAMES_IN_FLIGHT * 4);
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
 
@@ -396,118 +388,36 @@ void Bloom::updateFrameDescriptor(uint32_t i) {
     vkUpdateDescriptorSets(device_.device(), 1, &write, 0, nullptr);
 }
 
-void Bloom::createBlurPipeline(VkRenderPass renderPass, uint32_t blurdirection, VkPipeline& outPipeline) {
-    auto makeModule = [&](const std::vector<char>& code, const char* name) {
-        VkShaderModuleCreateInfo ci{};
-        ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        ci.codeSize = code.size();
-        ci.pCode = reinterpret_cast<const uint32_t*>(code.data());
-        VkShaderModule mod;
-        if (vkCreateShaderModule(device_.device(), &ci, nullptr, &mod) != VK_SUCCESS)
-            throw std::runtime_error("failed to create shader module: " + std::string(name));
-        return mod;
-    };
-    auto vertMod = makeModule(
-        Preloader::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.vert.spv"),
-        "gaussblur.vert");
-    auto fragMod = makeModule(
-        Preloader::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.frag.spv"),
-        "gaussblur.frag");
+std::unique_ptr<Pipeline> Bloom::createBlurPipeline(VkRenderPass renderPass, uint32_t blurdirection) {
+    auto& vertCode = Preloader::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.vert.spv");
+    auto& fragCode = Preloader::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.frag.spv");
 
-    VkPipelineShaderStageCreateInfo shaderStages[2]{};
-    shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    shaderStages[0].module = vertMod;
-    shaderStages[0].pName = "main";
-    shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    shaderStages[1].module = fragMod;
-    shaderStages[1].pName = "main";
+    PipelineConfigInfo configInfo{};
+    Pipeline::defaultPipelineConfigInfo(configInfo);
 
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssembly.primitiveRestartEnable = VK_FALSE;
+    configInfo.bindingDescriptions = {};
+    configInfo.attributeDescriptions = {};
 
-    VkPipelineRasterizationStateCreateInfo rasterization{};
-    rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterization.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterization.cullMode = VK_CULL_MODE_NONE;
-    rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterization.lineWidth = 1.0f;
+    configInfo.inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-    VkPipelineColorBlendAttachmentState blendAttachment{};
-    blendAttachment.colorWriteMask = 0xF;
-    blendAttachment.blendEnable = VK_TRUE;
-    blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-    blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-    blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
+    configInfo.blendAttachmentState.blendEnable = VK_TRUE;
+    configInfo.blendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
+    configInfo.blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    configInfo.blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    configInfo.blendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
+    configInfo.blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    configInfo.blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
 
-    VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &blendAttachment;
+    configInfo.depthStencilInfo.depthTestEnable = VK_FALSE;
+    configInfo.depthStencilInfo.depthWriteEnable = VK_FALSE;
 
-    VkPipelineDepthStencilStateCreateInfo depthStencil{};
-    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable = VK_FALSE;
-    depthStencil.depthWriteEnable = VK_FALSE;
+    configInfo.specMapEntries = {{0, 0, sizeof(uint32_t)}};
+    configInfo.specData = {blurdirection};
 
-    VkPipelineViewportStateCreateInfo viewportState{};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.scissorCount = 1;
+    configInfo.renderPass = renderPass;
+    configInfo.pipelineLayout = pipelineLayouts_.blur;
 
-    VkPipelineMultisampleStateCreateInfo multisample{};
-    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
-
-    VkPipelineVertexInputStateCreateInfo emptyInputState{};
-    emptyInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-    VkSpecializationMapEntry specEntry{};
-    specEntry.constantID = 0;
-    specEntry.offset = 0;
-    specEntry.size = sizeof(uint32_t);
-
-    VkSpecializationInfo specInfo{};
-    specInfo.mapEntryCount = 1;
-    specInfo.pMapEntries = &specEntry;
-    specInfo.dataSize = sizeof(uint32_t);
-    specInfo.pData = &blurdirection;
-
-    shaderStages[1].pSpecializationInfo = &specInfo;
-
-    VkGraphicsPipelineCreateInfo pipelineCI{};
-    pipelineCI.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineCI.stageCount = 2;
-    pipelineCI.pStages = shaderStages;
-    pipelineCI.pVertexInputState = &emptyInputState;
-    pipelineCI.pInputAssemblyState = &inputAssembly;
-    pipelineCI.pViewportState = &viewportState;
-    pipelineCI.pRasterizationState = &rasterization;
-    pipelineCI.pMultisampleState = &multisample;
-    pipelineCI.pColorBlendState = &colorBlending;
-    pipelineCI.pDepthStencilState = &depthStencil;
-    pipelineCI.pDynamicState = &dynamicState;
-    pipelineCI.layout = pipelineLayouts_.blur;
-    pipelineCI.renderPass = renderPass;
-
-    if (vkCreateGraphicsPipelines(device_.device(), device_.getPipelineCache(), 1, &pipelineCI, nullptr, &outPipeline) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create blur pipeline!");
-    }
-
-    vkDestroyShaderModule(device_.device(), vertMod, nullptr);
-    vkDestroyShaderModule(device_.device(), fragMod, nullptr);
+    return std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
 }
 
 void Bloom::createPipelines() {
@@ -529,89 +439,23 @@ void Bloom::createPipelines() {
         throw std::runtime_error("failed to create scene pipeline layout!");
     }
 
-    auto makeModule = [this](const std::vector<char>& code, const char* name) {
-        VkShaderModuleCreateInfo ci{};
-        ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        ci.codeSize = code.size();
-        ci.pCode = reinterpret_cast<const uint32_t*>(code.data());
-        VkShaderModule mod;
-        if (vkCreateShaderModule(device_.device(), &ci, nullptr, &mod) != VK_SUCCESS)
-            throw std::runtime_error("failed to create shader module: " + std::string(name));
-        return mod;
-    };
-
-    auto vertModColor = makeModule(
-        Preloader::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.vert.spv"),
-        "colorpass.vert");
-    auto fragModColor = makeModule(
-        Preloader::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.frag.spv"),
-        "colorpass.frag");
-
-    VkPipelineShaderStageCreateInfo shaderStages[2]{};
-    shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-    VkPipelineRasterizationStateCreateInfo rasterization{};
-    rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterization.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterization.cullMode = VK_CULL_MODE_NONE;
-    rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterization.lineWidth = 1.0f;
-
-    VkPipelineColorBlendAttachmentState blendAttachment{};
-    blendAttachment.colorWriteMask = 0xF;
-    blendAttachment.blendEnable = VK_FALSE;
-
-    VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &blendAttachment;
-
-    VkPipelineDepthStencilStateCreateInfo depthStencil{};
-    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = VK_TRUE;
-    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-
-    VkPipelineViewportStateCreateInfo viewportState{};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.scissorCount = 1;
-
-    VkPipelineMultisampleStateCreateInfo multisample{};
-    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
-
-    // Create blur pipelines using the extracted method
-    createBlurPipeline(offscreenPass_.renderPass, 0, pipelines_.blurVert);
-    createBlurPipeline(sceneRenderPass_, 1, pipelines_.blurHorz);
+    // Create blur pipelines
+    pipelines_.blurVert = createBlurPipeline(offscreenPass_.renderPass, 0);
+    pipelines_.blurHorz = createBlurPipeline(sceneRenderPass_, 1);
 
     // --- Color pass (glow objects) ---
-    shaderStages[0].module = vertModColor;
-    shaderStages[0].pName = "main";
-    shaderStages[1].module = fragModColor;
-    shaderStages[1].pName = "main";
-    shaderStages[1].pSpecializationInfo = nullptr;
+    auto& vertCode = Preloader::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.vert.spv");
+    auto& fragCode = Preloader::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.frag.spv");
+
+    PipelineConfigInfo configInfo{};
+    Pipeline::defaultPipelineConfigInfo(configInfo);
 
     VkVertexInputBindingDescription bindingDesc{};
     bindingDesc.binding = 0;
     bindingDesc.stride = sizeof(glm::vec3) * 2;
     bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    std::array<VkVertexInputAttributeDescription, 2> attribDescs{};
+    std::vector<VkVertexInputAttributeDescription> attribDescs(2);
     attribDescs[0].binding = 0;
     attribDescs[0].location = 0;
     attribDescs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -621,38 +465,18 @@ void Bloom::createPipelines() {
     attribDescs[1].format = VK_FORMAT_R32G32B32_SFLOAT;
     attribDescs[1].offset = sizeof(glm::vec3);
 
-    VkPipelineVertexInputStateCreateInfo vertexInput{};
-    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount = 1;
-    vertexInput.pVertexBindingDescriptions = &bindingDesc;
-    vertexInput.vertexAttributeDescriptionCount = static_cast<uint32_t>(attribDescs.size());
-    vertexInput.pVertexAttributeDescriptions = attribDescs.data();
+    configInfo.bindingDescriptions = {bindingDesc};
+    configInfo.attributeDescriptions = attribDescs;
 
-    VkGraphicsPipelineCreateInfo pipelineCI{};
-    pipelineCI.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineCI.stageCount = 2;
-    pipelineCI.pStages = shaderStages;
-    pipelineCI.pVertexInputState = &vertexInput;
-    pipelineCI.pInputAssemblyState = &inputAssembly;
-    pipelineCI.pViewportState = &viewportState;
-    pipelineCI.pRasterizationState = &rasterization;
-    pipelineCI.pMultisampleState = &multisample;
-    pipelineCI.pColorBlendState = &colorBlending;
-    pipelineCI.pDepthStencilState = &depthStencil;
-    pipelineCI.pDynamicState = &dynamicState;
-    pipelineCI.layout = pipelineLayouts_.scene;
-    pipelineCI.renderPass = offscreenPass_.renderPass;
+    configInfo.blendAttachmentState.blendEnable = VK_FALSE;
 
-    rasterization.cullMode = VK_CULL_MODE_NONE;
-    depthStencil.depthTestEnable = VK_FALSE;
-    depthStencil.depthWriteEnable = VK_FALSE;
+    configInfo.depthStencilInfo.depthTestEnable = VK_FALSE;
+    configInfo.depthStencilInfo.depthWriteEnable = VK_FALSE;
 
-    if (vkCreateGraphicsPipelines(device_.device(), device_.getPipelineCache(), 1, &pipelineCI, nullptr, &pipelines_.glowPass) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create glow pass pipeline!");
-    }
+    configInfo.renderPass = offscreenPass_.renderPass;
+    configInfo.pipelineLayout = pipelineLayouts_.scene;
 
-    vkDestroyShaderModule(device_.device(), vertModColor, nullptr);
-    vkDestroyShaderModule(device_.device(), fragModColor, nullptr);
+    pipelines_.glowPass = std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
 }
 
 void Bloom::preScene(VkCommandBuffer cmd, uint32_t frameIndex,
@@ -705,7 +529,7 @@ void Bloom::beginGlowPass(VkCommandBuffer cmd, uint32_t frameIndex) {
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayouts_.scene, 0, 1,
                             &frames_[frameIndex].scene, 0, nullptr);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines_.glowPass);
+    pipelines_.glowPass->bind(cmd);
 }
 
 void Bloom::endGlowPass(VkCommandBuffer cmd, uint32_t frameIndex) {
@@ -741,7 +565,7 @@ void Bloom::endGlowPass(VkCommandBuffer cmd, uint32_t frameIndex) {
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayouts_.blur, 0, 1,
                             &frames_[frameIndex].blurVert, 0, nullptr);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines_.blurVert);
+    pipelines_.blurVert->bind(cmd);
     vkCmdDraw(cmd, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(cmd);
@@ -751,7 +575,7 @@ void Bloom::compositeBloom(VkCommandBuffer cmd, uint32_t frameIndex) {
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayouts_.blur, 0, 1,
                             &frames_[frameIndex].blurHorz, 0, nullptr);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines_.blurHorz);
+    pipelines_.blurHorz->bind(cmd);
     vkCmdDraw(cmd, 3, 1, 0, 0);
 }
 

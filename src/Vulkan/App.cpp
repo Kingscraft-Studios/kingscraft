@@ -76,7 +76,15 @@ namespace lve {
         // Init new UI engine alongside Noesis
         uiSystem->init(device, *descriptorManager_, renderer->getExtent());
 
-        screenManager->setContext(getContext());
+        auto& appCtx = AppContext::get();
+        appCtx.window = &window;
+        appCtx.device = &device;
+        appCtx.renderer = renderer.get();
+        appCtx.uiSystem = uiSystem.get();
+        appCtx.keybinds = keybinds_.get();
+        appCtx.textureCache = textureCache_.get();
+        appCtx.world = world_.get();
+
         screenManager->switchTo<MainMenu>(renderer->getRenderPass(), *uiSystem, renderer->getExtent());
 
         VkExtent2D extent = window.getExtent();
@@ -136,18 +144,6 @@ namespace lve {
                 }
             }
         }
-    }
-
-    AppContext App::getContext() {
-        return AppContext{
-            .window = &window,
-            .device = &device,
-            .renderer = renderer.get(),
-            .uiSystem = uiSystem.get(),
-            .keybinds = keybinds_.get(),
-            .textureCache = textureCache_.get(),
-            .world = world_.get()
-        };
     }
 
     void App::cleanup() {

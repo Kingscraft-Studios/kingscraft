@@ -11,7 +11,6 @@
 
 #include "Core/World/WorldScreen.hpp"
 #include "Core/Constants.hpp"
-#include "Core/AppContext.hpp"
 #include "Renderer/Renderer.hpp"
 
 namespace lve {
@@ -58,7 +57,7 @@ namespace lve {
         : renderPass_(renderPass), uiSystem_(uiSystem), extent_(extent) {
     }
 
-    void MainMenu::init(const AppContext&) {
+    void MainMenu::init() {
         ensureStyles(uiSystem_);
         createBackground();
         createTitle();

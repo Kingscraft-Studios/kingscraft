@@ -15,6 +15,7 @@ namespace lve {
 
     void PlayerController::tick(double dt) {
         if (!camera_ || !keybinds_ || !window_) return;
+        if (!cursorCaptured_) return;
 
         float speed = 3.0f * static_cast<float>(dt);
         if (keybinds_->isDown(Keys::W)) camera_->moveForward(speed);
@@ -43,6 +44,13 @@ namespace lve {
         camera_->setFov(fov);
         camera_->setNearPlane(nearPlane);
         camera_->setFarPlane(farPlane);
+    }
+
+    void PlayerController::resetMouse() {
+        if (window_) {
+            lastMouseX_ = window_->getLastX();
+            lastMouseY_ = window_->getLastY();
+        }
     }
 
     glm::mat4 PlayerController::getViewProj() const {

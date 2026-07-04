@@ -29,7 +29,9 @@ namespace lve {
         void resize(int width, int height);
         void onMouseMove(double x, double y);
         void onMouseButton(int button, int action, int mods, double x, double y);
+        using ScrollCallback = std::function<void(double, double)>;
         void onScroll(double dx, double dy);
+        void setScrollCallback(ScrollCallback cb) { scrollCallback_ = std::move(cb); }
         void onKey(int key, int action);
         void onChar(unsigned int codepoint);
 
@@ -61,6 +63,7 @@ namespace lve {
 
         VkRenderPass currentRenderPass_ = VK_NULL_HANDLE;
         std::unordered_map<std::string, std::function<void()>> buttonHandlers_;
+        ScrollCallback scrollCallback_;
     };
 
 } // namespace lve

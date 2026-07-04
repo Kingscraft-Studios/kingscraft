@@ -3,6 +3,7 @@
 #include "Renderer/PostProcessing.hpp"
 #include "Vulkan/Device.hpp"
 #include "Vulkan/Buffer.hpp"
+#include "Vulkan/Pipeline.hpp"
 #include "Vulkan/DescriptorManager.hpp"
 #include "Vulkan/RenderPass.hpp"
 #include "Core/Constants.hpp"
@@ -82,7 +83,7 @@ public:
 
     VkRenderPass getOffscreenRenderPass() const { return offscreenPass_.renderPass; }
     VkPipelineLayout getSceneLayout() const { return pipelineLayouts_.scene; }
-    VkPipeline getGlowPipeline() const { return pipelines_.glowPass; }
+    VkPipeline getGlowPipeline() const { return pipelines_.glowPass ? pipelines_.glowPass->getHandle() : VK_NULL_HANDLE; }
 
     static void computeOffscreenDim(VkExtent2D windowExtent, int32_t& outW, int32_t& outH);
 
@@ -96,7 +97,7 @@ private:
     void createOffscreen();
     void destroyOffscreenFramebuffers();
     void createDescriptors();
-    void createBlurPipeline(VkRenderPass renderPass, uint32_t blurdirection, VkPipeline& outPipeline);
+    std::unique_ptr<Pipeline> createBlurPipeline(VkRenderPass renderPass, uint32_t blurdirection);
     void createPipelines();
     void createUniformBuffers();
     void updateFrameDescriptor(uint32_t i);
@@ -114,9 +115,9 @@ private:
     } pipelineLayouts_;
 
     struct {
-        VkPipeline blurVert = VK_NULL_HANDLE;
-        VkPipeline blurHorz = VK_NULL_HANDLE;
-        VkPipeline glowPass = VK_NULL_HANDLE;
+        std::unique_ptr<Pipeline> blurVert;
+        std::unique_ptr<Pipeline> blurHorz;
+        std::unique_ptr<Pipeline> glowPass;
     } pipelines_;
 
     struct {
@@ -134,6 +135,8 @@ private:
     std::array<PerFrame, MAX_FRAMES_IN_FLIGHT> frames_;
 
     VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
+
+    std::unique_ptr<RenderPass> offscreenRenderPass_;
 
     VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
 };

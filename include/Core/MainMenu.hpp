@@ -13,7 +13,7 @@ namespace lve {
     public:
         MainMenu(VkRenderPass renderPass, UiWrapper& uiSystem, VkExtent2D extent);
 
-        void init(const AppContext& ctx) override;
+        void init() override;
         void tick(double) override {}
         void render(const FrameContext& ctx) override { uiSystem_.render(ctx.cmd, ctx.renderPass); }
         void cleanup() override;

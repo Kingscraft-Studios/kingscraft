@@ -32,7 +32,7 @@ namespace lve {
         App(const App &) = delete;
         App &operator=(const App &) = delete;
 
-        AppContext getContext();
+
 
         bool windowShouldClose() const;
         void tick();

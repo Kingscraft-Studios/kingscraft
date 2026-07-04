@@ -52,6 +52,8 @@ namespace lve {
 
         void bind(VkCommandBuffer commandBuffer);
 
+        VkPipeline getHandle() const { return graphicsPipeline; }
+
         static void defaultPipelineConfigInfo(PipelineConfigInfo &configInfo);
 
     private:

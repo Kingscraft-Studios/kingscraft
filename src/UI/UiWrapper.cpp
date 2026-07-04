@@ -107,7 +107,7 @@ namespace lve {
     }
 
     void UiWrapper::onScroll(double dx, double dy) {
-        (void)dx; (void)dy;
+        if (scrollCallback_) scrollCallback_(dx, dy);
     }
 
     void UiWrapper::onKey(int key, int action) {

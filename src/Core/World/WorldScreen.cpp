@@ -1,11 +1,13 @@
 #include "Core/World/WorldScreen.hpp"
 #include "Core/World/World.hpp"
+#include "Core/AppContext.hpp"
 #include "Vulkan/TextureCache.hpp"
 #include "Renderer/Renderer.hpp"
 #include "UI/UiWrapper.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Core/KeyBindHandler.hpp"
 #include "Core/Registries.hpp"
+#include "Core/Keys.hpp"
 #include "Vulkan/Window.hpp"
 #include "Vulkan/Device.hpp"
 
@@ -18,15 +20,14 @@ namespace lve {
         cleanup();
     }
 
-    void WorldScreen::init(const AppContext& ctx) {
-        appCtx_ = ctx;
+    void WorldScreen::init() {
+        auto& ctx = AppContext::get();
         world_ = ctx.world;
         auto* window = ctx.window;
         auto* keybinds = ctx.keybinds;
         auto* textureCache = ctx.textureCache;
         auto* renderer = ctx.renderer;
 
-        // Wait for block registrations to complete
         Registries::waitForBuild();
 
         textureCache->updateFromRegistry();
@@ -35,16 +36,49 @@ namespace lve {
         camera_.setRotation(0.0f, -35.0f);
 
         playerController_.init(camera_, *window, *keybinds);
+        playerController_.setCaptured(true);
         terrainRenderer_.init(*ctx.device, *textureCache, renderer->getWorldRenderPass());
 
         window->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         keybinds->setLayerEnabled(BindLayer::UI, false);
         fpsCounter_.init(*ctx.uiSystem);
+        hotbar_.init(*ctx.uiSystem, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         ctx.uiSystem->resize(static_cast<int>(extent_.width),
                              static_cast<int>(extent_.height));
+
+        ctx.uiSystem->setScrollCallback([this](double, double dy) {
+            if (dy > 0)
+                hotbar_.selectSlot(hotbar_.getSelectedSlot() - 1);
+            else if (dy < 0)
+                hotbar_.selectSlot(hotbar_.getSelectedSlot() + 1);
+        });
+
+        for (int i = 0; i < UiHotbar::SLOT_COUNT; ++i) {
+            int key = Keys::_1 + i;
+            keybinds->onPress(BindLayer::Screen, {key}, [this, i]() {
+                hotbar_.selectSlot(i);
+            });
+        }
     }
 
     void WorldScreen::tick(double dt) {
+        auto& ctx = AppContext::get();
+        bool debug = ctx.uiSystem->isDebugModeOn();
+
+        if (debug != wasDebugOn_) {
+            wasDebugOn_ = debug;
+            if (debug) {
+                ctx.window->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                ctx.keybinds->setLayerEnabled(BindLayer::UI, true);
+                playerController_.setCaptured(false);
+            } else {
+                ctx.window->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                ctx.keybinds->setLayerEnabled(BindLayer::UI, false);
+                playerController_.setCaptured(true);
+            }
+            playerController_.resetMouse();
+        }
+
         playerController_.tick(dt);
 
         world_->update(camera_.getPosition().x, camera_.getPosition().z,
@@ -68,14 +102,15 @@ namespace lve {
                                 ctx.frameIndex, ctx.gpuQueryPool,
                                 settings.enableFrustumCulling, worldHeight);
 
+        auto& app = AppContext::get();
         fpsCounter_.setCpuGpuTimes(ctx.cpuFrameTimeMs,
-                                   appCtx_.renderer->getGpuFrameTimeMs(),
-                                   appCtx_.renderer->getTerrainGpuTimeMs(),
+                                   app.renderer->getGpuFrameTimeMs(),
+                                   app.renderer->getTerrainGpuTimeMs(),
                                    ctx.cpuTickMs,
                                    ctx.cpuSubmitMs,
                                    0.0, 0.0);
 
-        appCtx_.uiSystem->render(ctx.cmd, ctx.renderPass);
+        app.uiSystem->render(ctx.cmd, ctx.renderPass);
     }
 
     void WorldScreen::renderGlow(const FrameContext& ctx) {
@@ -83,9 +118,12 @@ namespace lve {
     }
 
     void WorldScreen::cleanup() {
-        fpsCounter_.cleanup(*appCtx_.uiSystem);
-        if (appCtx_.window) {
-            glfwSetInputMode(appCtx_.window->getGLFWWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        auto& app = AppContext::get();
+        app.uiSystem->setScrollCallback(nullptr);
+        hotbar_.cleanup(*app.uiSystem);
+        fpsCounter_.cleanup(*app.uiSystem);
+        if (app.window) {
+            glfwSetInputMode(app.window->getGLFWWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         }
         terrainRenderer_.cleanup();
     }
