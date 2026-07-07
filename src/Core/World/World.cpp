@@ -59,6 +59,85 @@ namespace lve {
         return chunks_.find(packKey(gridX, gridZ)) != chunks_.end();
     }
 
+    Chunk* World::getChunk(int gridX, int gridZ) {
+        auto it = chunks_.find(packKey(gridX, gridZ));
+        return (it != chunks_.end()) ? it->second.get() : nullptr;
+    }
+
+    bool World::setBlock(int worldX, int worldY, int worldZ, uint8_t blockId) {
+        if (worldY < 0 || worldY >= height_) return false;
+        int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
+        int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
+        Chunk* chunk = getChunk(gx, gz);
+        if (!chunk) return false;
+        int lx = worldX - gx * chunkSize_;
+        int lz = worldZ - gz * chunkSize_;
+        chunk->setBlock(lx, worldY, lz, blockId);
+
+        if (lx == 0) { Chunk* n = getChunk(gx - 1, gz); if (n) n->markDirty(); }
+        if (lx == chunkSize_ - 1) { Chunk* n = getChunk(gx + 1, gz); if (n) n->markDirty(); }
+        if (lz == 0) { Chunk* n = getChunk(gx, gz - 1); if (n) n->markDirty(); }
+        if (lz == chunkSize_ - 1) { Chunk* n = getChunk(gx, gz + 1); if (n) n->markDirty(); }
+
+        return true;
+    }
+
+    uint8_t World::getBlock(int worldX, int worldY, int worldZ) const {
+        if (worldY < 0 || worldY >= height_) return 0;
+        int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
+        int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
+        auto it = chunks_.find(packKey(gx, gz));
+        if (it == chunks_.end()) return 0;
+        int lx = worldX - gx * chunkSize_;
+        int lz = worldZ - gz * chunkSize_;
+        return it->second->getBlock(lx, worldY, lz);
+    }
+
+    void World::remeshDirtyChunks() {
+        int N = chunkSize_;
+        int h = height_;
+
+        for (auto& [key, chunk] : chunks_) {
+            if (!chunk->isRemeshNeeded()) continue;
+
+            uint64_t ukey = key;
+            int gx = static_cast<int>(static_cast<int64_t>(ukey >> 32));
+            int gz = static_cast<int>(static_cast<int64_t>(ukey & 0xFFFFFFFF));
+
+            std::vector<uint8_t> edgePosX, edgeNegX, edgePosZ, edgeNegZ;
+            const std::vector<uint8_t>* pEdgePosX = nullptr;
+            const std::vector<uint8_t>* pEdgeNegX = nullptr;
+            const std::vector<uint8_t>* pEdgePosZ = nullptr;
+            const std::vector<uint8_t>* pEdgeNegZ = nullptr;
+
+            auto itPosX = chunks_.find(packKey(gx + 1, gz));
+            if (itPosX != chunks_.end()) {
+                edgePosX = extractEdgeStrip(itPosX->second->getBlockData(), N, h, 0);
+                pEdgePosX = &edgePosX;
+            }
+            auto itNegX = chunks_.find(packKey(gx - 1, gz));
+            if (itNegX != chunks_.end()) {
+                edgeNegX = extractEdgeStrip(itNegX->second->getBlockData(), N, h, 1);
+                pEdgeNegX = &edgeNegX;
+            }
+            auto itPosZ = chunks_.find(packKey(gx, gz + 1));
+            if (itPosZ != chunks_.end()) {
+                edgePosZ = extractEdgeStrip(itPosZ->second->getBlockData(), N, h, 2);
+                pEdgePosZ = &edgePosZ;
+            }
+            auto itNegZ = chunks_.find(packKey(gx, gz - 1));
+            if (itNegZ != chunks_.end()) {
+                edgeNegZ = extractEdgeStrip(itNegZ->second->getBlockData(), N, h, 3);
+                pEdgeNegZ = &edgeNegZ;
+            }
+
+            ChunkMesher::generate(*chunk, chunk->getBlockData(), h,
+                                  pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+            chunk->upload();
+            chunk->markRemeshed();
+        }
+    }
+
     void World::loadChunkSync(int gridX, int gridZ) {
         if (isChunkLoaded(gridX, gridZ)) return;
 

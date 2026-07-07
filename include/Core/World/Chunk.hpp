@@ -56,6 +56,14 @@ namespace lve {
         const std::vector<uint8_t>& getBlockData() const { return blockData_; }
         void setBlockData(std::vector<uint8_t> data, int chunkSize, int height);
         uint8_t getBlock(int x, int y, int z) const;
+        void setBlock(int x, int y, int z, uint8_t blockId);
+
+        int getBlockDataSize() const { return chunkSize_; }
+        int getHeight() const { return height_; }
+
+        bool isRemeshNeeded() const { return remeshNeeded_; }
+        void markDirty() { remeshNeeded_ = true; }
+        void markRemeshed() { remeshNeeded_ = false; }
 
         void upload();
         void bindAndDraw(VkCommandBuffer cmd);
@@ -75,9 +83,12 @@ namespace lve {
         std::vector<uint8_t> blockData_;
         int chunkSize_ = 0;
         int height_ = 0;
+        bool remeshNeeded_ = false;
 
         std::unique_ptr<Buffer> vertexBuffer_;
         std::unique_ptr<Buffer> indexBuffer_;
+        std::unique_ptr<Buffer> prevVertexBuffer_;
+        std::unique_ptr<Buffer> prevIndexBuffer_;
 
         VkFence uploadCompleteFence_ = VK_NULL_HANDLE;
         VkCommandBuffer uploadCmd_ = VK_NULL_HANDLE;

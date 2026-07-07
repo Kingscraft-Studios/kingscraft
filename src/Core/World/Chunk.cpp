@@ -35,11 +35,24 @@ namespace lve {
                           + static_cast<size_t>(x)];
     }
 
+    void Chunk::setBlock(int x, int y, int z, uint8_t blockId) {
+        if (blockData_.empty()) return;
+        if (x < 0 || x >= chunkSize_ || y < 0 || y >= height_ || z < 0 || z >= chunkSize_)
+            return;
+        blockData_[static_cast<size_t>(y) * chunkSize_ * chunkSize_
+                   + static_cast<size_t>(z) * chunkSize_
+                   + static_cast<size_t>(x)] = blockId;
+        remeshNeeded_ = true;
+    }
+
     void Chunk::upload() {
         VkDeviceSize vertexSize = vertices_.size() * sizeof(ChunkVertex);
         VkDeviceSize indexSize = indices_.size() * sizeof(uint16_t);
         VkDeviceSize totalSize = vertexSize + indexSize;
         if (totalSize == 0) return;
+
+        prevVertexBuffer_ = std::move(vertexBuffer_);
+        prevIndexBuffer_ = std::move(indexBuffer_);
 
         if (vertexSize > 0) {
             vertexBuffer_ = std::make_unique<Buffer>(
@@ -100,6 +113,9 @@ namespace lve {
             }
             vkDestroyFence(device_.device(), uploadCompleteFence_, nullptr);
             uploadCompleteFence_ = VK_NULL_HANDLE;
+
+            prevVertexBuffer_.reset();
+            prevIndexBuffer_.reset();
         }
 
         VkBuffer vb[] = {vertexBuffer_->getHandle()};
@@ -112,6 +128,8 @@ namespace lve {
     void Chunk::cleanup() {
         vertexBuffer_.reset();
         indexBuffer_.reset();
+        prevVertexBuffer_.reset();
+        prevIndexBuffer_.reset();
         if (uploadCompleteFence_ != VK_NULL_HANDLE) {
             vkWaitForFences(device_.device(), 1, &uploadCompleteFence_, VK_TRUE, UINT64_MAX);
             vkDestroyFence(device_.device(), uploadCompleteFence_, nullptr);

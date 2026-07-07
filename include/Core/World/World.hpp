@@ -36,6 +36,10 @@ namespace lve {
         int getChunkSize() const { return chunkSize_; }
         int getHeight() const { return height_; }
 
+        bool setBlock(int worldX, int worldY, int worldZ, uint8_t blockId);
+        uint8_t getBlock(int worldX, int worldY, int worldZ) const;
+        void remeshDirtyChunks();
+
         static int worldToGrid(float worldCoord, int chunkSize);
 
     private:
@@ -47,6 +51,7 @@ namespace lve {
             std::vector<uint8_t> blockData;
         };
 
+        Chunk* getChunk(int gridX, int gridZ);
         static uint64_t packKey(int gx, int gz);
         void loadChunkSync(int gridX, int gridZ);
         void genThreadFunc();

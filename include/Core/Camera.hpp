@@ -9,6 +9,7 @@ namespace lve {
     public:
         void setPosition(glm::vec3 pos) { position_ = pos; }
         glm::vec3 getPosition() const { return position_; }
+        glm::vec3 getForward() const { return forward_; }
 
         void setRotation(float yaw, float pitch) { yaw_ = yaw; pitch_ = pitch; updateVectors(); }
 

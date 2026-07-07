@@ -38,6 +38,9 @@ namespace lve {
             double y = window.getLastY();
 
             uiSystem->onMouseButton(button, action, mods, x, y);
+
+            if (screenManager->getCurrent())
+                screenManager->getCurrent()->onMouseButton(button, action, mods);
         });
 
         window.setScrollCallback([this](double dx, double dy) {

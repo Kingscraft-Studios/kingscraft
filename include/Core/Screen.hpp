@@ -28,6 +28,7 @@ namespace lve {
 
         virtual FrameRenderInfo getFrameRenderInfo(const Renderer& renderer, uint32_t imageIndex) const = 0;
 
+        virtual void onMouseButton(int button, int action, int mods) {}
         virtual void onRenderPassChanged(VkRenderPass) {}
         virtual void onSwapChainRecreated(VkExtent2D extent) {}
     };

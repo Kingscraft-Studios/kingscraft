@@ -8,6 +8,8 @@
 #include "Core/KeyBindHandler.hpp"
 #include "Core/Registries.hpp"
 #include "Core/Keys.hpp"
+#include "Core/Raycast.hpp"
+#include "Core/Blocks/Blocks.hpp"
 #include "Vulkan/Window.hpp"
 #include "Vulkan/Device.hpp"
 
@@ -133,6 +135,46 @@ namespace lve {
 
     void WorldScreen::onRenderPassChanged(VkRenderPass renderPass) {
         terrainRenderer_.onRenderPassChanged(renderPass);
+    }
+
+    void WorldScreen::onMouseButton(int button, int action, int mods) {
+        (void)mods;
+        if (action != GLFW_PRESS) return;
+        if (!playerController_.isCursorCaptured()) return;
+
+        const Camera& cam = playerController_.getCamera();
+        glm::vec3 origin = cam.getPosition();
+        glm::vec3 dir = cam.getForward();
+
+        auto hit = raycastBlock(origin, dir, 8.0f, *world_);
+        if (!hit.hit) return;
+
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            world_->setBlock(hit.x, hit.y, hit.z, 0);
+            world_->remeshDirtyChunks();
+            return;
+        }
+
+        if (button != GLFW_MOUSE_BUTTON_RIGHT) return;
+
+        static constexpr int faceNormals[6][3] = {
+            {1, 0, 0},  {-1, 0, 0},
+            {0, 1, 0},  {0, -1, 0},
+            {0, 0, 1},  {0, 0, -1},
+        };
+
+        int placeX = hit.x + faceNormals[hit.face][0];
+        int placeY = hit.y + faceNormals[hit.face][1];
+        int placeZ = hit.z + faceNormals[hit.face][2];
+
+        if (placeY < 0 || placeY >= world_->getHeight()) return;
+
+        auto* key = hotbar_.getSlotBlock(hotbar_.getSelectedSlot());
+        if (!key || key->getId() == 0) return;
+
+        uint8_t blockId = static_cast<uint8_t>(key->getId());
+        world_->setBlock(placeX, placeY, placeZ, blockId);
+        world_->remeshDirtyChunks();
     }
 
     void WorldScreen::onSwapChainRecreated(VkExtent2D extent) {
