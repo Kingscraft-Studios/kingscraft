@@ -35,6 +35,9 @@ namespace lve {
         void setFontAtlas(VkImageView imageView, VkSampler sampler);
         bool hasFontAtlas() const { return atlasView_ != VK_NULL_HANDLE; }
 
+        void setBlockTexture(VkImageView imageView, VkSampler sampler);
+        bool hasBlockTexture() const { return blockTexView_ != VK_NULL_HANDLE; }
+
         void uploadStylePool(const void* data, uint32_t count);
         void uploadElementStyles(const void* data, uint32_t firstElement, uint32_t count);
 
@@ -46,6 +49,8 @@ namespace lve {
         void allocateDescriptorSets();
         void createUniformBuffer();
         void updateUniformBuffer();
+        void createDummyTexture();
+        void destroyDummyTexture();
         void updateUiDescriptorSet();
         void updateCompositeDescriptorSet();
 
@@ -91,6 +96,20 @@ namespace lve {
         // Element→style index SSBO (binding 3) — maps elementId to styleIndex
         std::unique_ptr<Buffer> elementStylesBuffer_;
         VkDescriptorBufferInfo elementStylesInfo_{};
+
+        // Block texture array (set 1, binding 0)
+        VkDescriptorSetLayout blockTexLayout_ = VK_NULL_HANDLE;
+        VkDescriptorPool blockTexPool_ = VK_NULL_HANDLE;
+        VkDescriptorSet blockTexSet_ = VK_NULL_HANDLE;
+        VkImageView blockTexView_ = VK_NULL_HANDLE;
+        VkSampler blockTexSampler_ = VK_NULL_HANDLE;
+        bool blockTexDirty_ = false;
+
+        // Placeholder white texture used before real block textures are available
+        VkImage dummyImage_ = VK_NULL_HANDLE;
+        VkDeviceMemory dummyMemory_ = VK_NULL_HANDLE;
+        VkImageView dummyImageView_ = VK_NULL_HANDLE;
+        VkSampler dummySampler_ = VK_NULL_HANDLE;
     };
 
 } // namespace lve

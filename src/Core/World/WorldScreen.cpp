@@ -31,6 +31,7 @@ namespace lve {
         Registries::waitForBuild();
 
         textureCache->updateFromRegistry();
+        ctx.uiSystem->setBlockTexture(textureCache->getImageView(), textureCache->getSampler());
 
         camera_.setPosition({67.5f, 15.0f, 67.5f});
         camera_.setRotation(0.0f, -35.0f);
@@ -97,10 +98,12 @@ namespace lve {
         glm::mat4 viewProj = playerController_.getViewProj();
         float worldHeight = static_cast<float>(world_->getHeight());
 
+        double frustumMs = 0.0, drawMs = 0.0;
         terrainRenderer_.render(ctx.cmd, world_->getLoadedChunks(),
                                 viewProj, camera_.getPosition(),
                                 ctx.frameIndex, ctx.gpuQueryPool,
-                                settings.enableFrustumCulling, worldHeight);
+                                settings.enableFrustumCulling, worldHeight,
+                                &frustumMs, &drawMs);
 
         auto& app = AppContext::get();
         fpsCounter_.setCpuGpuTimes(ctx.cpuFrameTimeMs,
@@ -108,7 +111,7 @@ namespace lve {
                                    app.renderer->getTerrainGpuTimeMs(),
                                    ctx.cpuTickMs,
                                    ctx.cpuSubmitMs,
-                                   0.0, 0.0);
+                                   frustumMs, drawMs);
 
         app.uiSystem->render(ctx.cmd, ctx.renderPass);
     }
@@ -134,6 +137,7 @@ namespace lve {
 
     void WorldScreen::onSwapChainRecreated(VkExtent2D extent) {
         extent_ = extent;
+        hotbar_.resize(static_cast<float>(extent.width), static_cast<float>(extent.height));
     }
 
     FrameRenderInfo WorldScreen::getFrameRenderInfo(const Renderer& renderer, uint32_t imageIndex) const {

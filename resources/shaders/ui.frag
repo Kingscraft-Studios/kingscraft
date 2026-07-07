@@ -12,15 +12,17 @@ layout(location = 2) flat in vec4 inColor2;
 layout(location = 3) flat in vec4 inParams;
 
 layout(set = 0, binding = 1) uniform sampler2D fontAtlas;
+layout(set = 1, binding = 0) uniform sampler2DArray blockTextures;
 
 layout(location = 0) out vec4 outColor;
 
 void main() {
     float mode = inParams.x;
 
-    // Texture (-5)
+    // Texture (-5): sample from block texture array using inParams.y as layer
     if (mode < -4.5) {
-        outColor = texture(fontAtlas, inUv);
+        int layer = int(inParams.y);
+        outColor = texture(blockTextures, vec3(inUv, layer));
 
     // RoundedRect (-4): SDF-based rounded rect with optional border
     } else if (mode < -3.5) {

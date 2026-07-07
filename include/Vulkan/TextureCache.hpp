@@ -18,6 +18,7 @@ public:
 
     VkDescriptorSetLayout getLayout() const { return descriptorSetLayout_; }
     VkDescriptorSet getDescriptorSet() const { return descriptorSet_; }
+    VkImageView getImageView() const { return imageView_; }
     VkSampler getSampler() const { return sampler_; }
     uint32_t getLayerCount() const { return layerCount_; }
 

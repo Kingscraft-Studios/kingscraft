@@ -30,6 +30,7 @@ struct UiStyle {
     float cornerRadius = 0.0f;
     float borderWidth = 0.0f;
     float coverage = 1.0f;
+    float textureLayer = -1.0f;
     glm::vec2 gradientDir{1.0f, 0.0f};
     glm::vec2 gradientCenter{0.5f, 0.5f};
 
@@ -38,9 +39,13 @@ struct UiStyle {
         gpu.color1 = color1;
         gpu.color2 = color2;
         gpu.params.x = static_cast<float>(static_cast<int>(mode));
-        gpu.params.y = cornerRadius;
         gpu.params.z = borderWidth;
         gpu.params.w = coverage;
+        if (mode == RenderMode::Texture) {
+            gpu.params.y = textureLayer;
+        } else {
+            gpu.params.y = cornerRadius;
+        }
         return gpu;
     }
 };

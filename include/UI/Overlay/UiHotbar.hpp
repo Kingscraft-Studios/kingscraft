@@ -2,6 +2,7 @@
 
 #include "UI/Elements/UiRect.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
+#include "UI/Elements/UiImage.hpp"
 
 namespace lve {
 
@@ -20,6 +21,7 @@ namespace lve {
         void init(UiWrapper& ui, float screenW, float screenH);
         void cleanup(UiWrapper& ui);
 
+        void resize(float screenW, float screenH);
         void selectSlot(int index);
         int getSelectedSlot() const { return selectedSlot_; }
 
@@ -35,11 +37,13 @@ namespace lve {
         UiRect bg_;
         UiRect selection_;
         UiRect slots_[SLOT_COUNT];
+        UiImage slotIcons_[SLOT_COUNT];
         UiTextBlock slotNumbers_[SLOT_COUNT];
 
         uint32_t bgStyle_ = 0;
         uint32_t slotStyle_ = 0;
         uint32_t selectionStyle_ = 0;
+        uint32_t iconStyles_[SLOT_COUNT] = {};
     };
 
 } // namespace lve

@@ -47,6 +47,11 @@ namespace lve {
         void updateStylePool() { if (engine_) engine_->updateStylePool(); }
         void markDirty(uint32_t elementId);
 
+        // Block texture — delegates to renderer
+        void setBlockTexture(VkImageView imageView, VkSampler sampler) {
+            if (engine_) engine_->getRenderer().setBlockTexture(imageView, sampler);
+        }
+
         // Debug editing mode — delegates to engine
         void setDebugMode(bool on) { if (engine_) engine_->setDebugMode(on); }
         bool isDebugModeOn() const { return engine_ && engine_->isDebugModeOn(); }

@@ -23,7 +23,9 @@ namespace lve {
         void render(VkCommandBuffer cmd, const std::vector<Chunk*>& chunks,
                     const glm::mat4& viewProj, const glm::vec3& cameraPos,
                     uint32_t frameIndex, VkQueryPool gpuQueryPool,
-                    bool enableFrustumCulling, float worldHeight);
+                    bool enableFrustumCulling, float worldHeight,
+                    double* outFrustumMs = nullptr,
+                    double* outDrawMs = nullptr);
 
         void onRenderPassChanged(VkRenderPass renderPass);
 

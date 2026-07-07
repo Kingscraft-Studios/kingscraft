@@ -1,6 +1,8 @@
 #include "UI/Overlay/UiHotbar.hpp"
 #include "UI/UiWrapper.hpp"
 #include "UI/Engine/UiStyle.hpp"
+#include "Core/Blocks/Blocks.hpp"
+#include "Core/Blocks/Block.hpp"
 #include <string>
 
 namespace lve {
@@ -20,6 +22,31 @@ namespace lve {
             .mode = RenderMode::Solid,
             .color1 = {1.0f, 1.0f, 1.0f, 0.8f},
         });
+
+        // Register icon styles: first 3 slots use block textures, rest are solid
+        Block* grass = Blocks::GRASS_BLOCK;
+        Block* dirt = Blocks::DIRT;
+        Block* stone = Blocks::STONE;
+        int layers[3] = {
+            grass ? grass->getTextureBaseOffset() : 0,
+            dirt ? dirt->getTextureBaseOffset() : 0,
+            stone ? stone->getTextureBaseOffset() : 0,
+        };
+
+        for (int i = 0; i < SLOT_COUNT; ++i) {
+            if (i < 3) {
+                iconStyles_[i] = ui.registerStyle(UiStyle{
+                    .mode = RenderMode::Texture,
+                    .color1 = {1.0f, 1.0f, 1.0f, 1.0f},
+                    .textureLayer = static_cast<float>(layers[i]),
+                });
+            } else {
+                iconStyles_[i] = ui.registerStyle(UiStyle{
+                    .mode = RenderMode::Solid,
+                    .color1 = {0.3f, 0.3f, 0.3f, 0.5f},
+                });
+            }
+        }
 
         float totalW = totalWidth();
         float anchorX = -totalW / 2.0f;
@@ -46,6 +73,12 @@ namespace lve {
             slots_[i].setName("HotbarSlot_" + std::to_string(i));
             ui.addElement(&slots_[i]);
 
+            slotIcons_[i].setAnchor({0.5f, 1.0f}, {offsetX + 2, -SLOT_SIZE - BOTTOM_MARGIN + 2});
+            slotIcons_[i].setSize({SLOT_SIZE - 4, SLOT_SIZE - 4});
+            slotIcons_[i].setStyleIndex(iconStyles_[i]);
+            slotIcons_[i].setName("HotbarIcon_" + std::to_string(i));
+            ui.addElement(&slotIcons_[i]);
+
             slotNumbers_[i].setAnchor({0.5f, 1.0f}, {offsetX + 4, -SLOT_SIZE - BOTTOM_MARGIN + 4});
             slotNumbers_[i].setSize({16, 16});
             slotNumbers_[i].setText(std::to_string((i + 1) % 10));
@@ -63,8 +96,14 @@ namespace lve {
         ui.removeElement(&selection_);
         for (int i = 0; i < SLOT_COUNT; ++i) {
             ui.removeElement(&slots_[i]);
+            ui.removeElement(&slotIcons_[i]);
             ui.removeElement(&slotNumbers_[i]);
         }
+    }
+
+    void UiHotbar::resize(float screenW, float screenH) {
+        screenW_ = screenW;
+        screenH_ = screenH;
     }
 
     void UiHotbar::selectSlot(int index) {
@@ -74,10 +113,7 @@ namespace lve {
         float anchorX = -totalW / 2.0f;
         float offsetX = anchorX + selectedSlot_ * (SLOT_SIZE + SLOT_GAP);
         selection_.setPixelOffset({offsetX, -SLOT_SIZE - BOTTOM_MARGIN});
-        selection_.setPosition({
-            0.5f * screenW_ + offsetX,
-            screenH_ - SLOT_SIZE - BOTTOM_MARGIN
-        });
+        selection_.updateLayout(screenW_, screenH_);
     }
 
 } // namespace lve

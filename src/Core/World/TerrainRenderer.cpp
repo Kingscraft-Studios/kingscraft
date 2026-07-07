@@ -80,7 +80,8 @@ namespace lve {
     void TerrainRenderer::render(VkCommandBuffer cmd, const std::vector<Chunk*>& chunks,
                                  const glm::mat4& viewProj, const glm::vec3& cameraPos,
                                  uint32_t frameIndex, VkQueryPool gpuQueryPool,
-                                 bool enableFrustumCulling, float worldHeight)
+                                 bool enableFrustumCulling, float worldHeight,
+                                 double* outFrustumMs, double* outDrawMs)
     {
         if (!pipeline_) return;
 
@@ -112,6 +113,8 @@ namespace lve {
         std::vector<Chunk*> visible;
         visible.reserve(chunks.size());
 
+        double frustumStart = TimeUtil::uptimeSeconds();
+
         if (enableFrustumCulling && !chunks.empty()) {
             float chunkSize = static_cast<float>(chunks[0]->getVerticesPerAxis() - 1);
             glm::vec3 halfExtents(chunkSize * 0.5f, worldHeight * 0.5f, chunkSize * 0.5f);
@@ -141,10 +144,16 @@ namespace lve {
             }
         }
 
+        if (outFrustumMs)
+            *outFrustumMs = (TimeUtil::uptimeSeconds() - frustumStart) * 1000.0;
+
         // Draw
+        double drawStart = TimeUtil::uptimeSeconds();
         for (Chunk* chunk : visible) {
             chunk->bindAndDraw(cmd);
         }
+        if (outDrawMs)
+            *outDrawMs = (TimeUtil::uptimeSeconds() - drawStart) * 1000.0;
 
         // Terrain GPU timestamp end
         vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, gpuQueryPool, qi + 3);

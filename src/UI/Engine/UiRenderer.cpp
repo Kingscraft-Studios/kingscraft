@@ -11,6 +11,7 @@
 #include "Util/Preloader.hpp"
 
 #include <cstddef>
+#include <cstring>
 #include <stdexcept>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -28,10 +29,10 @@ namespace lve {
         createDescriptorSetLayouts();
         createDescriptorPools();
         createUniformBuffer();
+        createDummyTexture();
         offscreenTarget_ = std::make_unique<OffscreenTarget>(
             device_, extent_, VK_FORMAT_R8G8B8A8_UNORM, offscreenRenderPass_->getHandle());
         allocateDescriptorSets();
-        createPipeline();
         updateUiDescriptorSet();
         updateCompositeDescriptorSet();
         updateUniformBuffer();
@@ -50,6 +51,14 @@ namespace lve {
         if (pipelineLayout_ != VK_NULL_HANDLE) {
             vkDestroyPipelineLayout(device_.device(), pipelineLayout_, nullptr);
             pipelineLayout_ = VK_NULL_HANDLE;
+        }
+        if (blockTexLayout_ != VK_NULL_HANDLE) {
+            descriptorManager_.destroyLayout(blockTexLayout_);
+            blockTexLayout_ = VK_NULL_HANDLE;
+        }
+        if (blockTexPool_ != VK_NULL_HANDLE) {
+            descriptorManager_.destroyPool(blockTexPool_);
+            blockTexPool_ = VK_NULL_HANDLE;
         }
         if (uiDescriptorSetLayout_ != VK_NULL_HANDLE) {
             descriptorManager_.destroyLayout(uiDescriptorSetLayout_);
@@ -71,6 +80,7 @@ namespace lve {
         stylePoolBuffer_.reset();
         elementStylesBuffer_.reset();
         uniformBuffer_.reset();
+        destroyDummyTexture();
         initialized_ = false;
     }
 
@@ -85,6 +95,10 @@ namespace lve {
     void UiRenderer::renderOffscreen(VkCommandBuffer cmd, UiBatchQueue& batchQueue) {
         if (!initialized_ || extent_.width == 0 || extent_.height == 0) return;
         if (atlasView_ == VK_NULL_HANDLE) return;
+
+        if (!uiPipeline_) {
+            createPipeline();
+        }
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -125,9 +139,14 @@ namespace lve {
             updateUiDescriptorSet();
             atlasDirty_ = false;
         }
+        if (blockTexDirty_) {
+            updateUiDescriptorSet();
+            blockTexDirty_ = false;
+        }
 
+        VkDescriptorSet bindSets[2] = { uiDescriptorSet_, blockTexSet_ };
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                pipelineLayout_, 0, 1, &uiDescriptorSet_, 0, nullptr);
+                                pipelineLayout_, 0, 2, bindSets, 0, nullptr);
 
         batchQueue.flush(cmd);
 
@@ -166,6 +185,12 @@ namespace lve {
         atlasDirty_ = true;
     }
 
+    void UiRenderer::setBlockTexture(VkImageView imageView, VkSampler sampler) {
+        blockTexView_ = imageView;
+        blockTexSampler_ = sampler;
+        blockTexDirty_ = true;
+    }
+
     void UiRenderer::uploadStylePool(const void* data, uint32_t count) {
         if (!stylePoolBuffer_) return;
         uint32_t bytes = std::min(count, MAX_STYLES) * sizeof(GpuStyle);
@@ -179,10 +204,7 @@ namespace lve {
     }
 
     void UiRenderer::createDescriptorSetLayouts() {
-        // Binding 0: UBO (vertex), Binding 1: font atlas (fragment),
-        // Binding 2: stylePool SSBO (vertex), Binding 3: elementStyles SSBO (vertex)
         std::vector<VkDescriptorSetLayoutBinding> uiBindings(4);
-
         uiBindings[0].binding = 0;
         uiBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         uiBindings[0].descriptorCount = 1;
@@ -204,6 +226,14 @@ namespace lve {
         uiBindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
         uiDescriptorSetLayout_ = descriptorManager_.createLayout(uiBindings);
+
+        std::vector<VkDescriptorSetLayoutBinding> blockBindings(1);
+        blockBindings[0].binding = 0;
+        blockBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        blockBindings[0].descriptorCount = 1;
+        blockBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        blockTexLayout_ = descriptorManager_.createLayout(blockBindings);
 
         std::vector<VkDescriptorSetLayoutBinding> compBindings(1);
         compBindings[0].binding = 0;
@@ -227,6 +257,12 @@ namespace lve {
 
         uiDescriptorPool_ = descriptorManager_.createPool(uiPoolSizes, 1);
 
+        std::vector<VkDescriptorPoolSize> blockPoolSizes(1);
+        blockPoolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        blockPoolSizes[0].descriptorCount = 1;
+
+        blockTexPool_ = descriptorManager_.createPool(blockPoolSizes, 1);
+
         std::vector<VkDescriptorPoolSize> compPoolSizes(1);
         compPoolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         compPoolSizes[0].descriptorCount = 1;
@@ -236,14 +272,20 @@ namespace lve {
 
     void UiRenderer::allocateDescriptorSets() {
         uiDescriptorSet_ = descriptorManager_.allocateSet(uiDescriptorPool_, uiDescriptorSetLayout_);
+        blockTexSet_ = descriptorManager_.allocateSet(blockTexPool_, blockTexLayout_);
         compositeDescriptorSet_ = descriptorManager_.allocateSet(compositeDescriptorPool_, compositeDescriptorSetLayout_);
     }
 
     void UiRenderer::createPipeline() {
+        VkDescriptorSetLayout setLayouts[2] = {
+            uiDescriptorSetLayout_,
+            blockTexLayout_,
+        };
+
         VkPipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        layoutInfo.setLayoutCount = 1;
-        layoutInfo.pSetLayouts = &uiDescriptorSetLayout_;
+        layoutInfo.setLayoutCount = 2;
+        layoutInfo.pSetLayouts = setLayouts;
 
         if (vkCreatePipelineLayout(device_.device(), &layoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS) {
             throw std::runtime_error("failed to create UI pipeline layout!");
@@ -326,7 +368,7 @@ namespace lve {
         configInfo.blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         configInfo.blendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
         configInfo.blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        configInfo.blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        configInfo.blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         configInfo.blendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
 
         configInfo.depthStencilInfo.depthTestEnable = VK_FALSE;
@@ -336,6 +378,98 @@ namespace lve {
         configInfo.pipelineLayout = compositePipelineLayout_;
 
         compositePipeline_ = std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
+    }
+
+    void UiRenderer::createDummyTexture() {
+        // 1x1 white pixel texture as fallback for block texture descriptor
+        uint32_t white = 0xFFFFFFFF;
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingMemory;
+        VkDeviceSize size = 4;
+        device_.createBuffer(size,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingMemory);
+        void* mapped;
+        vkMapMemory(device_.device(), stagingMemory, 0, size, 0, &mapped);
+        std::memcpy(mapped, &white, size);
+        vkUnmapMemory(device_.device(), stagingMemory);
+
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = 1;
+        imageInfo.extent.height = 1;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        device_.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                    dummyImage_, dummyMemory_);
+
+        device_.transitionImageLayout(dummyImage_, VK_FORMAT_R8G8B8A8_SRGB,
+                                      VK_IMAGE_LAYOUT_UNDEFINED,
+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                      1, 1);
+        device_.copyBufferToImage(stagingBuffer, dummyImage_, 1, 1, 1);
+        device_.transitionImageLayout(dummyImage_, VK_FORMAT_R8G8B8A8_SRGB,
+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                      1, 1);
+
+        vkDestroyBuffer(device_.device(), stagingBuffer, nullptr);
+        vkFreeMemory(device_.device(), stagingMemory, nullptr);
+
+        dummyImageView_ = device_.createImageView(dummyImage_, VK_FORMAT_R8G8B8A8_SRGB,
+                                                   VK_IMAGE_ASPECT_COLOR_BIT, 1, 0,
+                                                   VK_IMAGE_VIEW_TYPE_2D_ARRAY, 1);
+
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_NEAREST;
+        samplerInfo.minFilter = VK_FILTER_NEAREST;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 1.0f;
+
+        if (vkCreateSampler(device_.device(), &samplerInfo, nullptr, &dummySampler_) != VK_SUCCESS)
+            throw std::runtime_error("failed to create dummy sampler!");
+
+        // Use dummy as the initial block texture
+        blockTexView_ = dummyImageView_;
+        blockTexSampler_ = dummySampler_;
+    }
+
+    void UiRenderer::destroyDummyTexture() {
+        if (dummySampler_ != VK_NULL_HANDLE) {
+            vkDestroySampler(device_.device(), dummySampler_, nullptr);
+            dummySampler_ = VK_NULL_HANDLE;
+        }
+        if (dummyImageView_ != VK_NULL_HANDLE) {
+            vkDestroyImageView(device_.device(), dummyImageView_, nullptr);
+            dummyImageView_ = VK_NULL_HANDLE;
+        }
+        if (dummyImage_ != VK_NULL_HANDLE) {
+            vkDestroyImage(device_.device(), dummyImage_, nullptr);
+            dummyImage_ = VK_NULL_HANDLE;
+        }
+        if (dummyMemory_ != VK_NULL_HANDLE) {
+            vkFreeMemory(device_.device(), dummyMemory_, nullptr);
+            dummyMemory_ = VK_NULL_HANDLE;
+        }
     }
 
     void UiRenderer::createUniformBuffer() {
@@ -389,18 +523,18 @@ namespace lve {
         uboWrite.pBufferInfo = &uboBufferInfo;
 
         // Write font atlas binding (1) — only if atlas is ready
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = atlasView_;
-        imageInfo.sampler = atlasSampler_;
+        VkDescriptorImageInfo fontImageInfo{};
+        fontImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        fontImageInfo.imageView = atlasView_;
+        fontImageInfo.sampler = atlasSampler_;
 
-        VkWriteDescriptorSet imageWrite{};
-        imageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        imageWrite.dstSet = uiDescriptorSet_;
-        imageWrite.dstBinding = 1;
-        imageWrite.descriptorCount = 1;
-        imageWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        imageWrite.pImageInfo = &imageInfo;
+        VkWriteDescriptorSet fontWrite{};
+        fontWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        fontWrite.dstSet = uiDescriptorSet_;
+        fontWrite.dstBinding = 1;
+        fontWrite.descriptorCount = 1;
+        fontWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        fontWrite.pImageInfo = &fontImageInfo;
 
         // Write stylePool SSBO binding (2)
         VkWriteDescriptorSet poolWrite{};
@@ -420,16 +554,30 @@ namespace lve {
         elemWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         elemWrite.pBufferInfo = &elementStylesInfo_;
 
-        uint32_t writeCount;
-        VkWriteDescriptorSet writes[4];
-        writes[0] = uboWrite;
-        writes[1] = poolWrite;
-        writes[2] = elemWrite;
-        writeCount = 3;
+        // Write block texture binding (set 1, binding 0)
+        VkDescriptorImageInfo blockImageInfo{};
+        blockImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        blockImageInfo.imageView = blockTexView_;
+        blockImageInfo.sampler = blockTexSampler_;
 
+        VkWriteDescriptorSet blockWrite{};
+        blockWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        blockWrite.dstSet = blockTexSet_;
+        blockWrite.dstBinding = 0;
+        blockWrite.descriptorCount = 1;
+        blockWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        blockWrite.pImageInfo = &blockImageInfo;
+
+        // Collect all writes
+        VkWriteDescriptorSet writes[6];
+        uint32_t writeCount = 0;
+        writes[writeCount++] = uboWrite;
+        writes[writeCount++] = poolWrite;
+        writes[writeCount++] = elemWrite;
         if (atlasView_ != VK_NULL_HANDLE) {
-            writes[writeCount++] = imageWrite;
+            writes[writeCount++] = fontWrite;
         }
+        writes[writeCount++] = blockWrite;
 
         descriptorManager_.updateDescriptorSets(
             std::vector<VkWriteDescriptorSet>(writes, writes + writeCount));
