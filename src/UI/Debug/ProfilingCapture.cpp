@@ -27,6 +27,7 @@ namespace lve {
         fsInvoc_.clear();
         clipPrims_.clear();
         visibleChunks_.clear();
+        visibleSubChunks_.clear();
 
         elapsed_ = 0.0;
         frameCount_ = 0;
@@ -51,7 +52,8 @@ namespace lve {
         uint64_t iaVerts, uint64_t iaPrims,
         uint64_t vsInvoc, uint64_t fsInvoc,
         uint64_t clipPrims,
-        uint32_t visibleChunks)
+        uint32_t visibleChunks,
+        uint32_t visibleSubChunks)
     {
         if (!active_) return;
 
@@ -72,6 +74,7 @@ namespace lve {
         fsInvoc_.push_back(fsInvoc);
         clipPrims_.push_back(clipPrims);
         visibleChunks_.push_back(visibleChunks);
+        visibleSubChunks_.push_back(visibleSubChunks);
 
         frameCount_++;
     }
@@ -125,6 +128,7 @@ namespace lve {
         auto sFs       = computeStats(fsInvoc_);
         auto sClip     = computeStats(clipPrims_);
         auto sChunks   = computeStats(visibleChunks_);
+        auto sSubChunks = computeStats(visibleSubChunks_);
 
         char buf[4096];
         int pos = 0;
@@ -169,6 +173,14 @@ namespace lve {
                      static_cast<unsigned>(std::round(sChunks.avg)),
                      sChunks.min, sChunks.max);
             pos += snprintf(buf + pos, sizeof(buf) - pos, "%-22s %s\n", "Visible Chunks", val);
+        }
+
+        {
+            char val[128];
+            snprintf(val, sizeof(val), "%-12u %-12u %-12u",
+                     static_cast<unsigned>(std::round(sSubChunks.avg)),
+                     sSubChunks.min, sSubChunks.max);
+            pos += snprintf(buf + pos, sizeof(buf) - pos, "%-22s %s\n", "Visible SubChunks", val);
         }
 
         if (pos >= (int)sizeof(buf)) pos = sizeof(buf) - 1;

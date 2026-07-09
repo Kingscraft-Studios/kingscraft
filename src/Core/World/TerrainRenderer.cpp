@@ -87,7 +87,8 @@ namespace lve {
                                  const glm::mat4& viewProj, const glm::vec3& cameraPos,
                                  bool enableFrustumCulling, float worldHeight,
                                   double* outFrustumMs, double* outDrawMs,
-                                  uint32_t* outVisibleChunks)
+                                  uint32_t* outVisibleChunks,
+                                  uint32_t* outVisibleSubChunks)
     {
         if (!pipeline_) return;
 
@@ -113,6 +114,8 @@ namespace lve {
 
         double frustumStart = TimeUtil::uptimeSeconds();
 
+        uint32_t visibleSubCount = 0;
+
         if (enableFrustumCulling && !chunks.empty()) {
             float chunkSize = static_cast<float>(chunks[0]->getVerticesPerAxis() - 1);
             glm::vec3 halfExtents(chunkSize * 0.5f, worldHeight * 0.5f, chunkSize * 0.5f);
@@ -125,6 +128,8 @@ namespace lve {
                 if (!frustum.isVisible(min, max)) continue;
                 if (chunk->getIndexCount() == 0) continue;
                 visible.push_back(chunk);
+                for (auto& sub : chunk->getSubChunks())
+                    if (sub.indexCount > 0) visibleSubCount++;
             }
 
             std::sort(visible.begin(), visible.end(),
@@ -138,6 +143,8 @@ namespace lve {
             for (Chunk* chunk : chunks) {
                 if (chunk->getIndexCount() == 0) continue;
                 visible.push_back(chunk);
+                for (auto& sub : chunk->getSubChunks())
+                    if (sub.indexCount > 0) visibleSubCount++;
             }
         }
 
@@ -157,6 +164,8 @@ namespace lve {
 
         if (outVisibleChunks)
             *outVisibleChunks = static_cast<uint32_t>(visible.size());
+        if (outVisibleSubChunks)
+            *outVisibleSubChunks = visibleSubCount;
     }
 
     void TerrainRenderer::onRenderPassChanged(VkRenderPass renderPass) {

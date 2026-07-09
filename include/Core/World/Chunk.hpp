@@ -9,6 +9,8 @@
 
 namespace lve {
 
+    static constexpr uint32_t SUBCHUNK_H = 4;
+
     struct ChunkVertex {
         uint8_t  px;       // offset 0 — local chunk coordinate
         uint8_t  py;       // offset 1
@@ -46,18 +48,25 @@ namespace lve {
 
     static_assert(sizeof(ChunkVertex) == 8, "ChunkVertex must be 8 bytes");
 
+    struct SubChunk {
+        int yBase = 0;
+        std::vector<ChunkVertex> vertices;
+        std::vector<uint16_t> indices;
+        uint32_t indexCount = 0;
+        bool meshNeeded = true;
+    };
+
     class Chunk {
     public:
-        Chunk(Device& device, glm::ivec2 gridPos, int verticesPerAxis, float spacing);
+        Chunk(Device& device, glm::ivec2 gridPos, int verticesPerAxis, float spacing, int height);
         ~Chunk();
 
         glm::ivec2 getGridPos() const { return gridPos_; }
         glm::vec3 getWorldOrigin() const { return worldOrigin_; }
         int getVerticesPerAxis() const { return verticesPerAxis_; }
 
-        std::vector<ChunkVertex>& vertices() { return vertices_; }
-        std::vector<uint16_t>& indices() { return indices_; }
-        uint32_t getIndexCount() const { return indexCount_; }
+        std::vector<SubChunk>& getSubChunks() { return subChunks_; }
+        const std::vector<SubChunk>& getSubChunks() const { return subChunks_; }
 
         const std::vector<uint8_t>& getBlockData() const { return blockData_; }
         void setBlockData(std::vector<uint8_t> data, int chunkSize, int height);
@@ -67,9 +76,11 @@ namespace lve {
         int getBlockDataSize() const { return chunkSize_; }
         int getHeight() const { return height_; }
 
-        bool isRemeshNeeded() const { return remeshNeeded_; }
-        void markDirty() { remeshNeeded_ = true; }
-        void markRemeshed() { remeshNeeded_ = false; }
+        bool isRemeshNeeded() const;
+        void markDirty();
+        void markRemeshed();
+
+        uint32_t getIndexCount() const { return indexCount_; }
 
         void upload();
         void bindAndDraw(VkCommandBuffer cmd);
@@ -82,20 +93,18 @@ namespace lve {
         int verticesPerAxis_;
         float spacing_;
 
-        std::vector<ChunkVertex> vertices_;
-        std::vector<uint16_t> indices_;
-        uint32_t indexCount_ = 0;
-
         std::vector<uint8_t> blockData_;
         int chunkSize_ = 0;
         int height_ = 0;
-        bool remeshNeeded_ = false;
+
+        std::vector<SubChunk> subChunks_;
 
         std::unique_ptr<Buffer> vertexBuffer_;
         std::unique_ptr<Buffer> indexBuffer_;
         std::unique_ptr<Buffer> prevVertexBuffer_;
         std::unique_ptr<Buffer> prevIndexBuffer_;
-
+        uint32_t indexCount_ = 0;
+        uint32_t prevIndexCount_ = 0;
         VkFence uploadCompleteFence_ = VK_NULL_HANDLE;
         VkCommandBuffer uploadCmd_ = VK_NULL_HANDLE;
     };

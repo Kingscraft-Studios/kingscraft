@@ -20,7 +20,8 @@ namespace lve {
             uint64_t iaVerts, uint64_t iaPrims,
             uint64_t vsInvoc, uint64_t fsInvoc,
             uint64_t clipPrims,
-            uint32_t visibleChunks);
+            uint32_t visibleChunks,
+            uint32_t visibleSubChunks);
 
         bool isActive() const { return active_; }
 
@@ -37,6 +38,7 @@ namespace lve {
         std::vector<double> memBwGBs_, overdraw_;
         std::vector<uint64_t> iaVerts_, iaPrims_, vsInvoc_, fsInvoc_, clipPrims_;
         std::vector<uint32_t> visibleChunks_;
+        std::vector<uint32_t> visibleSubChunks_;
     };
 
 } // namespace lve

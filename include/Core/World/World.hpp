@@ -46,9 +46,7 @@ namespace lve {
         struct ChunkGenResult {
             int gx;
             int gz;
-            std::vector<ChunkVertex> vertices;
-            std::vector<uint16_t> indices;
-            std::vector<uint8_t> blockData;
+            std::unique_ptr<Chunk> chunk;
         };
 
         Chunk* getChunk(int gridX, int gridZ);

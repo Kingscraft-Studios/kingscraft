@@ -25,7 +25,8 @@ namespace lve {
                     bool enableFrustumCulling, float worldHeight,
                     double* outFrustumMs = nullptr,
                     double* outDrawMs = nullptr,
-                    uint32_t* outVisibleChunks = nullptr);
+                    uint32_t* outVisibleChunks = nullptr,
+                    uint32_t* outVisibleSubChunks = nullptr);
 
         void onRenderPassChanged(VkRenderPass renderPass);
 

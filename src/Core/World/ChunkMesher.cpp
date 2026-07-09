@@ -3,6 +3,7 @@
 #include "Core/Registry.hpp"
 #include "Core/Resources/BlockModel.hpp"
 #include <glm/glm.hpp>
+#include <algorithm>
 
 namespace lve {
 
@@ -51,17 +52,24 @@ namespace {
     }
 }
 
-void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, int height,
-                           const std::vector<uint8_t>* edgePosX,
-                           const std::vector<uint8_t>* edgeNegX,
-                           const std::vector<uint8_t>* edgePosZ,
-                           const std::vector<uint8_t>* edgeNegZ) {
-    int N = chunk.getVerticesPerAxis();
-
-    auto& vertices = chunk.vertices();
-    auto& indices = chunk.indices();
+void ChunkMesher::generateSubChunk(
+    SubChunk& subChunk,
+    const std::vector<uint8_t>& blockIds,
+    int N, int height,
+    int yBase,
+    const std::vector<uint8_t>* edgePosX,
+    const std::vector<uint8_t>* edgeNegX,
+    const std::vector<uint8_t>* edgePosZ,
+    const std::vector<uint8_t>* edgeNegZ)
+{
+    auto& vertices = subChunk.vertices;
+    auto& indices = subChunk.indices;
     vertices.clear();
     indices.clear();
+    subChunk.indexCount = 0;
+
+    int yEnd = std::min(yBase + static_cast<int>(SUBCHUNK_H), height);
+    if (yBase >= height) return;
 
     auto& registry = Registry<Block>::getRegistry();
 
@@ -93,11 +101,12 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
         int ua = uAxis[dir];
         int va = vAxis[dir];
 
-        int depthDim = (na == 1) ? height : N;
-        int uDim = (ua == 1) ? height : N;
-        int vDim = (va == 1) ? height : N;
+        int depthStart = (na == 1) ? yBase : 0;
+        int depthEnd   = (na == 1) ? yEnd : N;
+        int uDim       = (ua == 1) ? (yEnd - yBase) : N;
+        int vDim       = (va == 1) ? (yEnd - yBase) : N;
 
-        for (int depth = 0; depth < depthDim; ++depth) {
+        for (int depth = depthStart; depth < depthEnd; ++depth) {
             size_t sliceSize = static_cast<size_t>(uDim) * vDim;
             std::vector<bool> mask(sliceSize, false);
             std::vector<uint16_t> texIdx(sliceSize, 0);
@@ -108,6 +117,9 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
                     coords[na] = depth;
                     coords[ua] = u;
                     coords[va] = v;
+
+                    if (ua == 1) coords[1] += yBase;
+                    if (va == 1) coords[1] += yBase;
 
                     uint8_t blockId = getBlock(coords[0], coords[1], coords[2]);
                     if (blockId == 0) continue;
@@ -170,6 +182,8 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
                     basePos[ua] = u;
                     basePos[va] = v;
 
+                    if (na != 1) basePos[1] += yBase;
+
                     glm::vec3 baseLocal(
                         static_cast<float>(basePos[0]),
                         static_cast<float>(basePos[1]),
@@ -226,6 +240,8 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
             }
         }
     }
+
+    subChunk.indexCount = static_cast<uint32_t>(indices.size());
 }
 
 } // namespace lve

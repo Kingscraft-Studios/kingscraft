@@ -102,11 +102,12 @@ namespace lve {
         float worldHeight = static_cast<float>(world_->getHeight());
 
         double frustumMs = 0.0, drawMs = 0.0;
-        uint32_t visibleChunks = 0;
+        uint32_t visibleChunks = 0, visibleSubChunks = 0;
         terrainRenderer_.render(ctx.cmd, world_->getLoadedChunks(),
                                 viewProj, camera_.getPosition(),
                                 settings.enableFrustumCulling, worldHeight,
-                                &frustumMs, &drawMs, &visibleChunks);
+                                &frustumMs, &drawMs, &visibleChunks,
+                                &visibleSubChunks);
 
         auto& app = AppContext::get();
         auto* r = app.renderer;
@@ -126,7 +127,8 @@ namespace lve {
             r->getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
             r->getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
             r->getPipelineStat(Renderer::STAT_CLIP_PRIMS),
-            visibleChunks);
+            visibleChunks,
+            visibleSubChunks);
 
         auto* pc = app.profilingCapture;
         if (pc && pc->isActive()) {
@@ -146,7 +148,8 @@ namespace lve {
                 r->getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
                 r->getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
                 r->getPipelineStat(Renderer::STAT_CLIP_PRIMS),
-                visibleChunks);
+                visibleChunks,
+                visibleSubChunks);
         }
 
         app.uiSystem->render(ctx.cmd, ctx.renderPass);

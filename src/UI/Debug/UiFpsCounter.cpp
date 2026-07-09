@@ -65,10 +65,10 @@ namespace lve {
             uint64_t fsMil = latestFsInvoc_ / 1000000;
             char buf2[256];
             int n2 = snprintf(buf2, sizeof(buf2),
-                "Verts: %llu  Tris: %llu  Ch: %u  FS: %lluM  OD: %.1fx  BW: %.1fGB/s",
+                "Verts: %llu  Tris: %llu  Ch: %u/%u  FS: %lluM  OD: %.1fx  BW: %.1fGB/s",
                 (unsigned long long)latestIaVerts_,
                 (unsigned long long)latestIaPrims_,
-                latestVisibleChunks_,
+                latestVisibleSubChunks_, latestVisibleChunks_,
                 (unsigned long long)fsMil,
                 latestOverdraw_, latestMemBwGBs_);
             line2_.setText(std::string(buf2, n2));
@@ -99,7 +99,8 @@ namespace lve {
         uint64_t iaVerts, uint64_t iaPrims,
         uint64_t vsInvoc, uint64_t fsInvoc,
         uint64_t clipPrims,
-        uint32_t visibleChunks)
+        uint32_t visibleChunks,
+        uint32_t visibleSubChunks)
     {
         latestCpuMs_ = cpuFrameMs;
         latestGpuMs_ = gpuTotalMs;
@@ -118,6 +119,7 @@ namespace lve {
         latestFsInvoc_ = fsInvoc;
         latestClipPrims_ = clipPrims;
         latestVisibleChunks_ = visibleChunks;
+        latestVisibleSubChunks_ = visibleSubChunks;
     }
 
     void UiFpsCounter::cleanup(UiWrapper& ui) {

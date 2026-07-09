@@ -131,10 +131,12 @@ namespace lve {
                 pEdgeNegZ = &edgeNegZ;
             }
 
-            ChunkMesher::generate(*chunk, chunk->getBlockData(), h,
-                                  pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+            for (auto& sub : chunk->getSubChunks()) {
+                if (!sub.meshNeeded) continue;
+                ChunkMesher::generateSubChunk(sub, chunk->getBlockData(), N, h, sub.yBase,
+                                               pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+            }
             chunk->upload();
-            chunk->markRemeshed();
         }
     }
 
@@ -168,10 +170,12 @@ namespace lve {
             if (it != blockCache_.end()) { edgeNegZ = extractEdgeStrip(it->second, N, h, 3); pEdgeNegZ = &edgeNegZ; }
         }
 
-        auto chunk = std::make_unique<Chunk>(device_, glm::ivec2(gridX, gridZ), N, 1.0f);
+        auto chunk = std::make_unique<Chunk>(device_, glm::ivec2(gridX, gridZ), N, 1.0f, h);
         chunk->setBlockData(blockIds, N, h);
-        ChunkMesher::generate(*chunk, blockIds, h,
-                              pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+        for (auto& sub : chunk->getSubChunks()) {
+            ChunkMesher::generateSubChunk(sub, chunk->getBlockData(), N, h, sub.yBase,
+                                           pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+        }
         chunk->upload();
 
         chunks_[packKey(gridX, gridZ)] = std::move(chunk);
@@ -242,17 +246,17 @@ namespace lve {
                 if (it != blockCache_.end()) { edgeNegZ = extractEdgeStrip(it->second, N, h, 3); pEdgeNegZ = &edgeNegZ; }
             }
 
-            Chunk tempChunk(device_, glm::ivec2(gx, gz), N, 1.0f);
-            tempChunk.setBlockData(blockIds, N, h);
-            ChunkMesher::generate(tempChunk, blockIds, h,
-                                  pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+            auto tempChunk = std::make_unique<Chunk>(device_, glm::ivec2(gx, gz), N, 1.0f, h);
+            tempChunk->setBlockData(blockIds, N, h);
+            for (auto& sub : tempChunk->getSubChunks()) {
+                ChunkMesher::generateSubChunk(sub, tempChunk->getBlockData(), N, h, sub.yBase,
+                                               pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+            }
 
             ChunkGenResult result;
             result.gx = gx;
             result.gz = gz;
-            result.vertices = std::move(tempChunk.vertices());
-            result.indices = std::move(tempChunk.indices());
-            result.blockData = blockIds;
+            result.chunk = std::move(tempChunk);
 
             {
                 std::lock_guard<std::mutex> lock(genMutex_);
@@ -277,13 +281,8 @@ namespace lve {
 
             if (chunks_.count(key)) continue;
 
-            auto chunk = std::make_unique<Chunk>(device_, glm::ivec2(r.gx, r.gz), chunkSize_, 1.0f);
-            chunk->vertices() = std::move(r.vertices);
-            chunk->indices() = std::move(r.indices);
-            chunk->setBlockData(std::move(r.blockData), chunkSize_, height_);
-            chunk->upload();
-
-            chunks_[key] = std::move(chunk);
+            r.chunk->upload();
+            chunks_[key] = std::move(r.chunk);
             chunkCacheDirty_ = true;
         }
     }
