@@ -1,6 +1,7 @@
 #include "Core/World/WorldScreen.hpp"
 #include "Core/World/World.hpp"
 #include "Core/AppContext.hpp"
+#include "UI/Debug/ProfilingCapture.hpp"
 #include "Vulkan/TextureCache.hpp"
 #include "Renderer/Renderer.hpp"
 #include "UI/UiWrapper.hpp"
@@ -101,19 +102,52 @@ namespace lve {
         float worldHeight = static_cast<float>(world_->getHeight());
 
         double frustumMs = 0.0, drawMs = 0.0;
+        uint32_t visibleChunks = 0;
         terrainRenderer_.render(ctx.cmd, world_->getLoadedChunks(),
                                 viewProj, camera_.getPosition(),
-                                ctx.frameIndex, ctx.gpuQueryPool,
                                 settings.enableFrustumCulling, worldHeight,
-                                &frustumMs, &drawMs);
+                                &frustumMs, &drawMs, &visibleChunks);
 
         auto& app = AppContext::get();
-        fpsCounter_.setCpuGpuTimes(ctx.cpuFrameTimeMs,
-                                   app.renderer->getGpuFrameTimeMs(),
-                                   app.renderer->getTerrainGpuTimeMs(),
-                                   ctx.cpuTickMs,
-                                   ctx.cpuSubmitMs,
-                                   frustumMs, drawMs);
+        auto* r = app.renderer;
+        fpsCounter_.setCpuGpuTimes(
+            ctx.cpuFrameTimeMs,
+            r->getGpuFrameTimeMs(),
+            r->getWorldGpuMs(),
+            r->getUiGpuMs(),
+            ctx.cpuTickMs,
+            ctx.cpuSubmitMs,
+            r->getCmdRecordMs(),
+            frustumMs, drawMs,
+            r->getMemBandwidthGBs(),
+            r->getOverdraw(),
+            r->getPipelineStat(Renderer::STAT_IA_VERTICES),
+            r->getPipelineStat(Renderer::STAT_IA_PRIMITIVES),
+            r->getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
+            r->getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
+            r->getPipelineStat(Renderer::STAT_CLIP_PRIMS),
+            visibleChunks);
+
+        auto* pc = app.profilingCapture;
+        if (pc && pc->isActive()) {
+            pc->feedFrame(
+                ctx.cpuFrameTimeMs,
+                r->getGpuFrameTimeMs(),
+                r->getWorldGpuMs(),
+                r->getUiGpuMs(),
+                ctx.cpuTickMs,
+                ctx.cpuSubmitMs,
+                r->getCmdRecordMs(),
+                frustumMs, drawMs,
+                r->getMemBandwidthGBs(),
+                r->getOverdraw(),
+                r->getPipelineStat(Renderer::STAT_IA_VERTICES),
+                r->getPipelineStat(Renderer::STAT_IA_PRIMITIVES),
+                r->getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
+                r->getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
+                r->getPipelineStat(Renderer::STAT_CLIP_PRIMS),
+                visibleChunks);
+        }
 
         app.uiSystem->render(ctx.cmd, ctx.renderPass);
     }

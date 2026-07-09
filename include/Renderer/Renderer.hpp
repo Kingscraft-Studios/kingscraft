@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <functional>
+#include <array>
 
 namespace lve {
 
@@ -22,6 +23,28 @@ struct RenderPassBegin {
 
 class Renderer {
 public:
+    static constexpr uint32_t QUERIES_PER_FRAME = 6;
+    static constexpr uint32_t PIPELINE_STATS_PER_FRAME = 1;
+
+    enum GpuTsSlot : uint32_t {
+        TS_FRAME_START = 0,
+        TS_FRAME_END   = 1,
+        TS_WORLD_START = 2,
+        TS_WORLD_END   = 3,
+        TS_UI_START    = 4,
+        TS_UI_END      = 5,
+    };
+
+    enum PipeStatsIdx : uint32_t {
+        STAT_IA_VERTICES    = 0,
+        STAT_IA_PRIMITIVES  = 1,
+        STAT_VS_INVOCATIONS = 2,
+        STAT_CLIP_INVOC     = 3,
+        STAT_CLIP_PRIMS     = 4,
+        STAT_FS_INVOCATIONS = 5,
+        STAT_COUNT          = 6,
+    };
+
     Renderer(Device& device, VkExtent2D initialExtent);
     ~Renderer();
 
@@ -53,15 +76,25 @@ public:
     VkRenderPass getWorldRenderPass() const { return worldRenderPass_->getHandle(); }
     VkFramebuffer getWorldFramebuffer(uint32_t imageIndex) const { return worldFramebuffers_[imageIndex]; }
     VkFormat getDepthFormat() const { return depthFormat_; }
+
     double getGpuFrameTimeMs() const { return gpuFrameTimeMs_; }
-    double getTerrainGpuTimeMs() const { return terrainGpuTimeMs_; }
+    double getWorldGpuMs() const { return worldGpuMs_; }
+    double getUiGpuMs() const { return uiGpuMs_; }
+    double getCmdRecordMs() const { return cmdRecordMs_; }
+
+    uint64_t getPipelineStat(PipeStatsIdx idx) const { return pipelineStats_[idx]; }
+    double getMemBandwidthGBs() const { return memBandwidthGBs_; }
+    double getOverdraw() const { return overdraw_; }
+
     VkQueryPool getGpuQueryPool() const { return gpuQueryPool_; }
+    VkQueryPool getPipelineStatsPool() const { return pipelineStatsPool_; }
 
 private:
     void createCommandBuffers();
     void createWorldResources();
     void destroyWorldResources();
     void createQueryPool();
+    void createPipelineStatsPool();
 
     Device& device_;
     VkExtent2D extent_;
@@ -84,8 +117,18 @@ private:
 
     VkQueryPool gpuQueryPool_ = VK_NULL_HANDLE;
     double timestampPeriod_ = 1.0;
+
+    VkQueryPool pipelineStatsPool_ = VK_NULL_HANDLE;
+
     double gpuFrameTimeMs_ = 0.0;
-    double terrainGpuTimeMs_ = 0.0;
+    double worldGpuMs_ = 0.0;
+    double uiGpuMs_ = 0.0;
+    double cmdRecordMs_ = 0.0;
+
+    std::array<uint64_t, STAT_COUNT> pipelineStats_{};
+
+    double memBandwidthGBs_ = 0.0;
+    double overdraw_ = 0.0;
 };
 
 } // namespace lve

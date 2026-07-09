@@ -79,9 +79,9 @@ namespace lve {
 
     void TerrainRenderer::render(VkCommandBuffer cmd, const std::vector<Chunk*>& chunks,
                                  const glm::mat4& viewProj, const glm::vec3& cameraPos,
-                                 uint32_t frameIndex, VkQueryPool gpuQueryPool,
                                  bool enableFrustumCulling, float worldHeight,
-                                 double* outFrustumMs, double* outDrawMs)
+                                  double* outFrustumMs, double* outDrawMs,
+                                  uint32_t* outVisibleChunks)
     {
         if (!pipeline_) return;
 
@@ -96,7 +96,6 @@ namespace lve {
 
         vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &viewProj);
 
-        // Bind texture descriptor set (overrides any stale state from UI offscreen pass)
         if (textureCache_) {
             VkDescriptorSet texSet = textureCache_->getDescriptorSet();
             if (texSet != VK_NULL_HANDLE) {
@@ -105,11 +104,6 @@ namespace lve {
             }
         }
 
-        // Terrain GPU timestamp start
-        uint32_t qi = frameIndex * 4;
-        vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, gpuQueryPool, qi + 2);
-
-        // Collect visible chunks
         std::vector<Chunk*> visible;
         visible.reserve(chunks.size());
 
@@ -129,7 +123,6 @@ namespace lve {
                 visible.push_back(chunk);
             }
 
-            // Sort front-to-back
             std::sort(visible.begin(), visible.end(),
                 [cameraPos, halfExtents](Chunk* a, Chunk* b) {
                     glm::vec3 da = (a->getWorldOrigin() + halfExtents) - cameraPos;
@@ -147,7 +140,6 @@ namespace lve {
         if (outFrustumMs)
             *outFrustumMs = (TimeUtil::uptimeSeconds() - frustumStart) * 1000.0;
 
-        // Draw
         double drawStart = TimeUtil::uptimeSeconds();
         for (Chunk* chunk : visible) {
             chunk->bindAndDraw(cmd);
@@ -155,8 +147,8 @@ namespace lve {
         if (outDrawMs)
             *outDrawMs = (TimeUtil::uptimeSeconds() - drawStart) * 1000.0;
 
-        // Terrain GPU timestamp end
-        vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, gpuQueryPool, qi + 3);
+        if (outVisibleChunks)
+            *outVisibleChunks = static_cast<uint32_t>(visible.size());
     }
 
     void TerrainRenderer::onRenderPassChanged(VkRenderPass renderPass) {

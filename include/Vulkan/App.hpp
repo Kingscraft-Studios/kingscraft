@@ -13,6 +13,7 @@
 #include "Core/AppContext.hpp"
 #include "Core/Keys.hpp"
 #include "Core/KeyBindHandler.hpp"
+#include "UI/Debug/ProfilingCapture.hpp"
 #include <memory>
 
 #include "Core/World/World.hpp"
@@ -79,6 +80,7 @@ namespace lve {
         DefaultTerrainGenerator terrainGen_;
         std::unique_ptr<World> world_ = std::make_unique<World>(device, terrainGen_, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
         static constexpr double TICK_RATE = 100.0;
+        ProfilingCapture profilingCapture_;
         static constexpr double TICK_INTERVAL = 1.0 / TICK_RATE;
 
         QueueFamilyIndices indices = device.findPhysicalQueueFamilies();

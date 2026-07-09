@@ -1,12 +1,11 @@
 #include "Renderer/Renderer.hpp"
 #include "Core/Constants.hpp"
+#include "Util/TimeUtil.hpp"
 #include <stdexcept>
 #include <limits>
 #include <array>
 
 namespace lve {
-
-constexpr uint32_t QUERIES_PER_FRAME = 4;
 
 Renderer::Renderer(Device& device, VkExtent2D initialExtent)
     : device_(device), extent_(initialExtent) {
@@ -22,12 +21,16 @@ Renderer::Renderer(Device& device, VkExtent2D initialExtent)
     createCommandBuffers();
     createWorldResources();
     createQueryPool();
+    createPipelineStatsPool();
 }
 
 Renderer::~Renderer() {
     destroyWorldResources();
     if (gpuQueryPool_ != VK_NULL_HANDLE) {
         vkDestroyQueryPool(device_.device(), gpuQueryPool_, nullptr);
+    }
+    if (pipelineStatsPool_ != VK_NULL_HANDLE) {
+        vkDestroyQueryPool(device_.device(), pipelineStatsPool_, nullptr);
     }
     vkFreeCommandBuffers(
         device_.device(), device_.getCommandPool(),
@@ -90,26 +93,45 @@ bool Renderer::beginFrame() {
     device_.getStagingArena().advanceFrame();
 
     {
-        uint32_t queryStart = currentFrame_ * QUERIES_PER_FRAME;
-        uint64_t ts[2];
+        uint32_t qBase = currentFrame_ * QUERIES_PER_FRAME;
+        uint64_t ts[QUERIES_PER_FRAME];
         VkResult r = vkGetQueryPoolResults(
             device_.device(), gpuQueryPool_,
-            queryStart, 2, sizeof(ts), ts, sizeof(uint64_t),
+            qBase, QUERIES_PER_FRAME, sizeof(ts), ts, sizeof(uint64_t),
             VK_QUERY_RESULT_64_BIT);
         if (r == VK_SUCCESS) {
-            double startNs = static_cast<double>(ts[0]) * timestampPeriod_;
-            double endNs = static_cast<double>(ts[1]) * timestampPeriod_;
-            gpuFrameTimeMs_ = (endNs - startNs) / 1000000.0;
+            auto toMs = [&](uint32_t end, uint32_t start) -> double {
+                return (static_cast<double>(ts[end]) - static_cast<double>(ts[start]))
+                       * timestampPeriod_ / 1000000.0;
+            };
+            gpuFrameTimeMs_  = toMs(TS_FRAME_END, TS_FRAME_START);
+            worldGpuMs_      = toMs(TS_WORLD_END, TS_WORLD_START);
+            uiGpuMs_         = toMs(TS_UI_END, TS_UI_START);
         }
+    }
 
-        r = vkGetQueryPoolResults(
-            device_.device(), gpuQueryPool_,
-            queryStart + 2, 2, sizeof(ts), ts, sizeof(uint64_t),
+    {
+        uint32_t qStatsBase = currentFrame_ * PIPELINE_STATS_PER_FRAME;
+        VkResult r = vkGetQueryPoolResults(
+            device_.device(), pipelineStatsPool_,
+            qStatsBase, 1, sizeof(pipelineStats_), pipelineStats_.data(), sizeof(uint64_t),
             VK_QUERY_RESULT_64_BIT);
         if (r == VK_SUCCESS) {
-            double startNs = static_cast<double>(ts[0]) * timestampPeriod_;
-            double endNs = static_cast<double>(ts[1]) * timestampPeriod_;
-            terrainGpuTimeMs_ = (endNs - startNs) / 1000000.0;
+            uint64_t fs = pipelineStats_[STAT_FS_INVOCATIONS];
+            uint64_t w = extent_.width;
+            uint64_t h = extent_.height;
+            if (w > 0 && h > 0 && fs > 0) {
+                overdraw_ = static_cast<double>(fs) / static_cast<double>(w * h);
+                double bytesPerFragment = 8.0;
+                double gpuSec = worldGpuMs_ / 1000.0;
+                if (gpuSec > 0.0) {
+                    memBandwidthGBs_ = (static_cast<double>(fs) * bytesPerFragment) / gpuSec / 1e9;
+                }
+            }
+        } else {
+            pipelineStats_.fill(0);
+            overdraw_ = 0.0;
+            memBandwidthGBs_ = 0.0;
         }
     }
 
@@ -121,12 +143,20 @@ bool Renderer::beginFrame() {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
+    VkCommandBuffer cmd = commandBuffers_[currentImageIndex_];
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    if (vkBeginCommandBuffer(commandBuffers_[currentImageIndex_], &beginInfo) != VK_SUCCESS) {
+    if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS) {
         throw std::runtime_error("failed to begin recording command buffer!");
     }
+
+    uint32_t qi = currentFrame_ * QUERIES_PER_FRAME;
+    vkCmdResetQueryPool(cmd, gpuQueryPool_, qi, QUERIES_PER_FRAME);
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, gpuQueryPool_, qi + TS_FRAME_START);
+
+    uint32_t qs = currentFrame_ * PIPELINE_STATS_PER_FRAME;
+    vkCmdResetQueryPool(cmd, pipelineStatsPool_, qs, PIPELINE_STATS_PER_FRAME);
 
     return true;
 }
@@ -136,10 +166,12 @@ void Renderer::executeRenderPass(
     const std::function<void(VkCommandBuffer)>& drawCommands) {
 
     VkCommandBuffer cmd = commandBuffers_[currentImageIndex_];
-
     uint32_t qi = currentFrame_ * QUERIES_PER_FRAME;
-    vkCmdResetQueryPool(cmd, gpuQueryPool_, qi, QUERIES_PER_FRAME);
-    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, gpuQueryPool_, qi);
+
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, gpuQueryPool_, qi + TS_WORLD_START);
+
+    uint32_t qs = currentFrame_ * PIPELINE_STATS_PER_FRAME;
+    vkCmdBeginQuery(cmd, pipelineStatsPool_, qs, 0);
 
     VkRenderPassBeginInfo rpInfo{};
     rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -152,14 +184,23 @@ void Renderer::executeRenderPass(
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdSetViewport(cmd, 0, 1, &passBegin.viewport);
     vkCmdSetScissor(cmd, 0, 1, &passBegin.scissor);
+
+    double recStart = TimeUtil::uptimeSeconds();
     drawCommands(cmd);
+    cmdRecordMs_ = (TimeUtil::uptimeSeconds() - recStart) * 1000.0;
+
     vkCmdEndRenderPass(cmd);
 
-    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, gpuQueryPool_, qi + 1);
+    vkCmdEndQuery(cmd, pipelineStatsPool_, qs);
+
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, gpuQueryPool_, qi + TS_WORLD_END);
 }
 
 bool Renderer::endFrame() {
     VkCommandBuffer cmd = commandBuffers_[currentImageIndex_];
+    uint32_t qi = currentFrame_ * QUERIES_PER_FRAME;
+
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, gpuQueryPool_, qi + TS_FRAME_END);
 
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
         throw std::runtime_error("failed to record command buffer!");
@@ -342,6 +383,28 @@ void Renderer::createQueryPool() {
 
     VkCommandBuffer cmd = device_.beginSingleTimeCommands();
     vkCmdResetQueryPool(cmd, gpuQueryPool_, 0, MAX_FRAMES_IN_FLIGHT * QUERIES_PER_FRAME);
+    device_.endSingleTimeCommands(cmd);
+}
+
+void Renderer::createPipelineStatsPool() {
+    VkQueryPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    poolInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
+    poolInfo.queryCount = MAX_FRAMES_IN_FLIGHT * PIPELINE_STATS_PER_FRAME;
+    poolInfo.pipelineStatistics =
+        VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT;
+
+    if (vkCreateQueryPool(device_.device(), &poolInfo, nullptr, &pipelineStatsPool_) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create pipeline statistics query pool!");
+    }
+
+    VkCommandBuffer cmd = device_.beginSingleTimeCommands();
+    vkCmdResetQueryPool(cmd, pipelineStatsPool_, 0, MAX_FRAMES_IN_FLIGHT * PIPELINE_STATS_PER_FRAME);
     device_.endSingleTimeCommands(cmd);
 }
 

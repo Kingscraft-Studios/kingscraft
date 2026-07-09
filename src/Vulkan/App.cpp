@@ -29,6 +29,12 @@ namespace lve {
                 uiSystem->logSelectedElementPosition();
         });
 
+        keybinds_->onPress(BindLayer::Global, {Keys::F8}, [this]() {
+            if (!profilingCapture_.isActive()) {
+                profilingCapture_.start();
+            }
+        });
+
         window.setMouseMoveCallback([this](double x, double y) {
             uiSystem->onMouseMove(x, y);
         });
@@ -87,6 +93,7 @@ namespace lve {
         appCtx.keybinds = keybinds_.get();
         appCtx.textureCache = textureCache_.get();
         appCtx.world = world_.get();
+        appCtx.profilingCapture = &profilingCapture_;
 
         screenManager->switchTo<MainMenu>(renderer->getRenderPass(), *uiSystem, renderer->getExtent());
 
@@ -135,6 +142,8 @@ namespace lve {
                 tickAccumulator_ -= TICK_INTERVAL;
             }
             cpuTickMs_ = (TimeUtil::uptimeSeconds() - tickStart) * 1000.0;
+
+            profilingCapture_.tick(dt_);
 
             drawFrame();
 
@@ -200,7 +209,11 @@ namespace lve {
 
         if (info.uiEnabled) {
             uiSystem->update(dt_);
+            uint32_t qi = renderer->getFrameIndex() * Renderer::QUERIES_PER_FRAME;
+            VkQueryPool tsPool = renderer->getGpuQueryPool();
+            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, tsPool, qi + Renderer::TS_UI_START);
             uiSystem->renderOffscreen(cmd);
+            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool, qi + Renderer::TS_UI_END);
         }
 
         FrameContext frameCtx{};

@@ -9,6 +9,7 @@ class UiWrapper;
 class KeyBindHandler;
 class TextureCache;
 class World;
+class ProfilingCapture;
 
 class AppContext {
 public:
@@ -24,6 +25,7 @@ public:
     KeyBindHandler* keybinds = nullptr;
     TextureCache* textureCache = nullptr;
     World* world = nullptr;
+    ProfilingCapture* profilingCapture = nullptr;
 
 private:
     AppContext() = default;

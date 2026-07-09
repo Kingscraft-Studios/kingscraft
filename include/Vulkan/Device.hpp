@@ -30,7 +30,7 @@ namespace lve {
 #ifdef NDEBUG
         const bool enableValidationLayers = false;
 #else
-        const bool enableValidationLayers = false;
+        const bool enableValidationLayers = true;
 #endif
 
         Device(Window &window);
