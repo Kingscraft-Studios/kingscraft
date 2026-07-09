@@ -57,6 +57,7 @@ namespace lve {
 
         PipelineConfigInfo configInfo{};
         Pipeline::defaultPipelineConfigInfo(configInfo);
+        configInfo.rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 
         VkSpecializationMapEntry entry{};
         entry.constantID = 0;

@@ -30,6 +30,17 @@ namespace {
         glm::vec3(0, 0, 1)
     };
 
+    // Precomputed: true when cross(uAxis, vAxis) dot outward > 0
+    // (triangle would be CCW from outside → back face → needs reversal)
+    constexpr bool reverseWinding[6] = {
+        false,  // dir 0 (PosY): cross(X, Z) = -Y, outward = +Y, dot < 0 → CW → keep
+        true,   // dir 1 (NegY): cross(X, Z) = -Y, outward = -Y, dot > 0 → CCW → flip
+        true,   // dir 2 (PosZ): cross(X, Y) = +Z, outward = +Z, dot > 0 → CCW → flip
+        false,  // dir 3 (NegZ): cross(X, Y) = +Z, outward = -Z, dot < 0 → CW → keep
+        false,  // dir 4 (PosX): cross(Z, Y) = -X, outward = +X, dot < 0 → CW → keep
+        true    // dir 5 (NegX): cross(Z, Y) = -X, outward = -X, dot > 0 → CCW → flip
+    };
+
     const Quad* findQuad(const BlockModel& model, FaceDir dir) {
         for (const auto& elem : model.getElements()) {
             for (const auto& q : elem.quads) {
@@ -189,12 +200,21 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
                         vertices.push_back({corners[vi], uvs[vi], cellTex});
                     }
 
-                    indices.push_back(static_cast<uint16_t>(baseVertex));
-                    indices.push_back(static_cast<uint16_t>(baseVertex + 1));
-                    indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-                    indices.push_back(static_cast<uint16_t>(baseVertex));
-                    indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-                    indices.push_back(static_cast<uint16_t>(baseVertex + 3));
+                    if (reverseWinding[dir]) {
+                        indices.push_back(static_cast<uint16_t>(baseVertex));
+                        indices.push_back(static_cast<uint16_t>(baseVertex + 2));
+                        indices.push_back(static_cast<uint16_t>(baseVertex + 1));
+                        indices.push_back(static_cast<uint16_t>(baseVertex));
+                        indices.push_back(static_cast<uint16_t>(baseVertex + 3));
+                        indices.push_back(static_cast<uint16_t>(baseVertex + 2));
+                    } else {
+                        indices.push_back(static_cast<uint16_t>(baseVertex));
+                        indices.push_back(static_cast<uint16_t>(baseVertex + 1));
+                        indices.push_back(static_cast<uint16_t>(baseVertex + 2));
+                        indices.push_back(static_cast<uint16_t>(baseVertex));
+                        indices.push_back(static_cast<uint16_t>(baseVertex + 2));
+                        indices.push_back(static_cast<uint16_t>(baseVertex + 3));
+                    }
                 }
             }
         }
