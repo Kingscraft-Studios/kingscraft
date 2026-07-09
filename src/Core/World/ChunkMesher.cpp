@@ -57,7 +57,6 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
                            const std::vector<uint8_t>* edgePosZ,
                            const std::vector<uint8_t>* edgeNegZ) {
     int N = chunk.getVerticesPerAxis();
-    glm::vec3 origin = chunk.getWorldOrigin();
 
     auto& vertices = chunk.vertices();
     auto& indices = chunk.indices();
@@ -101,7 +100,7 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
         for (int depth = 0; depth < depthDim; ++depth) {
             size_t sliceSize = static_cast<size_t>(uDim) * vDim;
             std::vector<bool> mask(sliceSize, false);
-            std::vector<float> texIdx(sliceSize, -1.0f);
+            std::vector<uint16_t> texIdx(sliceSize, 0);
 
             for (int v = 0; v < vDim; ++v) {
                 for (int u = 0; u < uDim; ++u) {
@@ -124,7 +123,7 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
                     const Quad* quad = findQuad(block->getModel(), faceDirs[dir]);
                     if (!quad) continue;
 
-                    float gti = static_cast<float>(block->getTextureBaseOffset() + quad->tileIndex);
+                    uint16_t gti = static_cast<uint16_t>(block->getTextureBaseOffset() + quad->tileIndex);
                     int idx = v * uDim + u;
                     mask[idx] = true;
                     texIdx[idx] = gti;
@@ -138,7 +137,7 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
                     int idx = v * uDim + u;
                     if (!mask[idx] || visited[idx]) continue;
 
-                    float cellTex = texIdx[idx];
+                    uint16_t cellTex = texIdx[idx];
 
                     int rectW = 1;
                     while (u + rectW < uDim) {
@@ -171,33 +170,41 @@ void ChunkMesher::generate(Chunk& chunk, const std::vector<uint8_t>& blockIds, i
                     basePos[ua] = u;
                     basePos[va] = v;
 
-                    glm::vec3 baseWorld(
-                        origin.x + basePos[0],
-                        origin.y + basePos[1],
-                        origin.z + basePos[2]
+                    glm::vec3 baseLocal(
+                        static_cast<float>(basePos[0]),
+                        static_cast<float>(basePos[1]),
+                        static_cast<float>(basePos[2])
                     );
 
                     glm::vec3 du = axisVec[ua] * static_cast<float>(rectW);
                     glm::vec3 dv = axisVec[va] * static_cast<float>(rectH);
 
+                    glm::vec3 localCorners[4] = {
+                        baseLocal,
+                        baseLocal + du,
+                        baseLocal + du + dv,
+                        baseLocal + dv
+                    };
+
+                    int8_t uvs[4][2] = {
+                        {0, static_cast<int8_t>(rectH)},
+                        {static_cast<int8_t>(rectW), static_cast<int8_t>(rectH)},
+                        {static_cast<int8_t>(rectW), 0},
+                        {0, 0}
+                    };
+
                     int baseVertex = static_cast<int>(vertices.size());
 
-                    glm::vec3 corners[4] = {
-                        baseWorld,
-                        baseWorld + du,
-                        baseWorld + du + dv,
-                        baseWorld + dv
-                    };
-
-                    glm::vec2 uvs[4] = {
-                        {0.0f, static_cast<float>(rectH)},
-                        {static_cast<float>(rectW), static_cast<float>(rectH)},
-                        {static_cast<float>(rectW), 0.0f},
-                        {0.0f, 0.0f}
-                    };
-
                     for (int vi = 0; vi < 4; ++vi) {
-                        vertices.push_back({corners[vi], uvs[vi], cellTex});
+                        vertices.push_back({
+                            static_cast<uint8_t>(localCorners[vi].x),
+                            static_cast<uint8_t>(localCorners[vi].y),
+                            static_cast<uint8_t>(localCorners[vi].z),
+                            static_cast<uint8_t>(dir),
+                            uvs[vi][0],
+                            uvs[vi][1],
+                            cellTex
+                        });
                     }
 
                     if (reverseWinding[dir]) {

@@ -10,9 +10,13 @@
 namespace lve {
 
     struct ChunkVertex {
-        glm::vec3 position;
-        glm::vec2 uv;
-        float texIndex;
+        uint8_t  px;       // offset 0 — local chunk coordinate
+        uint8_t  py;       // offset 1
+        uint8_t  pz;       // offset 2
+        uint8_t  face;     // offset 3 — 0=PosY,1=NegY,2=PosZ,3=NegZ,4=PosX,5=NegX
+        int8_t   uvX;      // offset 4 — integer UV
+        int8_t   uvY;      // offset 5
+        uint16_t texIndex; // offset 6 — texture array layer index
 
         static VkVertexInputBindingDescription getBindingDescription() {
             VkVertexInputBindingDescription desc{};
@@ -26,19 +30,21 @@ namespace lve {
             std::array<VkVertexInputAttributeDescription, 3> desc{};
             desc[0].binding = 0;
             desc[0].location = 0;
-            desc[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-            desc[0].offset = offsetof(ChunkVertex, position);
+            desc[0].format = VK_FORMAT_R8G8B8A8_UINT;
+            desc[0].offset = offsetof(ChunkVertex, px);
             desc[1].binding = 0;
             desc[1].location = 1;
-            desc[1].format = VK_FORMAT_R32G32_SFLOAT;
-            desc[1].offset = offsetof(ChunkVertex, uv);
+            desc[1].format = VK_FORMAT_R8G8_SINT;
+            desc[1].offset = offsetof(ChunkVertex, uvX);
             desc[2].binding = 0;
             desc[2].location = 2;
-            desc[2].format = VK_FORMAT_R32_SFLOAT;
+            desc[2].format = VK_FORMAT_R16_UINT;
             desc[2].offset = offsetof(ChunkVertex, texIndex);
             return desc;
         }
     };
+
+    static_assert(sizeof(ChunkVertex) == 8, "ChunkVertex must be 8 bytes");
 
     class Chunk {
     public:

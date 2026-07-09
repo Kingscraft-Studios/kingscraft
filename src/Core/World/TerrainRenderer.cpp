@@ -10,6 +10,11 @@
 
 namespace lve {
 
+    struct TerrainPushConstants {
+        glm::mat4 viewProj;     // 64 bytes
+        glm::vec4 chunkOrigin;  // 16 bytes
+    };
+
     TerrainRenderer::~TerrainRenderer() {
         cleanup();
     }
@@ -35,7 +40,7 @@ namespace lve {
         VkPushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(glm::mat4);
+        pushConstantRange.size = sizeof(TerrainPushConstants);
 
         VkDescriptorSetLayout texLayout = textureCache.getLayout();
 
@@ -95,8 +100,6 @@ namespace lve {
 
         pipeline_->bind(cmd);
 
-        vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &viewProj);
-
         if (textureCache_) {
             VkDescriptorSet texSet = textureCache_->getDescriptorSet();
             if (texSet != VK_NULL_HANDLE) {
@@ -142,7 +145,11 @@ namespace lve {
             *outFrustumMs = (TimeUtil::uptimeSeconds() - frustumStart) * 1000.0;
 
         double drawStart = TimeUtil::uptimeSeconds();
+        TerrainPushConstants pc{};
+        pc.viewProj = viewProj;
         for (Chunk* chunk : visible) {
+            pc.chunkOrigin = glm::vec4(chunk->getWorldOrigin(), 0.0f);
+            vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(TerrainPushConstants), &pc);
             chunk->bindAndDraw(cmd);
         }
         if (outDrawMs)
