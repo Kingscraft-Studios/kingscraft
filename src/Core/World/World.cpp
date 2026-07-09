@@ -64,6 +64,11 @@ namespace lve {
         return (it != chunks_.end()) ? it->second.get() : nullptr;
     }
 
+    const Chunk* World::getChunk(int gridX, int gridZ) const {
+        auto it = chunks_.find(packKey(gridX, gridZ));
+        return (it != chunks_.end()) ? it->second.get() : nullptr;
+    }
+
     bool World::setBlock(int worldX, int worldY, int worldZ, uint8_t blockId) {
         if (worldY < 0 || worldY >= height_) return false;
         int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);

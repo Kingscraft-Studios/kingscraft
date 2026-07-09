@@ -16,6 +16,12 @@
 
 namespace lve {
 
+    namespace {
+        const Chunk* worldChunkLookup(int gx, int gz, void* ctx) {
+            return static_cast<const World*>(ctx)->getChunk(gx, gz);
+        }
+    }
+
     WorldScreen::WorldScreen(VkExtent2D extent)
         : extent_(extent) {}
 
@@ -103,11 +109,14 @@ namespace lve {
 
         double frustumMs = 0.0, drawMs = 0.0;
         uint32_t visibleChunks = 0, visibleSubChunks = 0;
+        uint32_t occlusionTested = 0, occlusionRemoved = 0;
         terrainRenderer_.render(ctx.cmd, world_->getLoadedChunks(),
                                 viewProj, camera_.getPosition(),
                                 settings.enableFrustumCulling, worldHeight,
+                                worldChunkLookup, static_cast<void*>(world_),
                                 &frustumMs, &drawMs, &visibleChunks,
-                                &visibleSubChunks);
+                                &visibleSubChunks, &occlusionTested,
+                                &occlusionRemoved);
 
         auto& app = AppContext::get();
         auto* r = app.renderer;
@@ -128,7 +137,9 @@ namespace lve {
             r->getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
             r->getPipelineStat(Renderer::STAT_CLIP_PRIMS),
             visibleChunks,
-            visibleSubChunks);
+            visibleSubChunks,
+            occlusionTested,
+            occlusionRemoved);
 
         auto* pc = app.profilingCapture;
         if (pc && pc->isActive()) {
@@ -149,7 +160,9 @@ namespace lve {
                 r->getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
                 r->getPipelineStat(Renderer::STAT_CLIP_PRIMS),
                 visibleChunks,
-                visibleSubChunks);
+                visibleSubChunks,
+                occlusionTested,
+                occlusionRemoved);
         }
 
         app.uiSystem->render(ctx.cmd, ctx.renderPass);

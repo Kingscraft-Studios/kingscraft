@@ -21,7 +21,9 @@ namespace lve {
             uint64_t vsInvoc, uint64_t fsInvoc,
             uint64_t clipPrims,
             uint32_t visibleChunks,
-            uint32_t visibleSubChunks);
+            uint32_t visibleSubChunks,
+            uint32_t occlusionTested = 0,
+            uint32_t occlusionRemoved = 0);
         void cleanup(UiWrapper& ui);
 
     private:
@@ -51,6 +53,8 @@ namespace lve {
         uint64_t latestClipPrims_ = 0;
         uint32_t latestVisibleChunks_ = 0;
         uint32_t latestVisibleSubChunks_ = 0;
+        uint32_t latestOcclusionTested_ = 0;
+        uint32_t latestOcclusionRemoved_ = 0;
     };
 
 } // namespace lve

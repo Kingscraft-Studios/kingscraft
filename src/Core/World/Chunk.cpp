@@ -34,6 +34,8 @@ namespace lve {
         blockData_ = std::move(data);
         chunkSize_ = chunkSize;
         height_ = height;
+        heightMap_.resize(static_cast<size_t>(chunkSize) * chunkSize);
+        rebuildHeightmap();
     }
 
     uint8_t Chunk::getBlock(int x, int y, int z) const {
@@ -50,6 +52,32 @@ namespace lve {
         blockData_[static_cast<size_t>(y) * chunkSize_ * chunkSize_
                    + static_cast<size_t>(z) * chunkSize_
                    + static_cast<size_t>(x)] = blockId;
+
+        // Update heightmap for this column
+        size_t hmIdx = static_cast<size_t>(z) * chunkSize_ + static_cast<size_t>(x);
+        if (blockId != 0) {
+            if (static_cast<uint16_t>(y) > heightMap_[hmIdx]) {
+                heightMap_[hmIdx] = static_cast<uint16_t>(y);
+                if (static_cast<uint16_t>(y) > maxHeight_)
+                    maxHeight_ = static_cast<uint16_t>(y);
+            }
+        } else {
+            if (static_cast<uint16_t>(y) == heightMap_[hmIdx]) {
+                uint16_t newTop = 0;
+                for (int ny = y - 1; ny >= 0; --ny) {
+                    if (blockData_[static_cast<size_t>(ny) * chunkSize_ * chunkSize_
+                                  + static_cast<size_t>(z) * chunkSize_
+                                  + static_cast<size_t>(x)] != 0) {
+                        newTop = static_cast<uint16_t>(ny);
+                        break;
+                    }
+                }
+                heightMap_[hmIdx] = newTop;
+                if (newTop == 0 || static_cast<uint16_t>(y) == maxHeight_)
+                    updateMinMaxHeight();
+            }
+        }
+
         int subIdx = y / static_cast<int>(SUBCHUNK_H);
         if (static_cast<size_t>(subIdx) < subChunks_.size())
             subChunks_[subIdx].meshNeeded = true;
@@ -74,6 +102,41 @@ namespace lve {
     void Chunk::markRemeshed() {
         for (auto& sub : subChunks_)
             sub.meshNeeded = false;
+    }
+
+    void Chunk::rebuildHeightmap() {
+        if (chunkSize_ == 0) return;
+        maxHeight_ = 0;
+        minHeight_ = static_cast<uint16_t>(height_);
+        for (int z = 0; z < chunkSize_; ++z) {
+            for (int x = 0; x < chunkSize_; ++x) {
+                uint16_t top = 0;
+                for (int y = height_ - 1; y >= 0; --y) {
+                    if (blockData_[static_cast<size_t>(y) * chunkSize_ * chunkSize_
+                                   + static_cast<size_t>(z) * chunkSize_
+                                   + static_cast<size_t>(x)] != 0) {
+                        top = static_cast<uint16_t>(y);
+                        break;
+                    }
+                }
+                heightMap_[static_cast<size_t>(z) * chunkSize_ + static_cast<size_t>(x)] = top;
+                if (top > maxHeight_) maxHeight_ = top;
+                if (top < minHeight_) minHeight_ = top;
+            }
+        }
+        if (minHeight_ == static_cast<uint16_t>(height_)) minHeight_ = 0;
+    }
+
+    void Chunk::updateMinMaxHeight() {
+        if (chunkSize_ == 0) return;
+        maxHeight_ = 0;
+        minHeight_ = static_cast<uint16_t>(height_);
+        for (size_t i = 0; i < heightMap_.size(); ++i) {
+            auto h = heightMap_[i];
+            if (h > maxHeight_) maxHeight_ = h;
+            if (h < minHeight_) minHeight_ = h;
+        }
+        if (minHeight_ == static_cast<uint16_t>(height_)) minHeight_ = 0;
     }
 
     void Chunk::upload() {

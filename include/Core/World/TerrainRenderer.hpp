@@ -12,6 +12,8 @@ namespace lve {
     class Device;
     class TextureCache;
 
+    using ChunkLookupFn = const Chunk* (*)(int gridX, int gridZ, void* context);
+
     class TerrainRenderer {
     public:
         TerrainRenderer() = default;
@@ -23,10 +25,14 @@ namespace lve {
         void render(VkCommandBuffer cmd, const std::vector<Chunk*>& chunks,
                     const glm::mat4& viewProj, const glm::vec3& cameraPos,
                     bool enableFrustumCulling, float worldHeight,
+                    ChunkLookupFn lookupFn = nullptr,
+                    void* lookupContext = nullptr,
                     double* outFrustumMs = nullptr,
                     double* outDrawMs = nullptr,
                     uint32_t* outVisibleChunks = nullptr,
-                    uint32_t* outVisibleSubChunks = nullptr);
+                    uint32_t* outVisibleSubChunks = nullptr,
+                    uint32_t* outOcclusionTested = nullptr,
+                    uint32_t* outOcclusionRemoved = nullptr);
 
         void onRenderPassChanged(VkRenderPass renderPass);
 

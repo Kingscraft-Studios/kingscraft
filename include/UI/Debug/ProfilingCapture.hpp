@@ -21,7 +21,9 @@ namespace lve {
             uint64_t vsInvoc, uint64_t fsInvoc,
             uint64_t clipPrims,
             uint32_t visibleChunks,
-            uint32_t visibleSubChunks);
+            uint32_t visibleSubChunks,
+            uint32_t occlusionTested = 0,
+            uint32_t occlusionRemoved = 0);
 
         bool isActive() const { return active_; }
 
@@ -39,6 +41,8 @@ namespace lve {
         std::vector<uint64_t> iaVerts_, iaPrims_, vsInvoc_, fsInvoc_, clipPrims_;
         std::vector<uint32_t> visibleChunks_;
         std::vector<uint32_t> visibleSubChunks_;
+        std::vector<uint32_t> occlusionTested_;
+        std::vector<uint32_t> occlusionRemoved_;
     };
 
 } // namespace lve

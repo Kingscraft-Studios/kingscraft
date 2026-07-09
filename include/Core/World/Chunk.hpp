@@ -76,6 +76,13 @@ namespace lve {
         int getBlockDataSize() const { return chunkSize_; }
         int getHeight() const { return height_; }
 
+        uint16_t getHeightAt(int localX, int localZ) const {
+            return heightMap_[localZ * chunkSize_ + localX];
+        }
+        uint16_t getMaxHeight() const { return maxHeight_; }
+        uint16_t getMinHeight() const { return minHeight_; }
+        const std::vector<uint16_t>& getHeightMap() const { return heightMap_; }
+
         bool isRemeshNeeded() const;
         void markDirty();
         void markRemeshed();
@@ -98,6 +105,13 @@ namespace lve {
         int height_ = 0;
 
         std::vector<SubChunk> subChunks_;
+
+        std::vector<uint16_t> heightMap_;
+        uint16_t maxHeight_ = 0;
+        uint16_t minHeight_ = 0;
+
+        void rebuildHeightmap();
+        void updateMinMaxHeight();
 
         std::unique_ptr<Buffer> vertexBuffer_;
         std::unique_ptr<Buffer> indexBuffer_;

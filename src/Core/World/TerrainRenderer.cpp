@@ -6,6 +6,7 @@
 #include "Util/Preloader.hpp"
 #include "Core/World/Chunk.hpp"
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace lve {
@@ -14,6 +15,73 @@ namespace lve {
         glm::mat4 viewProj;     // 64 bytes
         glm::vec4 chunkOrigin;  // 16 bytes
     };
+
+    static bool isChunkOccluded(const glm::vec3& cameraPos, const Chunk* chunk,
+                                 float cs, ChunkLookupFn lookupFn, void* lookupContext) {
+        if (chunk->getMaxHeight() == 0) return false;
+
+        glm::vec3 origin = chunk->getWorldOrigin();
+
+        // 5 test points: center + 4 top-face corners
+        float pts[5][2] = {
+            {origin.x + cs * 0.5f, origin.z + cs * 0.5f},
+            {origin.x,             origin.z},
+            {origin.x + cs,        origin.z},
+            {origin.x,             origin.z + cs},
+            {origin.x + cs,        origin.z + cs},
+        };
+
+        // Check if camera is underground
+        int camGx = static_cast<int>(std::floor(cameraPos.x / cs));
+        int camGz = static_cast<int>(std::floor(cameraPos.z / cs));
+        const Chunk* camChunk = lookupFn(camGx, camGz, lookupContext);
+        bool underground = false;
+        if (camChunk) {
+            int lx = static_cast<int>(cameraPos.x - camChunk->getWorldOrigin().x);
+            int lz = static_cast<int>(cameraPos.z - camChunk->getWorldOrigin().z);
+            if (lx >= 0 && lx < static_cast<int>(cs) && lz >= 0 && lz < static_cast<int>(cs))
+                if (static_cast<int>(cameraPos.y) <= static_cast<int>(camChunk->getHeightAt(lx, lz)))
+                    underground = true;
+        }
+        if (underground) return false;
+
+        for (int pi = 0; pi < 5; ++pi) {
+            float wx = pts[pi][0];
+            float wz = pts[pi][1];
+
+            int lx = static_cast<int>(wx - origin.x);
+            int lz = static_cast<int>(wz - origin.z);
+            if (lx < 0 || lx >= static_cast<int>(cs) || lz < 0 || lz >= static_cast<int>(cs))
+                continue;
+            float targetY = static_cast<float>(chunk->getHeightAt(lx, lz));
+            if (targetY <= 0.0f) continue;
+
+            glm::vec3 target(wx, targetY, wz);
+            glm::vec3 dir = glm::normalize(target - cameraPos);
+            float dist = glm::distance(target, cameraPos);
+
+            // Walk through chunk grid toward the target
+            for (float d = cs; d < dist; d += cs) {
+                glm::vec3 p = cameraPos + dir * d;
+                int gx = static_cast<int>(std::floor(p.x / cs));
+                int gz = static_cast<int>(std::floor(p.z / cs));
+                const Chunk* ic = lookupFn(gx, gz, lookupContext);
+                if (!ic) continue;
+                if (ic->getMaxHeight() == 0) continue;
+
+                glm::vec3 io = ic->getWorldOrigin();
+                int ilx = static_cast<int>(p.x - io.x);
+                int ilz = static_cast<int>(p.z - io.z);
+                if (ilx < 0 || ilx >= static_cast<int>(cs) || ilz < 0 || ilz >= static_cast<int>(cs))
+                    continue;
+
+                // +0.5f epsilon to prevent surface-grazing false positives
+                if (static_cast<float>(ic->getHeightAt(ilx, ilz)) > p.y + 0.5f)
+                    return true;
+            }
+        }
+        return false;
+    }
 
     TerrainRenderer::~TerrainRenderer() {
         cleanup();
@@ -86,9 +154,12 @@ namespace lve {
     void TerrainRenderer::render(VkCommandBuffer cmd, const std::vector<Chunk*>& chunks,
                                  const glm::mat4& viewProj, const glm::vec3& cameraPos,
                                  bool enableFrustumCulling, float worldHeight,
+                                 ChunkLookupFn lookupFn, void* lookupContext,
                                   double* outFrustumMs, double* outDrawMs,
                                   uint32_t* outVisibleChunks,
-                                  uint32_t* outVisibleSubChunks)
+                                  uint32_t* outVisibleSubChunks,
+                                  uint32_t* outOcclusionTested,
+                                  uint32_t* outOcclusionRemoved)
     {
         if (!pipeline_) return;
 
@@ -147,6 +218,31 @@ namespace lve {
                     if (sub.indexCount > 0) visibleSubCount++;
             }
         }
+
+        // Occlusion culling (front-to-back sorted)
+        uint32_t occlusionTested = 0;
+        uint32_t occlusionRemoved = 0;
+        if (lookupFn && enableFrustumCulling && RendererSettings::get().enableOcclusionCulling && !visible.empty()) {
+            float cs = static_cast<float>(visible[0]->getVerticesPerAxis() - 1);
+            float nearDist = cs * 2.0f;
+            std::vector<Chunk*> filtered;
+            filtered.reserve(visible.size());
+            for (Chunk* c : visible) {
+                glm::vec3 d = (c->getWorldOrigin() + glm::vec3(cs * 0.5f, 0.0f, cs * 0.5f)) - cameraPos;
+                if (d.x * d.x + d.y * d.y + d.z * d.z < nearDist * nearDist) {
+                    filtered.push_back(c);
+                    continue;
+                }
+                occlusionTested++;
+                if (!isChunkOccluded(cameraPos, c, cs, lookupFn, lookupContext))
+                    filtered.push_back(c);
+                else
+                    occlusionRemoved++;
+            }
+            visible.swap(filtered);
+        }
+        if (outOcclusionTested) *outOcclusionTested = occlusionTested;
+        if (outOcclusionRemoved) *outOcclusionRemoved = occlusionRemoved;
 
         if (outFrustumMs)
             *outFrustumMs = (TimeUtil::uptimeSeconds() - frustumStart) * 1000.0;

@@ -80,9 +80,9 @@ namespace lve {
 
             char buf3[256];
             int n3 = snprintf(buf3, sizeof(buf3),
-                "CPU:%.1fms [Cmd:%.2f  Draw:%.1f  Sub:%.2f]  Idle:%.1fms  Clip:%.1fK",
+                "CPU:%.1fms [Cmd:%.2f  Draw:%.1f  Sub:%.2f]  Idle:%.1fms  Occl:%u/%u",
                 cpuTotal, latestCmdRecordMs_, latestDrawMs_, latestCpuSubmitMs_,
-                gpuIdleMs, (double)latestClipPrims_ / 1000.0);
+                gpuIdleMs, latestOcclusionRemoved_, latestOcclusionTested_);
             line3_.setText(std::string(buf3, n3));
 
             elapsed_ = 0.0;
@@ -100,7 +100,9 @@ namespace lve {
         uint64_t vsInvoc, uint64_t fsInvoc,
         uint64_t clipPrims,
         uint32_t visibleChunks,
-        uint32_t visibleSubChunks)
+        uint32_t visibleSubChunks,
+        uint32_t occlusionTested,
+        uint32_t occlusionRemoved)
     {
         latestCpuMs_ = cpuFrameMs;
         latestGpuMs_ = gpuTotalMs;
@@ -120,6 +122,8 @@ namespace lve {
         latestClipPrims_ = clipPrims;
         latestVisibleChunks_ = visibleChunks;
         latestVisibleSubChunks_ = visibleSubChunks;
+        latestOcclusionTested_ = occlusionTested;
+        latestOcclusionRemoved_ = occlusionRemoved;
     }
 
     void UiFpsCounter::cleanup(UiWrapper& ui) {

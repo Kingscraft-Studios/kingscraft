@@ -28,6 +28,8 @@ namespace lve {
         clipPrims_.clear();
         visibleChunks_.clear();
         visibleSubChunks_.clear();
+        occlusionTested_.clear();
+        occlusionRemoved_.clear();
 
         elapsed_ = 0.0;
         frameCount_ = 0;
@@ -53,7 +55,9 @@ namespace lve {
         uint64_t vsInvoc, uint64_t fsInvoc,
         uint64_t clipPrims,
         uint32_t visibleChunks,
-        uint32_t visibleSubChunks)
+        uint32_t visibleSubChunks,
+        uint32_t occlusionTested,
+        uint32_t occlusionRemoved)
     {
         if (!active_) return;
 
@@ -75,6 +79,8 @@ namespace lve {
         clipPrims_.push_back(clipPrims);
         visibleChunks_.push_back(visibleChunks);
         visibleSubChunks_.push_back(visibleSubChunks);
+        occlusionTested_.push_back(occlusionTested);
+        occlusionRemoved_.push_back(occlusionRemoved);
 
         frameCount_++;
     }
@@ -129,6 +135,8 @@ namespace lve {
         auto sClip     = computeStats(clipPrims_);
         auto sChunks   = computeStats(visibleChunks_);
         auto sSubChunks = computeStats(visibleSubChunks_);
+        auto sOcclTested = computeStats(occlusionTested_);
+        auto sOcclRemoved = computeStats(occlusionRemoved_);
 
         char buf[4096];
         int pos = 0;
@@ -181,6 +189,22 @@ namespace lve {
                      static_cast<unsigned>(std::round(sSubChunks.avg)),
                      sSubChunks.min, sSubChunks.max);
             pos += snprintf(buf + pos, sizeof(buf) - pos, "%-22s %s\n", "Visible SubChunks", val);
+        }
+
+        {
+            char val[128];
+            snprintf(val, sizeof(val), "%-12u %-12u %-12u",
+                     static_cast<unsigned>(std::round(sOcclTested.avg)),
+                     sOcclTested.min, sOcclTested.max);
+            pos += snprintf(buf + pos, sizeof(buf) - pos, "%-22s %s\n", "Occlusion Tested", val);
+        }
+
+        {
+            char val[128];
+            snprintf(val, sizeof(val), "%-12u %-12u %-12u",
+                     static_cast<unsigned>(std::round(sOcclRemoved.avg)),
+                     sOcclRemoved.min, sOcclRemoved.max);
+            pos += snprintf(buf + pos, sizeof(buf) - pos, "%-22s %s\n", "Occlusion Removed", val);
         }
 
         if (pos >= (int)sizeof(buf)) pos = sizeof(buf) - 1;
