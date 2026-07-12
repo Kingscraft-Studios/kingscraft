@@ -5,6 +5,7 @@
 #include "Vulkan/Pipeline.hpp"
 #include <memory>
 #include <vector>
+#include <unordered_set>
 #include <glm/glm.hpp>
 
 namespace lve {
@@ -40,12 +41,24 @@ namespace lve {
         void createPipelineLayout(TextureCache& textureCache);
         void createPipeline(bool disableTextures);
 
+        void computeFrustumVisibleChunks(
+            const glm::vec3& cameraPos, const glm::mat4& viewProj,
+            float cs, ChunkLookupFn lookupFn, void* lookupContext);
+
         Device* device_ = nullptr;
         TextureCache* textureCache_ = nullptr;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
         VkRenderPass renderPass_ = VK_NULL_HANDLE;
         std::unique_ptr<Pipeline> pipeline_;
         bool lastDisableTextures_ = false;
+
+        // Occlusion: reused across frames to avoid per-frame allocation
+        std::unordered_set<uint64_t> reachedSet_;
+
+        // Cache inverse viewProj — only recompute when viewProj changes
+        glm::mat4 cachedViewProj_{};
+        glm::mat4 cachedInvVP_{};
+        bool invVPCacheValid_ = false;
     };
 
 } // namespace lve
