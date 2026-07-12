@@ -192,13 +192,20 @@ namespace lve {
             throw std::runtime_error("failed to find a suitable GPU!");
         }
 
-        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+        driverProperties = {};
+        driverProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+
+        VkPhysicalDeviceProperties2 properties2{};
+        properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        properties2.pNext = &driverProperties;
+
+        vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+        properties = properties2.properties;
+
         std::string deviceName = properties.deviceName;
         uint32_t major = VK_API_VERSION_MAJOR(properties.apiVersion);
         uint32_t minor = VK_API_VERSION_MINOR(properties.apiVersion);
         uint32_t patch = VK_API_VERSION_PATCH(properties.apiVersion);
-        // TODO: use VkPhysicalDeviceDriverProperties through the vkGetPhysicalDeviceProperties2
-        auto driverVersion = properties.driverVersion;
 
         LogUtils::info(ThreadName::Renderer,
             StringBuilder::build("Selected GPU: ", deviceName));
@@ -207,7 +214,18 @@ namespace lve {
             StringBuilder::build("Vulkan API: ", major, ".", minor, ".", patch));
 
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Driver Version: ", driverVersion));
+            StringBuilder::build("Driver: ", driverProperties.driverName,
+                " (", driverProperties.driverInfo, ")"));
+
+        LogUtils::info(ThreadName::Renderer,
+            StringBuilder::build("Driver Type: ", driverIdToString(driverProperties.driverID)));
+
+        LogUtils::info(ThreadName::Renderer,
+            StringBuilder::build("Conformance: ",
+                    static_cast<int>(driverProperties.conformanceVersion.major), ".",
+                    static_cast<int>(driverProperties.conformanceVersion.minor), ".",
+                    static_cast<int>(driverProperties.conformanceVersion.subminor), ".",
+                    static_cast<int>(driverProperties.conformanceVersion.patch)));
     }
 
     void Device::createLogicalDevice() {
@@ -502,10 +520,10 @@ namespace lve {
 
         // Print summary
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Available Vulkan Extensions: ", extensionCount));
+            StringBuilder::build("Available Instance Extensions: ", extensionCount));
 
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Required Extensions: ", requiredExtensions.size()));
+            StringBuilder::build("Required Instance Extensions: ", requiredExtensions.size()));
 
         // Validation check
         for (const auto& required : requiredExtensions) {
@@ -530,6 +548,13 @@ namespace lve {
 
         for (const auto &extension: availableExtensions) {
             requiredExtensions.erase(extension.extensionName);
+        }
+
+        if (requiredExtensions.empty()) {
+            LogUtils::info(ThreadName::Renderer,
+                StringBuilder::build("Available Device Extensions: ", extensionCount));
+            LogUtils::info(ThreadName::Renderer,
+                StringBuilder::build("Required Device Extensions: ", deviceExtensions.size()));
         }
 
         return requiredExtensions.empty();

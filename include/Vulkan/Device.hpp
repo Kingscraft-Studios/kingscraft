@@ -121,7 +121,8 @@ namespace lve {
                 VkImage &image,
                 VkDeviceMemory &imageMemory);
 
-        VkPhysicalDeviceProperties properties;
+        VkPhysicalDeviceProperties properties{};
+        VkPhysicalDeviceDriverProperties driverProperties{};
         VkInstance getInstance() { return instance; }
 
         StagingArena& getStagingArena() { return *stagingArena_; }
@@ -157,6 +158,21 @@ namespace lve {
 
         SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 
+        static const char* driverIdToString(VkDriverId id) {
+            switch (id) {
+                case VK_DRIVER_ID_AMD_PROPRIETARY:          return "AMD Proprietary";
+                case VK_DRIVER_ID_AMD_OPEN_SOURCE:          return "AMD Open Source";
+                case VK_DRIVER_ID_MESA_RADV:                return "Mesa RADV";
+                case VK_DRIVER_ID_NVIDIA_PROPRIETARY:       return "NVIDIA";
+                case VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS:return "Intel (Windows)";
+                case VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA:   return "Intel Mesa";
+                case VK_DRIVER_ID_MESA_LLVMPIPE:            return "Mesa LLVMpipe";
+                case VK_DRIVER_ID_MESA_V3DV:                return "Mesa V3DV";
+                case VK_DRIVER_ID_MESA_TURNIP:              return "Mesa Turnip";
+                default:                                    return "Unknown";
+            }
+        }
+
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
@@ -169,7 +185,10 @@ namespace lve {
         VkQueue presentQueue_;
 
         const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
-        const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        const std::vector<const char *> deviceExtensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME
+        };
 
         std::unique_ptr<StagingArena> stagingArena_;
         VkPipelineCache pipelineCache_ = VK_NULL_HANDLE;
