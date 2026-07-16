@@ -78,7 +78,7 @@ namespace lve {
             window->createWindowSurface(instance, &surface);
         }
         bool isInitialized() {
-            return window.has_value();
+            return initialized.load(std::memory_order_acquire);
         }
         void setClipBoard(const std::string text) {
             window->setClipboard(text.c_str());
@@ -91,5 +91,6 @@ namespace lve {
         std::optional<Window> window;
         std::shared_ptr<Mailbox> mailbox;
         std::atomic<bool> running;
+        std::atomic<bool> initialized{false};
     };
 }

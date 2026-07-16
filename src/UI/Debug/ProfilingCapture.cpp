@@ -6,6 +6,7 @@
 #include <string>
 #include <cmath>
 
+#include "Bus/MessageBus.hpp"
 #include "Threads/InputThread.hpp"
 
 namespace lve {
@@ -206,7 +207,9 @@ namespace lve {
 
         if (pos >= (int)sizeof(buf)) pos = sizeof(buf) - 1;
 
-        InputThread::getInstance().setClipBoard(buf);
+        MessageBus::Get().send(ThreadName::Input, [buf]() {
+             InputThread::getInstance().setClipBoard(buf);
+        });
     }
 
 } // namespace lve

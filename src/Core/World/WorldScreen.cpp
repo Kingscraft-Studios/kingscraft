@@ -1,4 +1,6 @@
 #include "Core/World/WorldScreen.hpp"
+
+#include "Bus/MessageBus.hpp"
 #include "Core/World/World.hpp"
 #include "Core/AppContext.hpp"
 #include "UI/Debug/ProfilingCapture.hpp"
@@ -48,8 +50,9 @@ namespace lve {
         playerController_.init(camera_, *keybinds);
         playerController_.setCaptured(true);
         terrainRenderer_.init(*ctx.device, *textureCache, renderer->getWorldRenderPass());
-
-        InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        MessageBus::Get().send(ThreadName::Input, []() {
+            InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        });
         keybinds->setLayerEnabled(BindLayer::UI, false);
         fpsCounter_.init(*ctx.uiSystem);
         hotbar_.init(*ctx.uiSystem, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
@@ -78,11 +81,15 @@ namespace lve {
         if (debug != wasDebugOn_) {
             wasDebugOn_ = debug;
             if (debug) {
-                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                MessageBus::Get().send(ThreadName::Input, []() {
+                    InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                });
                 ctx.keybinds->setLayerEnabled(BindLayer::UI, true);
                 playerController_.setCaptured(false);
             } else {
-                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                MessageBus::Get().send(ThreadName::Input, []() {
+                    InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                });
                 ctx.keybinds->setLayerEnabled(BindLayer::UI, false);
                 playerController_.setCaptured(true);
             }
@@ -178,7 +185,9 @@ namespace lve {
         hotbar_.cleanup(*app.uiSystem);
         fpsCounter_.cleanup(*app.uiSystem);
         if (InputThread::getInstance().isInitialized()) {
-            InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            MessageBus::Get().send(ThreadName::Input, []() {
+                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            });
         }
         terrainRenderer_.cleanup();
     }

@@ -27,9 +27,9 @@ void MessageBus::unsubscribe(ThreadName name) {
     subscribers_.erase(name);
 }
 
-bool MessageBus::send(ThreadName target, Message msg) {
+bool MessageBus::send(Message msg) {
     std::shared_lock lock(rwMutex_);
-    auto it = subscribers_.find(target);
+    auto it = subscribers_.find(msg.target);
     if (it == subscribers_.end())
         return false;
     auto mailbox = it->second.lock();
@@ -44,7 +44,7 @@ bool MessageBus::send(ThreadName target, std::function<void()> payload) {
         .target = target,
         .payload = std::move(payload)
     };
-    return send(target, std::move(msg));
+    return send(std::move(msg));
 }
 
 void MessageBus::signalQuit() {

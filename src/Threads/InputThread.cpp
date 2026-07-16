@@ -9,6 +9,7 @@ namespace lve {
         mailbox = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::Input, mailbox);
         running = true;
+        initialized.store(true, std::memory_order_release);
     }
 
     void InputThread::run() {
@@ -28,6 +29,8 @@ namespace lve {
 
     void InputThread::Shutdown() {
         running = false;
+        initialized.store(false, std::memory_order_release);
         mailbox->stop();
+        window.reset();
     }
 }

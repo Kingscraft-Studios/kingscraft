@@ -6,6 +6,7 @@
 #include <chrono>
 #include <thread>
 
+#include "Bus/MessageBus.hpp"
 #include "Threads/InputThread.hpp"
 
 namespace lve {
@@ -13,12 +14,16 @@ namespace lve {
     App::App() {
 
         keybinds_->onPress(BindLayer::Global, {Keys::F11}, [this]() {
-            InputThread::getInstance().toggleFullscreen();
+            MessageBus::Get().send(ThreadName::Input, []() {
+                InputThread::getInstance().toggleFullscreen();
+            });
             requestSwapchainRecreate = true;
         });
 
         keybinds_->onPress(BindLayer::Global, {Keys::ESCAPE}, [this]() {
-            InputThread::getInstance().setWindowClose();
+            MessageBus::Get().send(ThreadName::Input, []() {
+                InputThread::getInstance().setWindowClose();
+            });
         });
 
         keybinds_->onPress(BindLayer::Global, {Keys::F3, Keys::F6}, [this]() {
@@ -36,11 +41,15 @@ namespace lve {
             }
         });
 
-        InputThread::getInstance().setMouseMoveCallback([this](double x, double y) {
-            uiSystem->onMouseMove(x, y);
+        //TODO: Make so UiSystem or anything owned by RenderThread or any other thread is ran By its Owner Thread
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().setMouseMoveCallback([this](double x, double y) {
+                uiSystem->onMouseMove(x, y);
+            });
         });
 
-        InputThread::getInstance().setMouseButtonCallback([this](int button, int action, int mods) {
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().setMouseButtonCallback([this](int button, int action, int mods) {
             double x = InputThread::getInstance().getLastX();
             double y = InputThread::getInstance().getLastY();
 
@@ -48,18 +57,25 @@ namespace lve {
 
             if (screenManager->getCurrent())
                 screenManager->getCurrent()->onMouseButton(button, action, mods);
+            });
         });
 
-        InputThread::getInstance().setScrollCallback([this](double dx, double dy) {
-            uiSystem->onScroll(dx, dy);
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().setScrollCallback([this](double dx, double dy) {
+                uiSystem->onScroll(dx, dy);
+            });
         });
 
-        InputThread::getInstance().setKeyCallback([this](int key, int scancode, int action, int mods) {
-            keybinds_->onKeyEvent(key, scancode, action, mods);
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().setKeyCallback([this](int key, int scancode, int action, int mods) {
+                keybinds_->onKeyEvent(key, scancode, action, mods);
+            });
         });
 
-        InputThread::getInstance().setCharCallback([this](unsigned int codepoint) {
-            keybinds_->onChar(codepoint);
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().setCharCallback([this](unsigned int codepoint) {
+                keybinds_->onChar(codepoint);
+            });
         });
 
         keybinds_->setUiKeyCallback([this](int key, int action) {
@@ -71,7 +87,9 @@ namespace lve {
         });
 
         uiSystem->registerButtonHandler(BTN_QUIT_GAME, [this]() {
-            InputThread::getInstance().setWindowClose();
+            MessageBus::Get().send(ThreadName::Input, []() {
+                InputThread::getInstance().setWindowClose();
+            });
         });
 
         uiSystem->registerButtonHandler(BTN_ENTER_WORLD, [this]() {
@@ -80,10 +98,11 @@ namespace lve {
 
         resourceManager->loadRawImageData("resources/textures/logo/Kingscraft-Logo.png",
             [this](unsigned char* pixels, int width, int height) {
-                InputThread::getInstance().setIcon(pixels, width, height);
-            });
+                MessageBus::Get().send(ThreadName::Input, [pixels, width, height]() {
+                    InputThread::getInstance().setIcon(pixels, width, height);
+                });
+        });
 
-        // Init new UI engine alongside Noesis
         uiSystem->init(device, *descriptorManager_, renderer->getExtent());
 
         auto& appCtx = AppContext::get();
@@ -119,7 +138,9 @@ namespace lve {
 
         glfwPollEvents();
         keybinds_->update();
-        InputThread::getInstance().processInput();
+        MessageBus::Get().send(ThreadName::Input, []() {
+            InputThread::getInstance().processInput();
+        });
 
         auto currentExtent = InputThread::getInstance().getExtent();
 
@@ -127,7 +148,9 @@ namespace lve {
 
             requestSwapchainRecreate = false;
             pauseRenderer();
-            InputThread::getInstance().resetWindowResizedFlag();
+            MessageBus::Get().send(ThreadName::Input, []() {
+                InputThread::getInstance().resetWindowResizedFlag();
+            });
 
             recreateSwapChain();
             uiSystem->resize(currentExtent.width, currentExtent.height);
@@ -257,7 +280,9 @@ namespace lve {
 
         double submitStart = TimeUtil::uptimeSeconds();
         if (!renderer->endFrame()) {
-            InputThread::getInstance().resetWindowResizedFlag();
+            MessageBus::Get().send(ThreadName::Input, []() {
+                InputThread::getInstance().resetWindowResizedFlag();
+            });
             recreateSwapChain();
             auto newExtent = InputThread::getInstance().getExtent();
             uiSystem->resize(newExtent.width, newExtent.height);

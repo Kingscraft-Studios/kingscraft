@@ -23,7 +23,6 @@ public:
     void subscribe(ThreadName name, std::shared_ptr<Mailbox> mailbox);
     void unsubscribe(ThreadName name);
 
-    bool send(ThreadName target, Message msg);
     bool send(ThreadName target, std::function<void()> payload);
 
     template<typename T>
@@ -62,6 +61,8 @@ public:
     void waitForQuit();
 
 private:
+
+    bool send(Message msg);
 
     std::shared_mutex rwMutex_;
     std::unordered_map<ThreadName, std::weak_ptr<Mailbox>> subscribers_;
