@@ -19,6 +19,7 @@
 #include "Core/World/World.hpp"
 #include "Core/World/TerrainGenerator.hpp"
 #include "Renderer/RendererSettings.hpp"
+#include "Threads/InputThread.hpp"
 #include "Util/TimeUtil.hpp"
 
 namespace lve {
@@ -48,7 +49,6 @@ namespace lve {
         void pauseRenderer();
         void resumeRenderer();
 
-        Window& getWindow() { return window; }
         Device& getDevice() { return device; }
         Renderer& getRenderer() { return *renderer; }
         ResourceManager& getResourceManager() { return *resourceManager; }
@@ -58,7 +58,7 @@ namespace lve {
         PostProcessing& getPostProcessor() { return *postProcessor_; }
         TextureCache& getTextureCache() { return *textureCache_; }
         World* getWorld() { return world_.get(); }
-        VkExtent2D getExtent() { return window.getExtent(); }
+        VkExtent2D getExtent() { return InputThread::getInstance().getExtent().toVKExtent(); }
         double getCpuFrameTimeMs() const { return cpuFrameTimeMs_; }
         double getCpuTickMs() const { return cpuTickMs_; }
         double getCpuSubmitMs() const { return cpuSubmitMs_; }
@@ -66,10 +66,8 @@ namespace lve {
     private:
         void drawFrame();
         void recreateSwapChain();
-
-        Window window{WIDTH, HEIGHT, "Kingscraft"};
-        Device device{window};
-        std::unique_ptr<Renderer> renderer = std::make_unique<Renderer>(device, window.getExtent());
+        Device device;
+        std::unique_ptr<Renderer> renderer = std::make_unique<Renderer>(device, InputThread::getInstance().getExtent().toVKExtent());
         std::unique_ptr<DescriptorManager> descriptorManager_ = std::make_unique<DescriptorManager>(device);
         std::unique_ptr<TextureCache> textureCache_ = std::make_unique<TextureCache>(device);
         std::unique_ptr<PostProcessing> postProcessor_;

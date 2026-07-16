@@ -67,6 +67,8 @@ namespace lve {
                 case ThreadName::Renderer:     return "Renderer";
                 case ThreadName::Resource:     return "Resource";
                 case ThreadName::Registration: return "Registration";
+                case ThreadName::Input: return "Input";
+                    break;
             }
 
             return "Unknown";

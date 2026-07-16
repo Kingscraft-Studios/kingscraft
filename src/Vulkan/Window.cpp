@@ -32,7 +32,6 @@ namespace lve {
         glfwSetCursorPosCallback(window, [](GLFWwindow* w, double xpos, double ypos) {
         auto win = static_cast<Window*>(glfwGetWindowUserPointer(w));
         if (win) {
-            // --- THE MISSING PIECE: Save the position! ---
             win->lastX = xpos;
             win->lastY = ypos;
 
@@ -81,13 +80,6 @@ namespace lve {
     void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto lveWindow = static_cast<Window*>(glfwGetWindowUserPointer(window));
         if (!lveWindow) return;
-
-        // Prevent resizing if still in the loading screen
-        if (lveWindow->getLoading()) {
-            // Reset to fixed size (you can hardcode or use existing values)
-            glfwSetWindowSize(window, 800, 600);
-            return;
-        }
 
         lveWindow->framebufferResized = true;
         lveWindow->width = width;

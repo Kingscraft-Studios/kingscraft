@@ -18,7 +18,6 @@ public:
         return instance;
     }
 
-    Window* window = nullptr;
     Device* device = nullptr;
     Renderer* renderer = nullptr;
     UiWrapper* uiSystem = nullptr;

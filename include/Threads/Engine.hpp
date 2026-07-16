@@ -31,6 +31,7 @@ private:
     std::thread regThread_;
     std::thread rendererThread_;
     std::thread resLoaderThread_;
+    std::thread inputThread;
     RenderThread renderer_;
     ResourceLoader resourceLoader_;
 

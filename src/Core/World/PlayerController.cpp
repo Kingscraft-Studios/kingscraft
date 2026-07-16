@@ -1,20 +1,20 @@
 #include "Core/World/PlayerController.hpp"
 #include "Core/KeyBindHandler.hpp"
 #include "Core/Keys.hpp"
+#include "Threads/InputThread.hpp"
 #include "Vulkan/Window.hpp"
 
 namespace lve {
 
-    void PlayerController::init(Camera& camera, Window& window, KeyBindHandler& keybinds) {
+    void PlayerController::init(Camera& camera, KeyBindHandler& keybinds) {
         camera_ = &camera;
-        window_ = &window;
         keybinds_ = &keybinds;
-        lastMouseX_ = window.getLastX();
-        lastMouseY_ = window.getLastY();
+        lastMouseX_ = InputThread::getInstance().getLastX();
+        lastMouseY_ = InputThread::getInstance().getLastY();
     }
 
     void PlayerController::tick(double dt) {
-        if (!camera_ || !keybinds_ || !window_) return;
+        if (!camera_ || !keybinds_ || !InputThread::getInstance().isInitialized()) return;
         if (!cursorCaptured_) return;
 
         float speed = 3.0f * static_cast<float>(dt);
@@ -25,8 +25,8 @@ namespace lve {
         if (keybinds_->isDown(Keys::SPACE)) camera_->moveUp(speed);
         if (keybinds_->isDown(Keys::LEFT_SHIFT)) camera_->moveUp(-speed);
 
-        double mx = window_->getLastX();
-        double my = window_->getLastY();
+        double mx = InputThread::getInstance().getLastX();
+        double my = InputThread::getInstance().getLastY();
         double dx = mx - lastMouseX_;
         double dy = lastMouseY_ - my;
         lastMouseX_ = mx;
@@ -47,9 +47,9 @@ namespace lve {
     }
 
     void PlayerController::resetMouse() {
-        if (window_) {
-            lastMouseX_ = window_->getLastX();
-            lastMouseY_ = window_->getLastY();
+        if (InputThread::getInstance().isInitialized()) {
+            lastMouseX_ = InputThread::getInstance().getLastX();
+            lastMouseY_ = InputThread::getInstance().getLastY();
         }
     }
 

@@ -11,6 +11,7 @@
 #include "Core/Keys.hpp"
 #include "Core/Raycast.hpp"
 #include "Core/Blocks/Blocks.hpp"
+#include "Threads/InputThread.hpp"
 #include "Vulkan/Window.hpp"
 #include "Vulkan/Device.hpp"
 
@@ -32,7 +33,6 @@ namespace lve {
     void WorldScreen::init() {
         auto& ctx = AppContext::get();
         world_ = ctx.world;
-        auto* window = ctx.window;
         auto* keybinds = ctx.keybinds;
         auto* textureCache = ctx.textureCache;
         auto* renderer = ctx.renderer;
@@ -45,11 +45,11 @@ namespace lve {
         camera_.setPosition({67.5f, 15.0f, 67.5f});
         camera_.setRotation(0.0f, -35.0f);
 
-        playerController_.init(camera_, *window, *keybinds);
+        playerController_.init(camera_, *keybinds);
         playerController_.setCaptured(true);
         terrainRenderer_.init(*ctx.device, *textureCache, renderer->getWorldRenderPass());
 
-        window->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         keybinds->setLayerEnabled(BindLayer::UI, false);
         fpsCounter_.init(*ctx.uiSystem);
         hotbar_.init(*ctx.uiSystem, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
@@ -78,11 +78,11 @@ namespace lve {
         if (debug != wasDebugOn_) {
             wasDebugOn_ = debug;
             if (debug) {
-                ctx.window->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 ctx.keybinds->setLayerEnabled(BindLayer::UI, true);
                 playerController_.setCaptured(false);
             } else {
-                ctx.window->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 ctx.keybinds->setLayerEnabled(BindLayer::UI, false);
                 playerController_.setCaptured(true);
             }
@@ -177,8 +177,8 @@ namespace lve {
         app.uiSystem->setScrollCallback(nullptr);
         hotbar_.cleanup(*app.uiSystem);
         fpsCounter_.cleanup(*app.uiSystem);
-        if (app.window) {
-            glfwSetInputMode(app.window->getGLFWWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        if (InputThread::getInstance().isInitialized()) {
+            InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         }
         terrainRenderer_.cleanup();
     }

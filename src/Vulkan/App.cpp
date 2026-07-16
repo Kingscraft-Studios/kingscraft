@@ -6,18 +6,19 @@
 #include <chrono>
 #include <thread>
 
+#include "Threads/InputThread.hpp"
+
 namespace lve {
 
     App::App() {
-        keybinds_->setWindow(window.getGLFWWindow());
 
         keybinds_->onPress(BindLayer::Global, {Keys::F11}, [this]() {
-            window.toggleFullscreen();
+            InputThread::getInstance().toggleFullscreen();
             requestSwapchainRecreate = true;
         });
 
         keybinds_->onPress(BindLayer::Global, {Keys::ESCAPE}, [this]() {
-            window.setWindowClose();
+            InputThread::getInstance().setWindowClose();
         });
 
         keybinds_->onPress(BindLayer::Global, {Keys::F3, Keys::F6}, [this]() {
@@ -35,13 +36,13 @@ namespace lve {
             }
         });
 
-        window.setMouseMoveCallback([this](double x, double y) {
+        InputThread::getInstance().setMouseMoveCallback([this](double x, double y) {
             uiSystem->onMouseMove(x, y);
         });
 
-        window.setMouseButtonCallback([this](int button, int action, int mods) {
-            double x = window.getLastX();
-            double y = window.getLastY();
+        InputThread::getInstance().setMouseButtonCallback([this](int button, int action, int mods) {
+            double x = InputThread::getInstance().getLastX();
+            double y = InputThread::getInstance().getLastY();
 
             uiSystem->onMouseButton(button, action, mods, x, y);
 
@@ -49,15 +50,15 @@ namespace lve {
                 screenManager->getCurrent()->onMouseButton(button, action, mods);
         });
 
-        window.setScrollCallback([this](double dx, double dy) {
+        InputThread::getInstance().setScrollCallback([this](double dx, double dy) {
             uiSystem->onScroll(dx, dy);
         });
 
-        window.setKeyCallback([this](int key, int scancode, int action, int mods) {
+        InputThread::getInstance().setKeyCallback([this](int key, int scancode, int action, int mods) {
             keybinds_->onKeyEvent(key, scancode, action, mods);
         });
 
-        window.setCharCallback([this](unsigned int codepoint) {
+        InputThread::getInstance().setCharCallback([this](unsigned int codepoint) {
             keybinds_->onChar(codepoint);
         });
 
@@ -70,7 +71,7 @@ namespace lve {
         });
 
         uiSystem->registerButtonHandler(BTN_QUIT_GAME, [this]() {
-            window.setWindowClose();
+            InputThread::getInstance().setWindowClose();
         });
 
         uiSystem->registerButtonHandler(BTN_ENTER_WORLD, [this]() {
@@ -79,14 +80,13 @@ namespace lve {
 
         resourceManager->loadRawImageData("resources/textures/logo/Kingscraft-Logo.png",
             [this](unsigned char* pixels, int width, int height) {
-                window.setIcon(pixels, width, height);
+                InputThread::getInstance().setIcon(pixels, width, height);
             });
 
         // Init new UI engine alongside Noesis
         uiSystem->init(device, *descriptorManager_, renderer->getExtent());
 
         auto& appCtx = AppContext::get();
-        appCtx.window = &window;
         appCtx.device = &device;
         appCtx.renderer = renderer.get();
         appCtx.uiSystem = uiSystem.get();
@@ -97,7 +97,7 @@ namespace lve {
 
         screenManager->switchTo<MainMenu>(renderer->getRenderPass(), *uiSystem, renderer->getExtent());
 
-        VkExtent2D extent = window.getExtent();
+        VkExtent2D extent = InputThread::getInstance().getExtent().toVKExtent();
         postProcessor_ = std::make_unique<PostProcessing>();
         auto bloom = std::make_unique<Bloom>(device, extent, renderer->getWorldRenderPass(), *descriptorManager_);
         postProcessor_->addEffect(std::move(bloom));
@@ -108,7 +108,7 @@ namespace lve {
     }
 
     bool App::windowShouldClose() const {
-        return window.shouldClose();
+        return InputThread::getInstance().shouldClose();
     }
 
     void App::tick() {
@@ -119,15 +119,15 @@ namespace lve {
 
         glfwPollEvents();
         keybinds_->update();
-        window.processInput();
+        InputThread::getInstance().processInput();
 
-        auto currentExtent = window.getExtent();
+        auto currentExtent = InputThread::getInstance().getExtent();
 
-        if ((requestSwapchainRecreate || window.wasWindowResized()) && currentExtent.width > 0 && currentExtent.height > 0) {
+        if ((requestSwapchainRecreate || InputThread::getInstance().wasWindowResized()) && currentExtent.width > 0 && currentExtent.height > 0) {
 
             requestSwapchainRecreate = false;
             pauseRenderer();
-            window.resetWindowResizedFlag();
+            InputThread::getInstance().resetWindowResizedFlag();
 
             recreateSwapChain();
             uiSystem->resize(currentExtent.width, currentExtent.height);
@@ -173,9 +173,9 @@ namespace lve {
     }
 
     void App::recreateSwapChain() {
-        auto extent = window.getExtent();
+        auto extent = InputThread::getInstance().getExtent().toVKExtent();
         while (extent.width == 0 || extent.height == 0) {
-            extent = window.getExtent();
+            extent = InputThread::getInstance().getExtent().toVKExtent();
             glfwWaitEvents();
         }
 
@@ -196,7 +196,7 @@ namespace lve {
 
         if (!renderer->beginFrame()) {
             recreateSwapChain();
-            auto newExtent = window.getExtent();
+            auto newExtent = InputThread::getInstance().getExtent();
             uiSystem->resize(newExtent.width, newExtent.height);
             return;
         }
@@ -257,9 +257,9 @@ namespace lve {
 
         double submitStart = TimeUtil::uptimeSeconds();
         if (!renderer->endFrame()) {
-            window.resetWindowResizedFlag();
+            InputThread::getInstance().resetWindowResizedFlag();
             recreateSwapChain();
-            auto newExtent = window.getExtent();
+            auto newExtent = InputThread::getInstance().getExtent();
             uiSystem->resize(newExtent.width, newExtent.height);
         }
         cpuSubmitMs_ = (TimeUtil::uptimeSeconds() - submitStart) * 1000.0;

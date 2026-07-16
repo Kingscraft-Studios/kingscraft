@@ -22,8 +22,6 @@ namespace lve {
         using UiKeyCallback = std::function<void(int key, int action)>;
         using UiCharCallback = std::function<void(unsigned int codepoint)>;
 
-        void setWindow(GLFWwindow* window) { window_ = window; }
-
         void onKeyEvent(int key, int scancode, int action, int mods) {
             if (key < 0 || key > GLFW_KEY_LAST) return;
             currKeys_[key] = (action == GLFW_PRESS || action == GLFW_REPEAT);
@@ -117,7 +115,6 @@ namespace lve {
             return false;
         }
 
-        GLFWwindow* window_ = nullptr;
         std::array<bool, GLFW_KEY_LAST + 1> prevKeys_{};
         std::array<bool, GLFW_KEY_LAST + 1> currKeys_{};
         std::vector<Binding> bindings_;

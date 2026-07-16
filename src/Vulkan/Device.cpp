@@ -9,6 +9,8 @@
 #include <unordered_set>
 
 #include "Bus/MessageBus.hpp"
+#include "GLFW/glfw3.h"
+#include "Threads/InputThread.hpp"
 #include "Threads/Logger.hpp"
 #include "Util/LogUtils.hpp"
 
@@ -84,7 +86,7 @@ namespace lve {
     }
 
 // class member functions
-    Device::Device(lve::Window &window) : window(window) {
+    Device::Device() {
         createInstance();
         setupDebugMessenger();
         createSurface();
@@ -421,7 +423,7 @@ namespace lve {
 
     }
 
-    void Device::createSurface() { window.createWindowSurface(instance, &surface_); }
+    void Device::createSurface() { InputThread::getInstance().createSurface(instance, surface_); }
 
     bool Device::isDeviceSuitable(VkPhysicalDevice device) {
         QueueFamilyIndices indices = findQueueFamilies(device);

@@ -8,6 +8,8 @@
 #include <string>
 #include <functional>
 
+#include "Core/WindowStruct.hpp"
+
 namespace lve {
 
     class Window {
@@ -22,7 +24,7 @@ namespace lve {
 
         bool shouldClose() const { return glfwWindowShouldClose(window); }
 
-        VkExtent2D getExtent() { return {static_cast<uint32_t>(width), static_cast<uint32_t>(height)}; }
+        WindowExtent getExtent() { return {static_cast<uint32_t>(width), static_cast<uint32_t>(height)}; }
 
         bool wasWindowResized() { return framebufferResized; }
 
@@ -50,9 +52,6 @@ namespace lve {
             fullscreenToggleCallback = std::move(callback);
         }
 
-        void setLoading(bool loading) { isLoading = loading;}
-        bool getLoading() const {return isLoading;}
-
         // Helper to get last mouse pos for click logic
         double getLastX() const { return lastX; }
         double getLastY() const { return lastY; }
@@ -60,6 +59,10 @@ namespace lve {
         void setIcon(unsigned char* pixels, int width, int height);
 
         void setCursorType(int mode, int value) { glfwSetInputMode(window, mode, value); }
+
+        void setClipboard(const char* string) {
+            glfwSetClipboardString(window, string);
+        }
 
     private:
         static void framebufferResizeCallback(GLFWwindow *window, int width, int height);
@@ -82,8 +85,6 @@ namespace lve {
         const GLFWvidmode* videoMode = nullptr;
 
         std::function<void()> fullscreenToggleCallback;
-
-        bool isLoading = false;
 
         MouseMovementCallback mouseMovementCallback;
         MouseButtonCallback mouseButtonCallback;

@@ -10,7 +10,7 @@ namespace lve {
 
     class PlayerController {
     public:
-        void init(Camera& camera, Window& window, KeyBindHandler& keybinds);
+        void init(Camera& camera, KeyBindHandler& keybinds);
         void tick(double dt);
         void updateProjection(VkExtent2D extent, float fov, float nearPlane, float farPlane);
 
@@ -23,7 +23,6 @@ namespace lve {
 
     private:
         Camera* camera_ = nullptr;
-        Window* window_ = nullptr;
         KeyBindHandler* keybinds_ = nullptr;
         double lastMouseX_ = 0.0;
         double lastMouseY_ = 0.0;

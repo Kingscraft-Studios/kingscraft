@@ -7,7 +7,8 @@ enum class ThreadName {
     Engine,
     Renderer,
     Resource,
-    Registration
+    Registration,
+    Input
 };
 
 struct Message {

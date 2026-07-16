@@ -7,7 +7,9 @@
 
 #include <chrono>
 
+#include "Core/Constants.hpp"
 #include "Core/Registries.hpp"
+#include "Threads/InputThread.hpp"
 #include "Util/LogUtils.hpp"
 
 namespace lve {
@@ -19,6 +21,8 @@ namespace lve {
         resourceLoader_.stop();
         if (resLoaderThread_.joinable()) resLoaderThread_.join();
         if (regThread_.joinable()) regThread_.join();
+        InputThread::getInstance().Shutdown();
+        if (inputThread.joinable()) inputThread.join();
         if (rendererThread_.joinable()) rendererThread_.join();
     }
 
@@ -39,6 +43,8 @@ namespace lve {
         IO::Init();
         Logger::Init();
 
+        InputThread::getInstance().Init({DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, "Kingscraft"});
+
 
         mailbox_ = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::Engine, mailbox_);
@@ -50,6 +56,8 @@ namespace lve {
         resLoaderThread_ = std::thread([this]() { resourceLoader_.run(); });
 
         regThread_ = std::thread([]() { Registries::build(); });
+
+        inputThread = std::thread([]() {InputThread::getInstance().run(); });
 
         renderer_.setQuitCallback([this]() { stop(); });
         rendererThread_ = std::thread([this]() { renderer_.run(); });
@@ -63,6 +71,9 @@ namespace lve {
 
         LogUtils::info(ThreadName::Engine, "Shutting down");
         if (rendererThread_.joinable()) rendererThread_.join();
+
+        InputThread::getInstance().Shutdown();
+        if (inputThread.joinable()) inputThread.join();
 
         resourceLoader_.stop();
         if (resLoaderThread_.joinable()) resLoaderThread_.join();

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Window.hpp"
 #include "StagingArena.hpp"
 
 // std lib headers
@@ -33,7 +32,7 @@ namespace lve {
         const bool enableValidationLayers = true;
 #endif
 
-        Device(Window &window);
+        Device();
 
         ~Device();
 
@@ -176,7 +175,6 @@ namespace lve {
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-        Window &window;
         VkCommandPool commandPool;
 
         VkDevice device_;

@@ -1,11 +1,12 @@
 #include "UI/Debug/ProfilingCapture.hpp"
-#include "Core/AppContext.hpp"
 #include "Vulkan/Window.hpp"
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <cstdio>
 #include <string>
 #include <cmath>
+
+#include "Threads/InputThread.hpp"
 
 namespace lve {
 
@@ -113,10 +114,6 @@ namespace lve {
 
         if (frameCount_ < 2) return;
 
-        auto getWindow = []() -> GLFWwindow* {
-            return AppContext::get().window->getGLFWWindow();
-        };
-
         auto sFrame    = computeStats(cpuFrameMs_);
         auto sGpu      = computeStats(gpuTotalMs_);
         auto sWorld    = computeStats(worldGpuMs_);
@@ -209,7 +206,7 @@ namespace lve {
 
         if (pos >= (int)sizeof(buf)) pos = sizeof(buf) - 1;
 
-        glfwSetClipboardString(getWindow(), buf);
+        InputThread::getInstance().setClipBoard(buf);
     }
 
 } // namespace lve
