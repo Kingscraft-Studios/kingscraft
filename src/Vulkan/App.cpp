@@ -13,80 +13,103 @@ namespace lve {
 
     App::App() {
 
-        keybinds_->onPress(BindLayer::Global, {Keys::F11}, [this]() {
-            MessageBus::Get().send(ThreadName::Input, []() {
-                InputThread::getInstance().toggleFullscreen();
-            });
-            requestSwapchainRecreate = true;
-        });
-
-        keybinds_->onPress(BindLayer::Global, {Keys::ESCAPE}, [this]() {
-            MessageBus::Get().send(ThreadName::Input, []() {
-                InputThread::getInstance().setWindowClose();
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F11}, [this]() {
+                MessageBus::Get().send(ThreadName::Input, []() {
+                    InputThread::getInstance().toggleFullscreen();
+                });
+                requestSwapchainRecreate = true;
             });
         });
 
-        keybinds_->onPress(BindLayer::Global, {Keys::F3, Keys::F6}, [this]() {
-            uiSystem->setDebugMode(!uiSystem->isDebugModeOn());
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::ESCAPE}, []() {
+                MessageBus::Get().send(ThreadName::Input, []() {
+                    InputThread::getInstance().setWindowClose();
+                });
+            });
         });
 
-        keybinds_->onPress(BindLayer::Global, {Keys::F7}, [this]() {
-            if (uiSystem->isDebugModeOn())
-                uiSystem->logSelectedElementPosition();
+
+
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F3, Keys::F6}, [this]() {
+                uiSystem->setDebugMode(!uiSystem->isDebugModeOn());
+            });
         });
 
-        keybinds_->onPress(BindLayer::Global, {Keys::F8}, [this]() {
-            if (!profilingCapture_.isActive()) {
-                profilingCapture_.start();
-            }
+
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F7}, [this]() {
+                if (uiSystem->isDebugModeOn())
+                    uiSystem->logSelectedElementPosition();
+            });
         });
 
-        //TODO: Make so UiSystem or anything owned by RenderThread or any other thread is ran By its Owner Thread
+
+        MessageBus::Get().send(ThreadName::Input, [this]() {
+            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F8}, [this]() {
+                if (!profilingCapture_.isActive()) {
+                    profilingCapture_.start();
+                }
+            });
+        });
+
         MessageBus::Get().send(ThreadName::Input, [this]() {
             InputThread::getInstance().setMouseMoveCallback([this](double x, double y) {
-                uiSystem->onMouseMove(x, y);
+                MessageBus::Get().send(ThreadName::Renderer, [this, x, y]() {
+                    uiSystem->onMouseMove(x, y);
+                });
             });
         });
 
         MessageBus::Get().send(ThreadName::Input, [this]() {
             InputThread::getInstance().setMouseButtonCallback([this](int button, int action, int mods) {
-            double x = InputThread::getInstance().getLastX();
-            double y = InputThread::getInstance().getLastY();
-
-            uiSystem->onMouseButton(button, action, mods, x, y);
-
-            if (screenManager->getCurrent())
-                screenManager->getCurrent()->onMouseButton(button, action, mods);
+                double x = InputThread::getInstance().getLastX();
+                double y = InputThread::getInstance().getLastY();
+                MessageBus::Get().send(ThreadName::Renderer, [this, button, action, mods, x, y]() {
+                    uiSystem->onMouseButton(button, action, mods, x, y);
+                    if (screenManager->getCurrent())
+                        screenManager->getCurrent()->onMouseButton(button, action, mods);
+                });
             });
         });
 
         MessageBus::Get().send(ThreadName::Input, [this]() {
             InputThread::getInstance().setScrollCallback([this](double dx, double dy) {
-                uiSystem->onScroll(dx, dy);
+                MessageBus::Get().send(ThreadName::Renderer, [this, dx, dy]() {
+                    uiSystem->onScroll(dx, dy);
+                });
             });
         });
+
+        MessageBus::Get().send(ThreadName::Input, []() {
+            InputThread::getInstance().setKeyCallback([](int key, int scancode, int action, int mods) {
+                InputThread::getInstance().getKeyBindHandler().onKeyEvent(key, scancode, action, mods);
+            });
+        });
+
+        MessageBus::Get().send(ThreadName::Input, []() {
+            InputThread::getInstance().setCharCallback([](unsigned int codepoint) {
+                InputThread::getInstance().getKeyBindHandler().onChar(codepoint);
+            });
+        });
+
 
         MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().setKeyCallback([this](int key, int scancode, int action, int mods) {
-                keybinds_->onKeyEvent(key, scancode, action, mods);
+            InputThread::getInstance().getKeyBindHandler().setUiKeyCallback([this](int key, int action) {
+                uiSystem->onKey(key, action);
             });
         });
+
 
         MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().setCharCallback([this](unsigned int codepoint) {
-                keybinds_->onChar(codepoint);
+            InputThread::getInstance().getKeyBindHandler().setUiCharCallback([this](unsigned int codepoint) {
+                uiSystem->onChar(codepoint);
             });
         });
 
-        keybinds_->setUiKeyCallback([this](int key, int action) {
-            uiSystem->onKey(key, action);
-        });
-
-        keybinds_->setUiCharCallback([this](unsigned int codepoint) {
-            uiSystem->onChar(codepoint);
-        });
-
-        uiSystem->registerButtonHandler(BTN_QUIT_GAME, [this]() {
+        uiSystem->registerButtonHandler(BTN_QUIT_GAME, []() {
             MessageBus::Get().send(ThreadName::Input, []() {
                 InputThread::getInstance().setWindowClose();
             });
@@ -97,7 +120,7 @@ namespace lve {
         });
 
         resourceManager->loadRawImageData("resources/textures/logo/Kingscraft-Logo.png",
-            [this](unsigned char* pixels, int width, int height) {
+            [](unsigned char* pixels, int width, int height) {
                 MessageBus::Get().send(ThreadName::Input, [pixels, width, height]() {
                     InputThread::getInstance().setIcon(pixels, width, height);
                 });
@@ -109,7 +132,6 @@ namespace lve {
         appCtx.device = &device;
         appCtx.renderer = renderer.get();
         appCtx.uiSystem = uiSystem.get();
-        appCtx.keybinds = keybinds_.get();
         appCtx.textureCache = textureCache_.get();
         appCtx.world = world_.get();
         appCtx.profilingCapture = &profilingCapture_;
@@ -135,12 +157,6 @@ namespace lve {
         dt_ = currentTime - prevTime_;
         prevTime_ = currentTime;
         if (dt_ > 0.25) dt_ = 0.25;
-
-        glfwPollEvents();
-        keybinds_->update();
-        MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().processInput();
-        });
 
         auto currentExtent = InputThread::getInstance().getExtent();
 
@@ -198,8 +214,10 @@ namespace lve {
     void App::recreateSwapChain() {
         auto extent = InputThread::getInstance().getExtent().toVKExtent();
         while (extent.width == 0 || extent.height == 0) {
+            MessageBus::Get().send(ThreadName::Input, []() {
+                InputThread::getInstance().waitEvents();
+            });
             extent = InputThread::getInstance().getExtent().toVKExtent();
-            glfwWaitEvents();
         }
 
         vkDeviceWaitIdle(device.device());

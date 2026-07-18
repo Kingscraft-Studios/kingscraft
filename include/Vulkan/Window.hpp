@@ -33,7 +33,6 @@ namespace lve {
         void createWindowSurface(VkInstance instance, VkSurfaceKHR *surface);
         GLFWwindow* getGLFWWindow() const { return window; }
 
-        void processInput();
         void toggleFullscreen();
 
         using MouseMovementCallback = std::function<void(double, double)>;
@@ -64,6 +63,19 @@ namespace lve {
             glfwSetClipboardString(window, string);
         }
 
+        void pollGLFWEvents() {
+            glfwPollEvents();
+        }
+
+        void waitEvents() {
+            glfwWaitEvents();
+        }
+
+        using ResizeHook = std::function<void(int width, int height)>;
+        using MousePosHook = std::function<void(double x, double y)>;
+        void setResizeHook(ResizeHook hook) { resizeHook_ = std::move(hook); }
+        void setMousePosHook(MousePosHook hook) { mousePosHook_ = std::move(hook); }
+
     private:
         static void framebufferResizeCallback(GLFWwindow *window, int width, int height);
 
@@ -91,6 +103,9 @@ namespace lve {
         ScrollCallback scrollCallback;
         KeyCallback keyCallback;
         CharCallback charCallback;
+
+        ResizeHook resizeHook_;
+        MousePosHook mousePosHook_;
 
         double lastX = 0, lastY = 0;
     };

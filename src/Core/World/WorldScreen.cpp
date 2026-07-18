@@ -35,7 +35,6 @@ namespace lve {
     void WorldScreen::init() {
         auto& ctx = AppContext::get();
         world_ = ctx.world;
-        auto* keybinds = ctx.keybinds;
         auto* textureCache = ctx.textureCache;
         auto* renderer = ctx.renderer;
 
@@ -47,13 +46,15 @@ namespace lve {
         camera_.setPosition({67.5f, 15.0f, 67.5f});
         camera_.setRotation(0.0f, -35.0f);
 
-        playerController_.init(camera_, *keybinds);
+        playerController_.init(camera_, InputThread::getInstance().getKeyBindHandler());
         playerController_.setCaptured(true);
         terrainRenderer_.init(*ctx.device, *textureCache, renderer->getWorldRenderPass());
         MessageBus::Get().send(ThreadName::Input, []() {
             InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         });
-        keybinds->setLayerEnabled(BindLayer::UI, false);
+        MessageBus::Get().send(ThreadName::Input, []() {
+            InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
+        });
         fpsCounter_.init(*ctx.uiSystem);
         hotbar_.init(*ctx.uiSystem, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         ctx.uiSystem->resize(static_cast<int>(extent_.width),
@@ -68,8 +69,10 @@ namespace lve {
 
         for (int i = 0; i < UiHotbar::SLOT_COUNT; ++i) {
             int key = Keys::_1 + i;
-            keybinds->onPress(BindLayer::Screen, {key}, [this, i]() {
-                hotbar_.selectSlot(i);
+            MessageBus::Get().send(ThreadName::Input, [key, i, this]() {
+                InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Screen, {key}, [this, i]() {
+                    hotbar_.selectSlot(i);
+                });
             });
         }
     }
@@ -84,13 +87,17 @@ namespace lve {
                 MessageBus::Get().send(ThreadName::Input, []() {
                     InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 });
-                ctx.keybinds->setLayerEnabled(BindLayer::UI, true);
+                MessageBus::Get().send(ThreadName::Input, []() {
+                    InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
+                });
                 playerController_.setCaptured(false);
             } else {
                 MessageBus::Get().send(ThreadName::Input, []() {
                     InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 });
-                ctx.keybinds->setLayerEnabled(BindLayer::UI, false);
+                MessageBus::Get().send(ThreadName::Input, []() {
+                    InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
+                });
                 playerController_.setCaptured(true);
             }
             playerController_.resetMouse();

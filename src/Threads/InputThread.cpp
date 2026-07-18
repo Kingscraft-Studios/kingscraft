@@ -6,8 +6,31 @@
 namespace lve {
     void InputThread::Init(WindowCreateInfo info) {
         window.emplace(info.width, info.height, info.name);
+
+        auto ext = window->getExtent();
+        cachedWidth_.store(ext.width, std::memory_order_release);
+        cachedHeight_.store(ext.height, std::memory_order_release);
+        lastMouseX_.store(window->getLastX(), std::memory_order_release);
+        lastMouseY_.store(window->getLastY(), std::memory_order_release);
+
+        window->setResizeHook([this](int w, int h) {
+            cachedWidth_.store(static_cast<uint32_t>(w), std::memory_order_release);
+            cachedHeight_.store(static_cast<uint32_t>(h), std::memory_order_release);
+            windowResized_.store(true, std::memory_order_release);
+        });
+        window->setMousePosHook([this](double x, double y) {
+            lastMouseX_.store(x, std::memory_order_release);
+            lastMouseY_.store(y, std::memory_order_release);
+        });
+
         mailbox = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::Input, mailbox);
+        keyHandler->setDispatcher([](std::function<void()> cb) {
+            // TODO: Change Renderer to GameLogic once its in place
+            MessageBus::Get().send(ThreadName::Renderer, [cb = std::move(cb)]() {
+                cb();  // executes on game logic thread
+            });
+        });
         running = true;
         initialized.store(true, std::memory_order_release);
     }
@@ -24,6 +47,9 @@ namespace lve {
                     }
                 }
             }
+            window->pollGLFWEvents();
+            closeRequested_.store(window->shouldClose(), std::memory_order_release);
+            keyHandler->update();
         }
     }
 

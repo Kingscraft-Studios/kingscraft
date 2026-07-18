@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 
 #include <array>
+#include <atomic>
 #include <functional>
 #include <vector>
 #include <algorithm>
@@ -24,14 +25,24 @@ namespace lve {
 
         void onKeyEvent(int key, int scancode, int action, int mods) {
             if (key < 0 || key > GLFW_KEY_LAST) return;
-            currKeys_[key] = (action == GLFW_PRESS || action == GLFW_REPEAT);
-            if (uiKeyCallback_ && layerEnabled_[static_cast<int>(BindLayer::UI)])
-                uiKeyCallback_(key, action);
+            currKeys_[key].store(action == GLFW_PRESS || action == GLFW_REPEAT, std::memory_order_relaxed);
+            if (uiKeyCallback_ && layerEnabled_[static_cast<int>(BindLayer::UI)]) {
+                if (dispatcher)
+                    dispatcher([this, key, action]() { uiKeyCallback_(key, action); });
+                else
+                    uiKeyCallback_(key, action);
+            }
         }
 
         void onChar(unsigned int codepoint) {
-            if (uiCharCallback_ && layerEnabled_[static_cast<int>(BindLayer::UI)])
-                uiCharCallback_(codepoint);
+            if (uiCharCallback_ && layerEnabled_[static_cast<int>(BindLayer::UI)]) {
+                if (dispatcher) {
+                    dispatcher([this, codepoint]() { uiCharCallback_(codepoint); });
+                } else {
+                    uiCharCallback_(codepoint);
+                }
+            }
+
         }
 
         void update() {
@@ -42,20 +53,29 @@ namespace lve {
                 bool now = isSatisfied(i) && !isSuppressed(i);
                 bool was = prevSatisfied_[i];
 
-                if (now && !was && bindings_[i].onPress)
-                    bindings_[i].onPress();
-                if (!now && was && bindings_[i].onRelease)
-                    bindings_[i].onRelease();
+                if (now && !was && bindings_[i].onPress) {
+                    if (dispatcher)
+                        dispatcher(bindings_[i].onPress);  // runs on game logic thread
+                    else
+                        bindings_[i].onPress();            // fallback: run directly
+                }
+                if (!now && was && bindings_[i].onRelease) {
+                    if (dispatcher)
+                        dispatcher(bindings_[i].onRelease);  // runs on game logic thread
+                    else
+                        bindings_[i].onRelease();            // fallback: run directly
+                }
 
                 prevSatisfied_[i] = now;
             }
 
-            prevKeys_ = currKeys_;
+            for (size_t i = 0; i <= GLFW_KEY_LAST; i++)
+                prevKeys_[i].store(currKeys_[i].load(std::memory_order_relaxed), std::memory_order_relaxed);
         }
 
-        bool isDown(int key) const { return currKeys_[key]; }
-        bool isPressed(int key) const { return currKeys_[key] && !prevKeys_[key]; }
-        bool isReleased(int key) const { return !currKeys_[key] && prevKeys_[key]; }
+        bool isDown(int key) const { return currKeys_[key].load(std::memory_order_relaxed); }
+        bool isPressed(int key) const { return currKeys_[key].load(std::memory_order_relaxed) && !prevKeys_[key].load(std::memory_order_relaxed); }
+        bool isReleased(int key) const { return !currKeys_[key].load(std::memory_order_relaxed) && prevKeys_[key].load(std::memory_order_relaxed); }
 
         void onPress(BindLayer layer, Chord chord, Callback cb) {
             bindings_.push_back({layer, std::move(chord), std::move(cb), {}});
@@ -80,6 +100,10 @@ namespace lve {
 
         void clear() { bindings_.clear(); prevSatisfied_.clear(); }
 
+        void setDispatcher(std::function<void(std::function<void()>)> fn) {
+            dispatcher = std::move(fn);
+        }
+
     private:
         struct Binding {
             BindLayer layer;
@@ -90,7 +114,7 @@ namespace lve {
 
         bool isSatisfied(size_t idx) const {
             for (int k : bindings_[idx].chord)
-                if (!currKeys_[k]) return false;
+                if (!currKeys_[k].load(std::memory_order_relaxed)) return false;
             return true;
         }
 
@@ -103,7 +127,7 @@ namespace lve {
 
                 bool otherSatisfied = true;
                 for (int k : other)
-                    if (!currKeys_[k]) { otherSatisfied = false; break; }
+                    if (!currKeys_[k].load(std::memory_order_relaxed)) { otherSatisfied = false; break; }
                 if (!otherSatisfied) continue;
 
                 bool isSubset = true;
@@ -115,13 +139,14 @@ namespace lve {
             return false;
         }
 
-        std::array<bool, GLFW_KEY_LAST + 1> prevKeys_{};
-        std::array<bool, GLFW_KEY_LAST + 1> currKeys_{};
+        std::array<std::atomic<bool>, GLFW_KEY_LAST + 1> prevKeys_{};
+        std::array<std::atomic<bool>, GLFW_KEY_LAST + 1> currKeys_{};
         std::vector<Binding> bindings_;
         std::vector<bool> prevSatisfied_;
         UiKeyCallback uiKeyCallback_;
         UiCharCallback uiCharCallback_;
         std::array<bool, 3> layerEnabled_{true, true, true};
+        std::function<void(std::function<void()>)> dispatcher;
     };
 
 } // namespace lve

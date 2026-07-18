@@ -54,7 +54,6 @@ namespace lve {
         ResourceManager& getResourceManager() { return *resourceManager; }
         UiWrapper& getUiSystem() { return *uiSystem; }
         ScreenManager& getScreenManager() { return *screenManager; }
-        KeyBindHandler& getKeyBindHandler() { return *keybinds_; }
         PostProcessing& getPostProcessor() { return *postProcessor_; }
         TextureCache& getTextureCache() { return *textureCache_; }
         World* getWorld() { return world_.get(); }
@@ -74,7 +73,6 @@ namespace lve {
         std::unique_ptr<ResourceManager> resourceManager = std::make_unique<ResourceManager>(device);
         std::unique_ptr<UiWrapper> uiSystem = std::make_unique<UiWrapper>();
         std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
-        std::unique_ptr<KeyBindHandler> keybinds_ = std::make_unique<KeyBindHandler>();
         DefaultTerrainGenerator terrainGen_;
         std::unique_ptr<World> world_ = std::make_unique<World>(device, terrainGen_, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
         static constexpr double TICK_RATE = 100.0;

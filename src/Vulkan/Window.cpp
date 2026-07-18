@@ -34,6 +34,7 @@ namespace lve {
         if (win) {
             win->lastX = xpos;
             win->lastY = ypos;
+            if (win->mousePosHook_) win->mousePosHook_(xpos, ypos);
 
             if (win->mouseMovementCallback) {
                 win->mouseMovementCallback(xpos, ypos);
@@ -84,6 +85,7 @@ namespace lve {
         lveWindow->framebufferResized = true;
         lveWindow->width = width;
         lveWindow->height = height;
+        if (lveWindow->resizeHook_) lveWindow->resizeHook_(width, height);
     }
 
     void Window::toggleFullscreen() {
@@ -100,10 +102,6 @@ namespace lve {
             glfwSetWindowMonitor(window, nullptr, windowedX, windowedY, windowedWidth, windowedHeight, 0);
             isFullscreen = false;
         }
-    }
-
-    void Window::processInput() {
-        // Input is now handled by KeyBindHandler
     }
 
     void Window::setIcon(unsigned char* pixels, int width, int height) {

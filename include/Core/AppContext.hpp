@@ -21,7 +21,6 @@ public:
     Device* device = nullptr;
     Renderer* renderer = nullptr;
     UiWrapper* uiSystem = nullptr;
-    KeyBindHandler* keybinds = nullptr;
     TextureCache* textureCache = nullptr;
     World* world = nullptr;
     ProfilingCapture* profilingCapture = nullptr;
