@@ -1,5 +1,4 @@
 #include "Threads/Renderer.hpp"
-#include "Vulkan/App.hpp"
 #include "Bus/MessageBus.hpp"
 
 namespace lve {
@@ -8,18 +7,21 @@ namespace lve {
         mailbox_ = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::Renderer, mailbox_);
 
-        App app;
-        while (!app.windowShouldClose()) {
+        while (!app->windowShouldClose()) {
             Message msg;
             while (mailbox_->try_pop(msg)) {
                 if (msg.payload) msg.payload();
             }
-            app.tick();
+            app->tick();
         }
-        app.cleanup();
+        app->cleanup();
 
         MessageBus::Get().unsubscribe(ThreadName::Renderer);
         if (quitCallback_) quitCallback_();
     }
 
+    void RenderThread::shutdown() {
+        mailbox_->stop();
+        app.reset();
+    }
 } // namespace lve

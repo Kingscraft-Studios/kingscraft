@@ -7,8 +7,11 @@
 #include "Bus/Mailbox.hpp"
 #include "Threads/Renderer.hpp"
 #include "Threads/ResourceLoader.hpp"
+#include "Threads/GameLogicThread.hpp"
 
 namespace lve {
+
+    class App;
 
     class Engine {
     public:
@@ -32,8 +35,8 @@ private:
     std::thread rendererThread_;
     std::thread resLoaderThread_;
     std::thread inputThread;
-    RenderThread renderer_;
     ResourceLoader resourceLoader_;
+    std::thread gameLogicThread_;
 
     static std::unique_ptr<Engine> instance_;
 };

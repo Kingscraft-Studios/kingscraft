@@ -8,7 +8,8 @@ enum class ThreadName {
     Renderer,
     Resource,
     Registration,
-    Input
+    Input,
+    GameLogic
 };
 
 struct Message {

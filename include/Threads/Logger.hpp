@@ -68,7 +68,7 @@ namespace lve {
                 case ThreadName::Resource:     return "Resource";
                 case ThreadName::Registration: return "Registration";
                 case ThreadName::Input: return "Input";
-                    break;
+                case ThreadName::GameLogic: return "GameLogic";
             }
 
             return "Unknown";

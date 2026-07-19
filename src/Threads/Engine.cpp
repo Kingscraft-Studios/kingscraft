@@ -21,9 +21,11 @@ namespace lve {
         resourceLoader_.stop();
         if (resLoaderThread_.joinable()) resLoaderThread_.join();
         if (regThread_.joinable()) regThread_.join();
+        if (rendererThread_.joinable()) rendererThread_.join();
+        GameLogicThread::getInstance().stop();
+        if (gameLogicThread_.joinable()) gameLogicThread_.join();
         InputThread::getInstance().Shutdown();
         if (inputThread.joinable()) inputThread.join();
-        if (rendererThread_.joinable()) rendererThread_.join();
     }
 
     void Engine::Init() {
@@ -44,7 +46,7 @@ namespace lve {
         Logger::Init();
 
         InputThread::getInstance().Init({DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, "Kingscraft"});
-
+        GameLogicThread::getInstance().init();
 
         mailbox_ = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::Engine, mailbox_);
@@ -53,14 +55,13 @@ namespace lve {
         Preloader::Init();
         Preloader::Get().loadAll();
 
+        // Threads Start up
         resLoaderThread_ = std::thread([this]() { resourceLoader_.run(); });
-
         regThread_ = std::thread([]() { Registries::build(); });
-
         inputThread = std::thread([]() {InputThread::getInstance().run(); });
-
-        renderer_.setQuitCallback([this]() { stop(); });
-        rendererThread_ = std::thread([this]() { renderer_.run(); });
+        RenderThread::getInstance().setQuitCallback([this]() { stop(); });
+        rendererThread_ = std::thread([]() { RenderThread::getInstance().run(); });
+        gameLogicThread_ = std::thread([]() { GameLogicThread::getInstance().run(); });
 
         while (running_) {
             Message msg;
@@ -69,25 +70,26 @@ namespace lve {
             }
         }
 
-        LogUtils::info(ThreadName::Engine, "Shutting down");
-        if (rendererThread_.joinable()) rendererThread_.join();
 
+        LogUtils::info(ThreadName::Engine, "Shutting down");
+        RenderThread::getInstance().shutdown();
+        if (rendererThread_.joinable()) rendererThread_.join();
+        GameLogicThread::getInstance().stop();
+        if (gameLogicThread_.joinable()) gameLogicThread_.join();
         InputThread::getInstance().Shutdown();
         if (inputThread.joinable()) inputThread.join();
-
         resourceLoader_.stop();
         if (resLoaderThread_.joinable()) resLoaderThread_.join();
 
+        // Sync Everything
         Message msg;
         while (mailbox_->try_pop(msg)) {
             if (msg.payload) msg.payload();
         }
 
         MessageBus::Get().unsubscribe(ThreadName::Engine);
-
         Logger::Shutdown();
         IO::Shutdown();
-
         MessageBus::Get().signalQuit();
     }
 

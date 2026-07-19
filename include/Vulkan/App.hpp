@@ -24,6 +24,8 @@
 
 namespace lve {
 
+    class GameLogicThread;
+
     class App {
     public:
         static constexpr int WIDTH = DEFAULT_WINDOW_WIDTH;
@@ -59,7 +61,6 @@ namespace lve {
         World* getWorld() { return world_.get(); }
         VkExtent2D getExtent() { return InputThread::getInstance().getExtent().toVKExtent(); }
         double getCpuFrameTimeMs() const { return cpuFrameTimeMs_; }
-        double getCpuTickMs() const { return cpuTickMs_; }
         double getCpuSubmitMs() const { return cpuSubmitMs_; }
 
     private:
@@ -75,21 +76,15 @@ namespace lve {
         std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
         DefaultTerrainGenerator terrainGen_;
         std::unique_ptr<World> world_ = std::make_unique<World>(device, terrainGen_, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
-        static constexpr double TICK_RATE = 100.0;
         ProfilingCapture profilingCapture_;
-        static constexpr double TICK_INTERVAL = 1.0 / TICK_RATE;
 
         QueueFamilyIndices indices = device.findPhysicalQueueFamilies();
         bool requestSwapchainRecreate = false;
         double cpuFrameTimeMs_ = 0.0;
-        double cpuTickMs_ = 0.0;
         double cpuSubmitMs_ = 0.0;
         VkExtent2D lastExtent{0, 0};
         RenderState renderState = RenderState::Running;
-        double prevTime_ = 0.0;
-        double dt_ = 0.0;
-        double tickAccumulator_ = 0.0;
-        double currentTime = 0.0;
+        double currentFrameStart_ = 0.0;
     };
 
 }  // namespace lve

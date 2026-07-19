@@ -8,6 +8,8 @@
 
 #include "Bus/MessageBus.hpp"
 #include "Threads/InputThread.hpp"
+#include "Threads/Engine.hpp"
+#include "Util/LogUtils.hpp"
 
 namespace lve {
 
@@ -22,7 +24,7 @@ namespace lve {
             });
         });
 
-        MessageBus::Get().send(ThreadName::Input, [this]() {
+        MessageBus::Get().send(ThreadName::Input, []() {
             InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::ESCAPE}, []() {
                 MessageBus::Get().send(ThreadName::Input, []() {
                     InputThread::getInstance().setWindowClose();
@@ -153,11 +155,6 @@ namespace lve {
     }
 
     void App::tick() {
-        currentTime = TimeUtil::uptimeSeconds();
-        dt_ = currentTime - prevTime_;
-        prevTime_ = currentTime;
-        if (dt_ > 0.25) dt_ = 0.25;
-
         auto currentExtent = InputThread::getInstance().getExtent();
 
         if ((requestSwapchainRecreate || InputThread::getInstance().wasWindowResized()) && currentExtent.width > 0 && currentExtent.height > 0) {
@@ -174,21 +171,16 @@ namespace lve {
         }
 
         if (renderState == RenderState::Running) {
-            tickAccumulator_ += dt_;
-            double tickStart = TimeUtil::uptimeSeconds();
-            while (tickAccumulator_ >= TICK_INTERVAL) {
-                screenManager->tick(TICK_INTERVAL);
-                tickAccumulator_ -= TICK_INTERVAL;
+            currentFrameStart_ = TimeUtil::uptimeSeconds();
+            if (GameLogicThread::getInstance().isTickReady()) {
+                GameLogicThread::getInstance().ackTick();
+                profilingCapture_.tick(GameLogicThread::getInstance().getDt());
+                drawFrame();
             }
-            cpuTickMs_ = (TimeUtil::uptimeSeconds() - tickStart) * 1000.0;
-
-            profilingCapture_.tick(dt_);
-
-            drawFrame();
 
             int maxFps = RendererSettings::get().maxFps;
             if (maxFps > 0) {
-                double frameTime = TimeUtil::uptimeSeconds() - currentTime;
+                double frameTime = TimeUtil::uptimeSeconds() - currentFrameStart_;
                 double target = 1.0 / maxFps;
                 if (frameTime < target) {
                     std::this_thread::sleep_for(std::chrono::duration<double>(target - frameTime));
@@ -249,7 +241,7 @@ namespace lve {
         auto info = screenManager->getCurrent()->getFrameRenderInfo(*renderer, imageIndex);
 
         if (info.uiEnabled) {
-            uiSystem->update(dt_);
+            uiSystem->update(GameLogicThread::getInstance().getDt());
             uint32_t qi = renderer->getFrameIndex() * Renderer::QUERIES_PER_FRAME;
             VkQueryPool tsPool = renderer->getGpuQueryPool();
             vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, tsPool, qi + Renderer::TS_UI_START);
@@ -261,13 +253,13 @@ namespace lve {
         frameCtx.cmd = cmd;
         frameCtx.renderPass = info.renderPass;
         frameCtx.extent = extent;
-        frameCtx.dt = dt_;
+        frameCtx.dt = GameLogicThread::getInstance().getDt();
         frameCtx.frameIndex = renderer->getFrameIndex();
         frameCtx.imageIndex = imageIndex;
         frameCtx.gpuQueryPool = renderer->getGpuQueryPool();
         frameCtx.postProcessing = postProcessor_.get();
         frameCtx.cpuFrameTimeMs = cpuFrameTimeMs_;
-        frameCtx.cpuTickMs = cpuTickMs_;
+        frameCtx.cpuTickMs = GameLogicThread::getInstance().getCpuTickMs();
         frameCtx.cpuSubmitMs = cpuSubmitMs_;
 
         // Pre-scene effects (glow passes, downsampling, etc.)
