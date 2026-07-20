@@ -118,7 +118,7 @@ namespace lve {
         });
 
         uiSystem->registerButtonHandler(BTN_ENTER_WORLD, [this]() {
-            screenManager->switchTo<WorldScreen>(renderer->getExtent());
+            screenManager->setScreen<WorldScreen>(renderer->getExtent());
         });
 
         resourceManager->loadRawImageData("resources/textures/logo/Kingscraft-Logo.png",
@@ -138,7 +138,7 @@ namespace lve {
         appCtx.world = world_.get();
         appCtx.profilingCapture = &profilingCapture_;
 
-        screenManager->switchTo<MainMenu>(renderer->getRenderPass(), *uiSystem, renderer->getExtent());
+        screenManager->setScreen<MainMenu>(renderer->getRenderPass(), *uiSystem, renderer->getExtent());
 
         VkExtent2D extent = InputThread::getInstance().getExtent().toVKExtent();
         postProcessor_ = std::make_unique<PostProcessing>();

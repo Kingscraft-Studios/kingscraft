@@ -11,7 +11,7 @@ namespace lve {
         ScreenManager() = default;
 
         template<typename T, typename... Args>
-        void switchTo(Args&&... args) {
+        void setScreen(Args&&... args) {
             if (currentScreen_) currentScreen_->cleanup();
             currentScreen_ = std::make_unique<T>(std::forward<Args>(args)...);
             currentScreen_->init();

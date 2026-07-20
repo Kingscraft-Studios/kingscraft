@@ -252,7 +252,10 @@ namespace lve {
         return {
             renderer.getWorldRenderPass(),
             renderer.getWorldFramebuffer(imageIndex),
-            {{{0.4f, 0.6f, 0.9f, 1.0f}}, {1.0f, 0}},
+            {
+                {{0.4f, 0.6f, 0.9f, 1.0f}},
+                {1.0f, 0}
+            },
             true
         };
     }
