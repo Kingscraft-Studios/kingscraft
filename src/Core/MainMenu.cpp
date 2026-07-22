@@ -1,12 +1,3 @@
-// TODO: SSBO Style System — MainMenu redesign
-// Uses registered styles with the SSBO system:
-// - Solid background via UiGradientRect (setFillParent)
-// - Gold text with Arial font, anchored positions
-// - Buttons with transparent bg, gold text, gold selection bar
-// - Hover styles for text color change (gold_dark → gold)
-// - Selection bar rects alongside buttons
-// - Anchor system repositioning on resize via UiWrapper
-
 #include "Core/MainMenu.hpp"
 
 #include "Core/World/WorldScreen.hpp"

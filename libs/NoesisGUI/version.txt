@@ -1,2 +1,0 @@
-svn://svn.noesisengine.com/Noesis/NoesisSDK/trunk/Native
-3.2.12 (r16754)
