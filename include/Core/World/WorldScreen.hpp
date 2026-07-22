@@ -13,7 +13,7 @@ namespace lve {
 
     class WorldScreen : public Screen {
     public:
-        explicit WorldScreen(VkExtent2D extent);
+        explicit WorldScreen();
         ~WorldScreen() override;
 
         void init() override;
@@ -29,9 +29,6 @@ namespace lve {
 
     private:
         VkExtent2D extent_{};
-
-
-        World* world_ = nullptr;
 
         PlayerController playerController_;
         TerrainRenderer terrainRenderer_;

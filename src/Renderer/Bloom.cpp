@@ -10,7 +10,7 @@ namespace lve {
 Bloom::Bloom(Device& device, VkExtent2D windowExtent, VkRenderPass sceneRenderPass,
              DescriptorManager& descriptorManager)
     : device_(device), descriptorManager_(descriptorManager),
-      sceneRenderPass_(sceneRenderPass), windowExtent_(windowExtent) {
+      activeCompositeRenderPass_(sceneRenderPass), windowExtent_(windowExtent) {
     createOffscreen();
     createUniformBuffers();
     createDescriptors();
@@ -88,10 +88,8 @@ void Bloom::recreate(VkExtent2D windowExtent, VkRenderPass sceneRenderPass) {
             updateFrameDescriptor(i);
     }
 
-    if (sceneRenderPass_ != sceneRenderPass) {
-        sceneRenderPass_ = sceneRenderPass;
-        pipelines_.blurHorz.reset();
-        pipelines_.blurHorz = createBlurPipeline(sceneRenderPass_, 1);
+    if (sceneRenderPass != activeCompositeRenderPass_) {
+        activeCompositeRenderPass_ = VK_NULL_HANDLE;
     }
 }
 
@@ -441,7 +439,7 @@ void Bloom::createPipelines() {
 
     // Create blur pipelines
     pipelines_.blurVert = createBlurPipeline(offscreenPass_.renderPass, 0);
-    pipelines_.blurHorz = createBlurPipeline(sceneRenderPass_, 1);
+    pipelines_.blurHorz = createBlurPipeline(activeCompositeRenderPass_, 1);
 
     // --- Color pass (glow objects) ---
     auto& vertCode = Preloader::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.vert.spv");
@@ -494,8 +492,7 @@ void Bloom::preScene(VkCommandBuffer cmd, uint32_t frameIndex,
 
 void Bloom::postScene(VkCommandBuffer cmd, uint32_t frameIndex,
                       const FrameContext& ctx) {
-    (void)ctx;
-    compositeBloom(cmd, frameIndex);
+    compositeBloom(cmd, frameIndex, ctx.renderPass);
 }
 
 void Bloom::beginGlowPass(VkCommandBuffer cmd, uint32_t frameIndex) {
@@ -571,7 +568,13 @@ void Bloom::endGlowPass(VkCommandBuffer cmd, uint32_t frameIndex) {
     vkCmdEndRenderPass(cmd);
 }
 
-void Bloom::compositeBloom(VkCommandBuffer cmd, uint32_t frameIndex) {
+void Bloom::compositeBloom(VkCommandBuffer cmd, uint32_t frameIndex, VkRenderPass activeRenderPass) {
+    if (activeRenderPass != activeCompositeRenderPass_) {
+        pipelines_.blurHorz.reset();
+        pipelines_.blurHorz = createBlurPipeline(activeRenderPass, 1);
+        activeCompositeRenderPass_ = activeRenderPass;
+    }
+
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayouts_.blur, 0, 1,
                             &frames_[frameIndex].blurHorz, 0, nullptr);

@@ -10,6 +10,8 @@
 #include <functional>
 #include <array>
 
+#include "FrameScene.hpp"
+
 namespace lve {
 
 struct RenderPassBegin {
@@ -18,8 +20,17 @@ struct RenderPassBegin {
     VkRect2D renderArea{};
     VkViewport viewport{};
     VkRect2D scissor{};
-    std::vector<VkClearValue> clearValues;
+
+    std::array<VkClearValue, 2> clearValues{};
+    uint32_t clearCount = 0;
 };
+
+    struct RenderTarget {
+        VkRenderPass renderPass;
+        VkFramebuffer framebuffer;
+        std::array<VkClearValue, 2> clearValues;
+        uint32_t clearCount;
+    };
 
 class Renderer {
 public:
@@ -88,6 +99,36 @@ public:
 
     VkQueryPool getGpuQueryPool() const { return gpuQueryPool_; }
     VkQueryPool getPipelineStatsPool() const { return pipelineStatsPool_; }
+
+    RenderTarget buildRenderTarget(const FrameScene& scene) const {
+        if (scene.terrain.renderTerrain)
+        {
+            return {
+                .renderPass = worldRenderPass_->getHandle(),
+                .framebuffer = worldFramebuffers_[currentImageIndex_],
+                .clearValues = {
+                    VkClearValue{
+                        .color = {{0.4f, 0.6f, 0.9f, 1.0f}}
+                    },
+                    VkClearValue{
+                        .depthStencil = {1.0f, 0}
+                    }
+                },
+                .clearCount = 2
+            };
+        }
+
+        return {
+            .renderPass = presentRenderPass_->getHandle(),
+            .framebuffer = framebufferManager_->getFramebuffer(currentImageIndex_),
+            .clearValues = {
+                VkClearValue{
+                    .color = {{0.1f, 0.1f, 0.1f, 1.0f}}
+                }
+            },
+            .clearCount = 1
+        };
+    }
 
 private:
     void createCommandBuffers();

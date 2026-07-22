@@ -178,7 +178,8 @@ void Renderer::executeRenderPass(
     rpInfo.renderPass = passBegin.renderPass;
     rpInfo.framebuffer = passBegin.framebuffer;
     rpInfo.renderArea = passBegin.renderArea;
-    rpInfo.clearValueCount = static_cast<uint32_t>(passBegin.clearValues.size());
+
+    rpInfo.clearValueCount = passBegin.clearCount;
     rpInfo.pClearValues = passBegin.clearValues.data();
 
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);

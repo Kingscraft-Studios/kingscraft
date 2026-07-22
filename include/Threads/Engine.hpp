@@ -5,6 +5,7 @@
 #include <atomic>
 
 #include "Bus/Mailbox.hpp"
+#include "Renderer/FrameExchange.hpp"
 #include "Threads/Renderer.hpp"
 #include "Threads/ResourceLoader.hpp"
 #include "Threads/GameLogicThread.hpp"
@@ -27,6 +28,7 @@ namespace lve {
     void stop();
 
     Mailbox& getMailbox() { return *mailbox_; }
+    FrameExchange& getFrameExchange() { return exchange; }
 
 private:
     std::atomic<bool> running_{true};
@@ -37,6 +39,8 @@ private:
     std::thread inputThread;
     ResourceLoader resourceLoader_;
     std::thread gameLogicThread_;
+
+    FrameExchange exchange;
 
     static std::unique_ptr<Engine> instance_;
 };

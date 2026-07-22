@@ -26,8 +26,7 @@ namespace lve {
         mailbox = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::Input, mailbox);
         keyHandler->setDispatcher([](std::function<void()> cb) {
-            // TODO: Change Renderer to GameLogic once its in place
-            MessageBus::Get().send(ThreadName::Renderer, [cb = std::move(cb)]() {
+            MessageBus::Get().send(ThreadName::GameLogic, [cb = std::move(cb)]() {
                 cb();  // executes on game logic thread
             });
         });

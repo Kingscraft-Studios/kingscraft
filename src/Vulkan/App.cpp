@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "Bus/MessageBus.hpp"
+#include "Renderer/FrameScene.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/Engine.hpp"
 #include "Util/LogUtils.hpp"
@@ -14,112 +15,6 @@
 namespace lve {
 
     App::App() {
-
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F11}, [this]() {
-                MessageBus::Get().send(ThreadName::Input, []() {
-                    InputThread::getInstance().toggleFullscreen();
-                });
-                requestSwapchainRecreate = true;
-            });
-        });
-
-        MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::ESCAPE}, []() {
-                MessageBus::Get().send(ThreadName::Input, []() {
-                    InputThread::getInstance().setWindowClose();
-                });
-            });
-        });
-
-
-
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F3, Keys::F6}, [this]() {
-                uiSystem->setDebugMode(!uiSystem->isDebugModeOn());
-            });
-        });
-
-
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F7}, [this]() {
-                if (uiSystem->isDebugModeOn())
-                    uiSystem->logSelectedElementPosition();
-            });
-        });
-
-
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F8}, [this]() {
-                if (!profilingCapture_.isActive()) {
-                    profilingCapture_.start();
-                }
-            });
-        });
-
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().setMouseMoveCallback([this](double x, double y) {
-                MessageBus::Get().send(ThreadName::Renderer, [this, x, y]() {
-                    uiSystem->onMouseMove(x, y);
-                });
-            });
-        });
-
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().setMouseButtonCallback([this](int button, int action, int mods) {
-                double x = InputThread::getInstance().getLastX();
-                double y = InputThread::getInstance().getLastY();
-                MessageBus::Get().send(ThreadName::Renderer, [this, button, action, mods, x, y]() {
-                    uiSystem->onMouseButton(button, action, mods, x, y);
-                    if (screenManager->getCurrent())
-                        screenManager->getCurrent()->onMouseButton(button, action, mods);
-                });
-            });
-        });
-
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().setScrollCallback([this](double dx, double dy) {
-                MessageBus::Get().send(ThreadName::Renderer, [this, dx, dy]() {
-                    uiSystem->onScroll(dx, dy);
-                });
-            });
-        });
-
-        MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().setKeyCallback([](int key, int scancode, int action, int mods) {
-                InputThread::getInstance().getKeyBindHandler().onKeyEvent(key, scancode, action, mods);
-            });
-        });
-
-        MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().setCharCallback([](unsigned int codepoint) {
-                InputThread::getInstance().getKeyBindHandler().onChar(codepoint);
-            });
-        });
-
-
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().getKeyBindHandler().setUiKeyCallback([this](int key, int action) {
-                uiSystem->onKey(key, action);
-            });
-        });
-
-
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().getKeyBindHandler().setUiCharCallback([this](unsigned int codepoint) {
-                uiSystem->onChar(codepoint);
-            });
-        });
-
-        uiSystem->registerButtonHandler(BTN_QUIT_GAME, []() {
-            MessageBus::Get().send(ThreadName::Input, []() {
-                InputThread::getInstance().setWindowClose();
-            });
-        });
-
-        uiSystem->registerButtonHandler(BTN_ENTER_WORLD, [this]() {
-            screenManager->setScreen<WorldScreen>(renderer->getExtent());
-        });
 
         resourceManager->loadRawImageData("resources/textures/logo/Kingscraft-Logo.png",
             [](unsigned char* pixels, int width, int height) {
@@ -130,15 +25,10 @@ namespace lve {
 
         uiSystem->init(device, *descriptorManager_, renderer->getExtent());
 
-        auto& appCtx = AppContext::get();
-        appCtx.device = &device;
-        appCtx.renderer = renderer.get();
-        appCtx.uiSystem = uiSystem.get();
-        appCtx.textureCache = textureCache_.get();
-        appCtx.world = world_.get();
-        appCtx.profilingCapture = &profilingCapture_;
-
-        screenManager->setScreen<MainMenu>(renderer->getRenderPass(), *uiSystem, renderer->getExtent());
+        // TODO: Move this Into GameLogic
+        MessageBus::Get().send(ThreadName::GameLogic, [this]() {
+            GameLogicThread::getInstance().setScreen<MainMenu>(renderer->getRenderPass(), *uiSystem, renderer->getExtent());
+        });
 
         VkExtent2D extent = InputThread::getInstance().getExtent().toVKExtent();
         postProcessor_ = std::make_unique<PostProcessing>();
@@ -174,7 +64,7 @@ namespace lve {
             currentFrameStart_ = TimeUtil::uptimeSeconds();
             if (GameLogicThread::getInstance().isTickReady()) {
                 GameLogicThread::getInstance().ackTick();
-                profilingCapture_.tick(GameLogicThread::getInstance().getDt());
+                profilingCapture_.tick(GameLogicThread::getInstance().getDelta());
                 drawFrame();
             }
 
@@ -215,8 +105,8 @@ namespace lve {
         vkDeviceWaitIdle(device.device());
 
         renderer->recreateSwapChain(extent);
-        screenManager->notifyRenderPassChanged(renderer->getRenderPass());
-        screenManager->notifySwapChainRecreated(extent);
+        // screenManager->notifyRenderPassChanged(renderer->getRenderPass());
+        // screenManager->notifySwapChainRecreated(extent);
         auto* bloom = static_cast<Bloom*>(postProcessor_->getEffect("bloom"));
         if (bloom) bloom->recreate(extent, renderer->getWorldRenderPass());
     }
@@ -238,10 +128,11 @@ namespace lve {
         VkExtent2D extent = renderer->getExtent();
         uint32_t imageIndex = renderer->getCurrentImageIndex();
 
-        auto info = screenManager->getCurrent()->getFrameRenderInfo(*renderer, imageIndex);
+        const FrameScene& scene = Engine::Get().getFrameExchange().readFrame();
+        RenderTarget target = renderer->buildRenderTarget(scene);
 
-        if (info.uiEnabled) {
-            uiSystem->update(GameLogicThread::getInstance().getDt());
+        if (scene.ui.enabled) {
+            uiSystem->update(scene.stats.delta);
             uint32_t qi = renderer->getFrameIndex() * Renderer::QUERIES_PER_FRAME;
             VkQueryPool tsPool = renderer->getGpuQueryPool();
             vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, tsPool, qi + Renderer::TS_UI_START);
@@ -251,37 +142,39 @@ namespace lve {
 
         FrameContext frameCtx{};
         frameCtx.cmd = cmd;
-        frameCtx.renderPass = info.renderPass;
+        frameCtx.renderPass = target.renderPass;
         frameCtx.extent = extent;
-        frameCtx.dt = GameLogicThread::getInstance().getDt();
+        frameCtx.dt = scene.stats.delta;
         frameCtx.frameIndex = renderer->getFrameIndex();
         frameCtx.imageIndex = imageIndex;
         frameCtx.gpuQueryPool = renderer->getGpuQueryPool();
         frameCtx.postProcessing = postProcessor_.get();
         frameCtx.cpuFrameTimeMs = cpuFrameTimeMs_;
-        frameCtx.cpuTickMs = GameLogicThread::getInstance().getCpuTickMs();
+        frameCtx.cpuTickMs = scene.stats.cpuTickMs;
         frameCtx.cpuSubmitMs = cpuSubmitMs_;
 
         // Pre-scene effects (glow passes, downsampling, etc.)
-        if (!info.uiEnabled) {
-            postProcessor_->preScene(frameCtx, [this](const FrameContext& ctx) {
-                screenManager->getCurrent()->renderGlow(ctx);
+        if (!scene.ui.enabled) {
+            postProcessor_->preScene(frameCtx, [](const FrameContext& ctx) {
+                // screenManager->getCurrent()->renderGlow(ctx);
             });
         }
 
         RenderPassBegin pass{};
-        pass.renderPass = info.renderPass;
-        pass.framebuffer = info.framebuffer;
+        pass.renderPass = target.renderPass;
+        pass.framebuffer = target.framebuffer;
         pass.renderArea = {{0, 0}, extent};
         pass.viewport = {0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
         pass.scissor = {{0, 0}, extent};
-        pass.clearValues = info.clearValues;
+        pass.clearValues = target.clearValues;
+        pass.clearCount = target.clearCount;
 
-        renderer->executeRenderPass(pass, [this, frameCtx, info](VkCommandBuffer cb) {
-            screenManager->render(frameCtx);
+        renderer->executeRenderPass(pass, [this, frameCtx, scene, target](VkCommandBuffer cb) {
+            // Temp
+            uiSystem->render(cb,target.renderPass);
 
             // Post-scene effects (composite, etc.)
-            if (!info.uiEnabled) {
+            if (!scene.ui.enabled) {
                 postProcessor_->postScene(frameCtx);
             }
         });

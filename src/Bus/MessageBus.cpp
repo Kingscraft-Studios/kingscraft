@@ -1,5 +1,7 @@
 #include "Bus/MessageBus.hpp"
 
+#include "Util/LogUtils.hpp"
+
 namespace lve {
 
 static std::unique_ptr<MessageBus> instance = nullptr;

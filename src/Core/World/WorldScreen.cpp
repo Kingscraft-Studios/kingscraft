@@ -2,7 +2,6 @@
 
 #include "Bus/MessageBus.hpp"
 #include "Core/World/World.hpp"
-#include "Core/AppContext.hpp"
 #include "UI/Debug/ProfilingCapture.hpp"
 #include "Vulkan/TextureCache.hpp"
 #include "Renderer/Renderer.hpp"
@@ -14,6 +13,7 @@
 #include "Core/Raycast.hpp"
 #include "Core/Blocks/Blocks.hpp"
 #include "Threads/InputThread.hpp"
+#include "Threads/Renderer.hpp"
 #include "Vulkan/Window.hpp"
 #include "Vulkan/Device.hpp"
 
@@ -25,42 +25,38 @@ namespace lve {
         }
     }
 
-    WorldScreen::WorldScreen(VkExtent2D extent)
-        : extent_(extent) {}
+    WorldScreen::WorldScreen() {
+        extent_ = RenderThread::getInstance().getRenderer().getExtent();
+    }
 
     WorldScreen::~WorldScreen() {
         cleanup();
     }
 
     void WorldScreen::init() {
-        auto& ctx = AppContext::get();
-        world_ = ctx.world;
-        auto* textureCache = ctx.textureCache;
-        auto* renderer = ctx.renderer;
-
         Registries::waitForBuild();
 
-        textureCache->updateFromRegistry();
-        ctx.uiSystem->setBlockTexture(textureCache->getImageView(), textureCache->getSampler());
+        RenderThread::getInstance().getTexCache().updateFromRegistry();
+        RenderThread::getInstance().getUI().setBlockTexture(RenderThread::getInstance().getTexCache().getImageView(), RenderThread::getInstance().getTexCache().getSampler());
 
         camera_.setPosition({67.5f, 15.0f, 67.5f});
         camera_.setRotation(0.0f, -35.0f);
 
         playerController_.init(camera_, InputThread::getInstance().getKeyBindHandler());
         playerController_.setCaptured(true);
-        terrainRenderer_.init(*ctx.device, *textureCache, renderer->getWorldRenderPass());
+        terrainRenderer_.init(RenderThread::getInstance().getDevice(), RenderThread::getInstance().getTexCache(), RenderThread::getInstance().getRenderer().getWorldRenderPass());
         MessageBus::Get().send(ThreadName::Input, []() {
             InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         });
         MessageBus::Get().send(ThreadName::Input, []() {
             InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
         });
-        fpsCounter_.init(*ctx.uiSystem);
-        hotbar_.init(*ctx.uiSystem, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
-        ctx.uiSystem->resize(static_cast<int>(extent_.width),
+        fpsCounter_.init(RenderThread::getInstance().getUI());
+        hotbar_.init(RenderThread::getInstance().getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+        RenderThread::getInstance().getUI().resize(static_cast<int>(extent_.width),
                              static_cast<int>(extent_.height));
 
-        ctx.uiSystem->setScrollCallback([this](double, double dy) {
+        RenderThread::getInstance().getUI().setScrollCallback([this](double, double dy) {
             if (dy > 0)
                 hotbar_.selectSlot(hotbar_.getSelectedSlot() - 1);
             else if (dy < 0)
@@ -78,8 +74,7 @@ namespace lve {
     }
 
     void WorldScreen::tick(double dt) {
-        auto& ctx = AppContext::get();
-        bool debug = ctx.uiSystem->isDebugModeOn();
+        bool debug = RenderThread::getInstance().getUI().isDebugModeOn();
 
         if (debug != wasDebugOn_) {
             wasDebugOn_ = debug;
@@ -105,10 +100,10 @@ namespace lve {
 
         playerController_.tick(dt);
 
-        world_->update(camera_.getPosition().x, camera_.getPosition().z,
+        RenderThread::getInstance().getWorld().update(camera_.getPosition().x, camera_.getPosition().z,
                        RendererSettings::get().renderDistance);
-        world_->flushPendingCleanup();
-        world_->processCompletedChunks();
+        RenderThread::getInstance().getWorld().flushPendingCleanup();
+        RenderThread::getInstance().getWorld().processCompletedChunks();
     }
 
     void WorldScreen::render(const FrameContext& ctx) {
@@ -119,67 +114,64 @@ namespace lve {
                                            settings.nearPlane, settings.farPlane);
 
         glm::mat4 viewProj = playerController_.getViewProj();
-        float worldHeight = static_cast<float>(world_->getHeight());
+        float worldHeight = static_cast<float>(RenderThread::getInstance().getWorld().getHeight());
 
         double frustumMs = 0.0, drawMs = 0.0;
         uint32_t visibleChunks = 0, visibleSubChunks = 0;
         uint32_t occlusionTested = 0, occlusionRemoved = 0;
-        terrainRenderer_.render(ctx.cmd, world_->getLoadedChunks(),
+        terrainRenderer_.render(ctx.cmd, RenderThread::getInstance().getWorld().getLoadedChunks(),
                                 viewProj, camera_.getPosition(),
                                 settings.enableFrustumCulling, worldHeight,
-                                worldChunkLookup, static_cast<void*>(world_),
+                                worldChunkLookup, &RenderThread::getInstance().getWorld(),
                                 &frustumMs, &drawMs, &visibleChunks,
                                 &visibleSubChunks, &occlusionTested,
                                 &occlusionRemoved);
 
-        auto& app = AppContext::get();
-        auto* r = app.renderer;
         fpsCounter_.setCpuGpuTimes(
             ctx.cpuFrameTimeMs,
-            r->getGpuFrameTimeMs(),
-            r->getWorldGpuMs(),
-            r->getUiGpuMs(),
+            RenderThread::getInstance().getRenderer().getGpuFrameTimeMs(),
+            RenderThread::getInstance().getRenderer().getWorldGpuMs(),
+            RenderThread::getInstance().getRenderer().getUiGpuMs(),
             ctx.cpuTickMs,
             ctx.cpuSubmitMs,
-            r->getCmdRecordMs(),
+            RenderThread::getInstance().getRenderer().getCmdRecordMs(),
             frustumMs, drawMs,
-            r->getMemBandwidthGBs(),
-            r->getOverdraw(),
-            r->getPipelineStat(Renderer::STAT_IA_VERTICES),
-            r->getPipelineStat(Renderer::STAT_IA_PRIMITIVES),
-            r->getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
-            r->getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
-            r->getPipelineStat(Renderer::STAT_CLIP_PRIMS),
+            RenderThread::getInstance().getRenderer().getMemBandwidthGBs(),
+            RenderThread::getInstance().getRenderer().getOverdraw(),
+            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_IA_VERTICES),
+            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_IA_PRIMITIVES),
+            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
+            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
+            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_CLIP_PRIMS),
             visibleChunks,
             visibleSubChunks,
             occlusionTested,
             occlusionRemoved);
 
-        auto* pc = app.profilingCapture;
-        if (pc && pc->isActive()) {
-            pc->feedFrame(
+        if (RenderThread::getInstance().getProfilerCapture().isActive()) {
+            RenderThread::getInstance().getProfilerCapture().feedFrame(
                 ctx.cpuFrameTimeMs,
-                r->getGpuFrameTimeMs(),
-                r->getWorldGpuMs(),
-                r->getUiGpuMs(),
+                RenderThread::getInstance().getRenderer().getGpuFrameTimeMs(),
+                RenderThread::getInstance().getRenderer().getWorldGpuMs(),
+                RenderThread::getInstance().getRenderer().getUiGpuMs(),
                 ctx.cpuTickMs,
                 ctx.cpuSubmitMs,
-                r->getCmdRecordMs(),
+                RenderThread::getInstance().getRenderer().getCmdRecordMs(),
                 frustumMs, drawMs,
-                r->getMemBandwidthGBs(),
-                r->getOverdraw(),
-                r->getPipelineStat(Renderer::STAT_IA_VERTICES),
-                r->getPipelineStat(Renderer::STAT_IA_PRIMITIVES),
-                r->getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
-                r->getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
-                r->getPipelineStat(Renderer::STAT_CLIP_PRIMS),
+                RenderThread::getInstance().getRenderer().getMemBandwidthGBs(),
+                RenderThread::getInstance().getRenderer().getOverdraw(),
+                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_IA_VERTICES),
+                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_IA_PRIMITIVES),
+                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
+                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
+                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_CLIP_PRIMS),
                 visibleChunks,
                 visibleSubChunks,
                 occlusionTested,
                 occlusionRemoved);
         }
 
-        app.uiSystem->render(ctx.cmd, ctx.renderPass);
+        RenderThread::getInstance().getUI().render(ctx.cmd, ctx.renderPass);
     }
 
     void WorldScreen::renderGlow(const FrameContext& ctx) {
@@ -187,10 +179,9 @@ namespace lve {
     }
 
     void WorldScreen::cleanup() {
-        auto& app = AppContext::get();
-        app.uiSystem->setScrollCallback(nullptr);
-        hotbar_.cleanup(*app.uiSystem);
-        fpsCounter_.cleanup(*app.uiSystem);
+        RenderThread::getInstance().getUI().setScrollCallback(nullptr);
+        hotbar_.cleanup(RenderThread::getInstance().getUI());
+        fpsCounter_.cleanup(RenderThread::getInstance().getUI());
         if (InputThread::getInstance().isInitialized()) {
             MessageBus::Get().send(ThreadName::Input, []() {
                 InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -212,12 +203,12 @@ namespace lve {
         glm::vec3 origin = cam.getPosition();
         glm::vec3 dir = cam.getForward();
 
-        auto hit = raycastBlock(origin, dir, 8.0f, *world_);
+        auto hit = raycastBlock(origin, dir, 8.0f, RenderThread::getInstance().getWorld());
         if (!hit.hit) return;
 
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            world_->setBlock(hit.x, hit.y, hit.z, 0);
-            world_->remeshDirtyChunks();
+            RenderThread::getInstance().getWorld().setBlock(hit.x, hit.y, hit.z, 0);
+            RenderThread::getInstance().getWorld().remeshDirtyChunks();
             return;
         }
 
@@ -233,14 +224,14 @@ namespace lve {
         int placeY = hit.y + faceNormals[hit.face][1];
         int placeZ = hit.z + faceNormals[hit.face][2];
 
-        if (placeY < 0 || placeY >= world_->getHeight()) return;
+        if (placeY < 0 || placeY >= RenderThread::getInstance().getWorld().getHeight()) return;
 
         auto* key = hotbar_.getSlotBlock(hotbar_.getSelectedSlot());
         if (!key || key->getId() == 0) return;
 
         uint8_t blockId = static_cast<uint8_t>(key->getId());
-        world_->setBlock(placeX, placeY, placeZ, blockId);
-        world_->remeshDirtyChunks();
+        RenderThread::getInstance().getWorld().setBlock(placeX, placeY, placeZ, blockId);
+        RenderThread::getInstance().getWorld().remeshDirtyChunks();
     }
 
     void WorldScreen::onSwapChainRecreated(VkExtent2D extent) {

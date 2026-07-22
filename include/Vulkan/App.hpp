@@ -1,18 +1,12 @@
 #pragma once
 
-#include "Vulkan/Window.hpp"
 #include "Vulkan/Device.hpp"
-#include "Vulkan/RenderPass.hpp"
 #include "Vulkan/DescriptorManager.hpp"
 #include "Vulkan/TextureCache.hpp"
 #include "UI/UiWrapper.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Renderer/PostProcessing.hpp"
 #include "Resource/ResourceManager.hpp"
-#include "Core/ScreenManager.hpp"
-#include "Core/AppContext.hpp"
-#include "Core/Keys.hpp"
-#include "Core/KeyBindHandler.hpp"
 #include "UI/Debug/ProfilingCapture.hpp"
 #include <memory>
 
@@ -51,14 +45,16 @@ namespace lve {
         void pauseRenderer();
         void resumeRenderer();
 
+        void swapchainRecreate(bool recreate) { requestSwapchainRecreate = recreate; }
+
         Device& getDevice() { return device; }
         Renderer& getRenderer() { return *renderer; }
         ResourceManager& getResourceManager() { return *resourceManager; }
         UiWrapper& getUiSystem() { return *uiSystem; }
-        ScreenManager& getScreenManager() { return *screenManager; }
+        ProfilingCapture& getProfileCapture() {return profilingCapture_;}
         PostProcessing& getPostProcessor() { return *postProcessor_; }
         TextureCache& getTextureCache() { return *textureCache_; }
-        World* getWorld() { return world_.get(); }
+        World& getWorld() { return *world_; }
         VkExtent2D getExtent() { return InputThread::getInstance().getExtent().toVKExtent(); }
         double getCpuFrameTimeMs() const { return cpuFrameTimeMs_; }
         double getCpuSubmitMs() const { return cpuSubmitMs_; }
@@ -73,7 +69,6 @@ namespace lve {
         std::unique_ptr<PostProcessing> postProcessor_;
         std::unique_ptr<ResourceManager> resourceManager = std::make_unique<ResourceManager>(device);
         std::unique_ptr<UiWrapper> uiSystem = std::make_unique<UiWrapper>();
-        std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
         DefaultTerrainGenerator terrainGen_;
         std::unique_ptr<World> world_ = std::make_unique<World>(device, terrainGen_, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
         ProfilingCapture profilingCapture_;

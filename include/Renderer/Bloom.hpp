@@ -90,7 +90,7 @@ public:
 private:
     void beginGlowPass(VkCommandBuffer cmd, uint32_t frameIndex);
     void endGlowPass(VkCommandBuffer cmd, uint32_t frameIndex);
-    void compositeBloom(VkCommandBuffer cmd, uint32_t frameIndex);
+    void compositeBloom(VkCommandBuffer cmd, uint32_t frameIndex, VkRenderPass activeRenderPass);
 
     void destroyFramebuffer(FrameBuffer& fb);
     void createOffscreenFramebuffer(FrameBuffer* fb, VkFormat colorFormat, VkFormat depthFormat);
@@ -104,7 +104,7 @@ private:
 
     Device& device_;
     DescriptorManager& descriptorManager_;
-    VkRenderPass sceneRenderPass_ = VK_NULL_HANDLE;
+    VkRenderPass activeCompositeRenderPass_ = VK_NULL_HANDLE;
     VkExtent2D windowExtent_{};
 
     OffscreenPass offscreenPass_;

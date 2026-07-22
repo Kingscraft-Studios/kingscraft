@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "Bus/Mailbox.hpp"
+#include "Core/ScreenManager.hpp"
 #include "Util/TimeUtil.hpp"
 
 namespace lve {
@@ -16,14 +17,23 @@ public:
         return instance;
     }
 
-    void init() { prevTime_ = TimeUtil::uptimeSeconds(); }
+    void init();
     void run();
     void stop();
+
+    void registerAllKeys();
+    void registerUICallbacks();
 
     bool isTickReady() const;
     void ackTick();
     double getCpuTickMs() const;
-    double getDt() const;
+    double getDelta() const;
+    ScreenManager& getScreenManager() { return *screenManager; }
+
+    template<typename T, typename... Args>
+    void setScreen(Args&&... args) {
+        screenManager->setScreen<T>(std::forward<Args>(args)...);
+    }
 
 private:
     void tick();
@@ -39,6 +49,8 @@ private:
 
     static constexpr double TICK_RATE = 100.0;
     static constexpr double TICK_INTERVAL = 1.0 / TICK_RATE;
+
+    std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
 };
 
 }
