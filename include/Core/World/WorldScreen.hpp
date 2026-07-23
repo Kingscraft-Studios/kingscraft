@@ -25,8 +25,6 @@ namespace lve {
         void onRenderPassChanged(VkRenderPass renderPass) override;
         void onSwapChainRecreated(VkExtent2D extent) override;
 
-        FrameRenderInfo getFrameRenderInfo(const Renderer& renderer, uint32_t imageIndex) const override;
-
     private:
         VkExtent2D extent_{};
 

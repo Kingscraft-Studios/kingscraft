@@ -25,8 +25,7 @@ private:
         const RegistryKey<Block>& key,
         std::string_view path,
         int& pending,
-        Registry<Block>& registry)
-    {
+        Registry<Block>& registry) {
         pending++;
 
         ModelParser::loadAsync(std::string(path),
@@ -34,7 +33,7 @@ private:
             {
                 logModelInfo(model);
 
-                registry.reg(
+                registry.add(
                     key,
                     std::make_unique<T>(std::move(model))
                 );

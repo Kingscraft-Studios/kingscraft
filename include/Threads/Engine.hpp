@@ -12,8 +12,6 @@
 
 namespace lve {
 
-    class App;
-
     class Engine {
     public:
         Engine() = default;
@@ -39,6 +37,7 @@ private:
     std::thread inputThread;
     ResourceLoader resourceLoader_;
     std::thread gameLogicThread_;
+    std::atomic<bool> shutdownComplete_{false};
 
     FrameExchange exchange;
 

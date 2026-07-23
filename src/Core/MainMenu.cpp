@@ -151,13 +151,4 @@ namespace lve {
         selectionBarQuit_.setName("SelBarQuit");
         uiSystem_.addElement(&selectionBarQuit_);
     }
-
-    FrameRenderInfo MainMenu::getFrameRenderInfo(const Renderer& renderer, uint32_t) const {
-        return {
-            renderPass_,
-            renderer.getCurrentFramebuffer(),
-            {{{0.1f, 0.1f, 0.1f, 1.0f}}},
-            true
-        };
-    }
 } // namespace lve

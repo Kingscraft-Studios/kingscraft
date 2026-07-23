@@ -12,9 +12,7 @@ namespace lve {
 
 void ModelParser::loadAsync(const std::string& path,
                             std::function<void(BlockModel)> callback) {
-    MessageBus::Get().request<BlockModel>(
-        ThreadName::Resource,
-        [path]() -> BlockModel {
+    MessageBus::Get().request<BlockModel>(ThreadName::Resource, [path]() -> BlockModel {
             auto data = IO::Get().readFile(path);
             std::string jsonStr(data.begin(), data.end());
             auto j = nlohmann::json::parse(jsonStr);

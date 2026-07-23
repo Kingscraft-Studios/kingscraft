@@ -26,27 +26,27 @@ namespace lve {
     }
 
     void Blocks::registerBlocks(int& pending) {
-        auto& r = Registry<Block>::getRegistry();
+        auto& registry = Registry<Block>::getRegistry();
 
-        r.reg(AIR, std::make_unique<AirBlock>());
+        registry.add(AIR, std::make_unique<AirBlock>());
 
         loadBlock<GrassBlock>(
             GRASS_BLOCK,
             "resources/models/block/grass_block.json",
             pending,
-            r);
+            registry);
 
         loadBlock<StoneBlock>(
             STONE,
             "resources/models/block/stone_block.json",
             pending,
-            r);
+            registry);
 
         loadBlock<DirtBlock>(
             DIRT,
             "resources/models/block/dirt_block.json",
             pending,
-            r);
+            registry);
     }
 
 } // namespace lve

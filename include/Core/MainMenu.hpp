@@ -20,8 +20,6 @@ namespace lve {
         void onRenderPassChanged(VkRenderPass renderPass) override { renderPass_ = renderPass; }
         void onSwapChainRecreated(VkExtent2D extent) override;
 
-        FrameRenderInfo getFrameRenderInfo(const Renderer& renderer, uint32_t) const override;
-
     private:
         void createBackground();
         void createTitle();

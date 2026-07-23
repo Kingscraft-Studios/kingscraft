@@ -239,16 +239,4 @@ namespace lve {
         hotbar_.resize(static_cast<float>(extent.width), static_cast<float>(extent.height));
     }
 
-    FrameRenderInfo WorldScreen::getFrameRenderInfo(const Renderer& renderer, uint32_t imageIndex) const {
-        return {
-            renderer.getWorldRenderPass(),
-            renderer.getWorldFramebuffer(imageIndex),
-            {
-                {{0.4f, 0.6f, 0.9f, 1.0f}},
-                {1.0f, 0}
-            },
-            true
-        };
-    }
-
 } // namespace lve

@@ -25,7 +25,7 @@ public:
         return key;
     }
 
-    void reg(const RegistryKey<T>& key, std::unique_ptr<T> entry) {
+    void add(const RegistryKey<T>& key, std::unique_ptr<T> entry) {
         if (key.id_ >= 0 && key.id_ < static_cast<int>(entries_.size())) {
             entries_[key.id_] = std::move(entry);
         }

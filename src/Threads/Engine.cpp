@@ -17,15 +17,18 @@ namespace lve {
     std::unique_ptr<Engine> Engine::instance_ = nullptr;
 
     Engine::~Engine() {
-        mailbox_->stop();
-        resourceLoader_.stop();
-        if (resLoaderThread_.joinable()) resLoaderThread_.join();
+        if (!shutdownComplete_.load(std::memory_order_acquire)) {
+            mailbox_->stop();
+            resourceLoader_.stop();
+            if (resLoaderThread_.joinable()) resLoaderThread_.join();
+            if (rendererThread_.joinable()) rendererThread_.join();
+            GameLogicThread::getInstance().stop();
+            if (gameLogicThread_.joinable()) gameLogicThread_.join();
+            InputThread::getInstance().Shutdown();
+            if (inputThread.joinable()) inputThread.join();
+        }
+        // Stop Any Threads which are temporary and supposed to exits when the function returns
         if (regThread_.joinable()) regThread_.join();
-        if (rendererThread_.joinable()) rendererThread_.join();
-        GameLogicThread::getInstance().stop();
-        if (gameLogicThread_.joinable()) gameLogicThread_.join();
-        InputThread::getInstance().Shutdown();
-        if (inputThread.joinable()) inputThread.join();
     }
 
     void Engine::Init() {
@@ -91,6 +94,7 @@ namespace lve {
         Logger::Shutdown();
         IO::Shutdown();
         MessageBus::Get().signalQuit();
+        shutdownComplete_.store(true, std::memory_order_release);
     }
 
     void Engine::stop() {
