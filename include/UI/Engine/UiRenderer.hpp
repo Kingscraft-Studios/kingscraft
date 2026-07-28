@@ -8,6 +8,8 @@
 #include "Vulkan/OffscreenTarget.hpp"
 #include "UI/Engine/UiBatchQueue.hpp"
 #include "UiStyle.hpp"
+#include "Core/Constants.hpp"
+#include <array>
 #include <memory>
 #include <glm/glm.hpp>
 
@@ -28,8 +30,8 @@ namespace lve {
         void shutdown();
         void resize(VkExtent2D extent);
 
-        void renderOffscreen(VkCommandBuffer cmd, UiBatchQueue& batchQueue);
-        void composite(VkCommandBuffer cmd);
+        void renderOffscreen(VkCommandBuffer cmd, UiBatchQueue& batchQueue, uint32_t frameIndex);
+        void composite(VkCommandBuffer cmd, uint32_t frameIndex);
         void setTargetRenderPass(VkRenderPass renderPass);
 
         void setFontAtlas(VkImageView imageView, VkSampler sampler);
@@ -51,8 +53,8 @@ namespace lve {
         void updateUniformBuffer();
         void createDummyTexture();
         void destroyDummyTexture();
-        void updateUiDescriptorSet();
-        void updateCompositeDescriptorSet();
+        void updateUiDescriptorSet(uint32_t frameIndex);
+        void updateCompositeDescriptorSet(uint32_t frameIndex);
 
         Device& device_;
         DescriptorManager& descriptorManager_;
@@ -77,9 +79,9 @@ namespace lve {
         VkDescriptorPool uiDescriptorPool_ = VK_NULL_HANDLE;
         VkDescriptorPool compositeDescriptorPool_ = VK_NULL_HANDLE;
 
-        // Descriptor sets
-        VkDescriptorSet uiDescriptorSet_ = VK_NULL_HANDLE;
-        VkDescriptorSet compositeDescriptorSet_ = VK_NULL_HANDLE;
+        // Descriptor sets (per frame-in-flight)
+        std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> uiDescriptorSets_{};
+        std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> compositeDescriptorSets_{};
 
         // Uniform buffer (binding 0)
         std::unique_ptr<Buffer> uniformBuffer_;
@@ -88,6 +90,16 @@ namespace lve {
         VkImageView atlasView_ = VK_NULL_HANDLE;
         VkSampler atlasSampler_ = VK_NULL_HANDLE;
         bool atlasDirty_ = false;
+        uint32_t uiDescDirtyMask_ = 0;
+        uint32_t compositeDescDirtyMask_ = 0;
+
+        // Deferred pipeline retirement
+        struct RetiredPipeline {
+            std::unique_ptr<Pipeline> pipeline;
+            VkPipelineLayout layout = VK_NULL_HANDLE;
+        };
+        std::array<std::vector<RetiredPipeline>, MAX_FRAMES_IN_FLIGHT> retiredPipelines_;
+        uint32_t currentFrameIndex_ = 0;
 
         // Style pool SSBO (binding 2) — stores GpuStyle entries
         std::unique_ptr<Buffer> stylePoolBuffer_;
@@ -100,7 +112,7 @@ namespace lve {
         // Block texture array (set 1, binding 0)
         VkDescriptorSetLayout blockTexLayout_ = VK_NULL_HANDLE;
         VkDescriptorPool blockTexPool_ = VK_NULL_HANDLE;
-        VkDescriptorSet blockTexSet_ = VK_NULL_HANDLE;
+        std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> blockTexSets_{};
         VkImageView blockTexView_ = VK_NULL_HANDLE;
         VkSampler blockTexSampler_ = VK_NULL_HANDLE;
         bool blockTexDirty_ = false;

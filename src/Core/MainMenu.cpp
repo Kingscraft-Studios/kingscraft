@@ -44,8 +44,8 @@ namespace lve {
         g_stylesInit = true;
     }
 
-    MainMenu::MainMenu(VkRenderPass renderPass, UiWrapper& uiSystem, VkExtent2D extent)
-        : renderPass_(renderPass), uiSystem_(uiSystem), extent_(extent) {
+    MainMenu::MainMenu(UiWrapper& uiSystem)
+        : uiSystem_(uiSystem) {
     }
 
     void MainMenu::init() {
@@ -68,8 +68,13 @@ namespace lve {
         uiSystem_.removeElement(&quitButton_);
     }
 
-    void MainMenu::onSwapChainRecreated(VkExtent2D extent) {
-        extent_ = extent;
+    // void MainMenu::onSwapChainRecreated(VkExtent2D extent) {
+    //     extent_ = extent;
+    // }
+
+    void MainMenu::render(FrameScene &scene) {
+        scene.terrain.renderTerrain = false;
+        scene.ui.enabled = true;
     }
 
     void MainMenu::createBackground() {

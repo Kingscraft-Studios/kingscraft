@@ -8,12 +8,17 @@
 // Fragment shader has ZERO SSBO reads — uses varyings only.
 
 #include "UI/Engine/UiRenderer.hpp"
-#include "Util/Preloader.hpp"
+#include "../../../include/Core/Bootstrapper.hpp"
 
 #include <cstddef>
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
+#include <bits/this_thread_sleep.h>
 #include <glm/gtc/matrix_transform.hpp>
+
+#include "Bus/MessageBus.hpp"
+#include "Threads/Renderer.hpp"
 
 namespace lve {
 
@@ -33,14 +38,25 @@ namespace lve {
         offscreenTarget_ = std::make_unique<OffscreenTarget>(
             device_, extent_, VK_FORMAT_R8G8B8A8_UNORM, offscreenRenderPass_->getHandle());
         allocateDescriptorSets();
-        updateUiDescriptorSet();
-        updateCompositeDescriptorSet();
+        for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            updateUiDescriptorSet(i);
+            updateCompositeDescriptorSet(i);
+        }
         updateUniformBuffer();
         initialized_ = true;
     }
 
     void UiRenderer::shutdown() {
         if (!initialized_) return;
+        for (auto& slot : retiredPipelines_) {
+            for (auto& rp : slot) {
+                rp.pipeline.reset();
+                if (rp.layout != VK_NULL_HANDLE) {
+                    vkDestroyPipelineLayout(device_.device(), rp.layout, nullptr);
+                }
+            }
+            slot.clear();
+        }
         uiPipeline_.reset();
         compositePipeline_.reset();
         offscreenTarget_.reset();
@@ -88,13 +104,22 @@ namespace lve {
         if (!initialized_) return;
         extent_ = extent;
         offscreenTarget_->resize(extent_, offscreenRenderPass_->getHandle());
-        updateCompositeDescriptorSet();
+        compositeDescDirtyMask_ |= (1u << MAX_FRAMES_IN_FLIGHT) - 1;
         updateUniformBuffer();
     }
 
-    void UiRenderer::renderOffscreen(VkCommandBuffer cmd, UiBatchQueue& batchQueue) {
+    void UiRenderer::renderOffscreen(VkCommandBuffer cmd, UiBatchQueue& batchQueue, uint32_t frameIndex) {
         if (!initialized_ || extent_.width == 0 || extent_.height == 0) return;
         if (atlasView_ == VK_NULL_HANDLE) return;
+
+        currentFrameIndex_ = frameIndex;
+        for (auto& rp : retiredPipelines_[frameIndex]) {
+            rp.pipeline.reset();
+            if (rp.layout != VK_NULL_HANDLE) {
+                vkDestroyPipelineLayout(device_.device(), rp.layout, nullptr);
+            }
+        }
+        retiredPipelines_[frameIndex].clear();
 
         if (!uiPipeline_) {
             createPipeline();
@@ -135,16 +160,12 @@ namespace lve {
         VkRect2D scissor{{0, 0}, extent_};
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        if (atlasDirty_) {
-            updateUiDescriptorSet();
-            atlasDirty_ = false;
-        }
-        if (blockTexDirty_) {
-            updateUiDescriptorSet();
-            blockTexDirty_ = false;
+        if (uiDescDirtyMask_ & (1u << frameIndex)) {
+            updateUiDescriptorSet(frameIndex);
+            uiDescDirtyMask_ &= ~(1u << frameIndex);
         }
 
-        VkDescriptorSet bindSets[2] = { uiDescriptorSet_, blockTexSet_ };
+        VkDescriptorSet bindSets[2] = { uiDescriptorSets_[frameIndex], blockTexSets_[frameIndex] };
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 pipelineLayout_, 0, 2, bindSets, 0, nullptr);
 
@@ -153,8 +174,13 @@ namespace lve {
         vkCmdEndRenderPass(cmd);
     }
 
-    void UiRenderer::composite(VkCommandBuffer cmd) {
+    void UiRenderer::composite(VkCommandBuffer cmd, uint32_t frameIndex) {
         if (!initialized_ || extent_.width == 0 || extent_.height == 0) return;
+
+        if (compositeDescDirtyMask_ & (1u << frameIndex)) {
+            updateCompositeDescriptorSet(frameIndex);
+            compositeDescDirtyMask_ &= ~(1u << frameIndex);
+        }
 
         VkViewport viewport{0.0f, 0.0f,
             static_cast<float>(extent_.width), static_cast<float>(extent_.height),
@@ -166,16 +192,19 @@ namespace lve {
 
         compositePipeline_->bind(cmd);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                compositePipelineLayout_, 0, 1, &compositeDescriptorSet_, 0, nullptr);
+                                compositePipelineLayout_, 0, 1, &compositeDescriptorSets_[frameIndex], 0, nullptr);
         vkCmdDraw(cmd, 3, 1, 0, 0);
     }
 
     void UiRenderer::setTargetRenderPass(VkRenderPass renderPass) {
-        compositePipeline_.reset();
-        if (compositePipelineLayout_ != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(device_.device(), compositePipelineLayout_, nullptr);
-            compositePipelineLayout_ = VK_NULL_HANDLE;
-        }
+        uint32_t retireSlot = (currentFrameIndex_ + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        RetiredPipeline rp;
+        rp.pipeline = std::move(compositePipeline_);
+        rp.layout = compositePipelineLayout_;
+        compositePipelineLayout_ = VK_NULL_HANDLE;
+        retiredPipelines_[retireSlot].push_back(std::move(rp));
+
         createCompositePipeline(renderPass);
     }
 
@@ -183,12 +212,14 @@ namespace lve {
         atlasView_ = imageView;
         atlasSampler_ = sampler;
         atlasDirty_ = true;
+        uiDescDirtyMask_ |= (1u << MAX_FRAMES_IN_FLIGHT) - 1;
     }
 
     void UiRenderer::setBlockTexture(VkImageView imageView, VkSampler sampler) {
         blockTexView_ = imageView;
         blockTexSampler_ = sampler;
         blockTexDirty_ = true;
+        uiDescDirtyMask_ |= (1u << MAX_FRAMES_IN_FLIGHT) - 1;
     }
 
     void UiRenderer::uploadStylePool(const void* data, uint32_t count) {
@@ -247,33 +278,35 @@ namespace lve {
     void UiRenderer::createDescriptorPools() {
         std::vector<VkDescriptorPoolSize> uiPoolSizes(4);
         uiPoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uiPoolSizes[0].descriptorCount = 1;
+        uiPoolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
         uiPoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        uiPoolSizes[1].descriptorCount = 1;
+        uiPoolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT;
         uiPoolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        uiPoolSizes[2].descriptorCount = 1;
+        uiPoolSizes[2].descriptorCount = MAX_FRAMES_IN_FLIGHT;
         uiPoolSizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        uiPoolSizes[3].descriptorCount = 1;
+        uiPoolSizes[3].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 
-        uiDescriptorPool_ = descriptorManager_.createPool(uiPoolSizes, 1);
+        uiDescriptorPool_ = descriptorManager_.createPool(uiPoolSizes, MAX_FRAMES_IN_FLIGHT);
 
         std::vector<VkDescriptorPoolSize> blockPoolSizes(1);
         blockPoolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        blockPoolSizes[0].descriptorCount = 1;
+        blockPoolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 
-        blockTexPool_ = descriptorManager_.createPool(blockPoolSizes, 1);
+        blockTexPool_ = descriptorManager_.createPool(blockPoolSizes, MAX_FRAMES_IN_FLIGHT);
 
         std::vector<VkDescriptorPoolSize> compPoolSizes(1);
         compPoolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        compPoolSizes[0].descriptorCount = 1;
+        compPoolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 
-        compositeDescriptorPool_ = descriptorManager_.createPool(compPoolSizes, 1);
+        compositeDescriptorPool_ = descriptorManager_.createPool(compPoolSizes, MAX_FRAMES_IN_FLIGHT);
     }
 
     void UiRenderer::allocateDescriptorSets() {
-        uiDescriptorSet_ = descriptorManager_.allocateSet(uiDescriptorPool_, uiDescriptorSetLayout_);
-        blockTexSet_ = descriptorManager_.allocateSet(blockTexPool_, blockTexLayout_);
-        compositeDescriptorSet_ = descriptorManager_.allocateSet(compositeDescriptorPool_, compositeDescriptorSetLayout_);
+        for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            uiDescriptorSets_[i] = descriptorManager_.allocateSet(uiDescriptorPool_, uiDescriptorSetLayout_);
+            blockTexSets_[i] = descriptorManager_.allocateSet(blockTexPool_, blockTexLayout_);
+            compositeDescriptorSets_[i] = descriptorManager_.allocateSet(compositeDescriptorPool_, compositeDescriptorSetLayout_);
+        }
     }
 
     void UiRenderer::createPipeline() {
@@ -291,8 +324,8 @@ namespace lve {
             throw std::runtime_error("failed to create UI pipeline layout!");
         }
 
-        auto& vertCode = Preloader::Get().getShader("resources/shaders/ui.vert.spv");
-        auto& fragCode = Preloader::Get().getShader("resources/shaders/ui.frag.spv");
+        auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/ui.vert.spv");
+        auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/ui.frag.spv");
 
         PipelineConfigInfo configInfo{};
         Pipeline::defaultPipelineConfigInfo(configInfo);
@@ -354,8 +387,8 @@ namespace lve {
             throw std::runtime_error("failed to create composite pipeline layout!");
         }
 
-        auto& vertCode = Preloader::Get().getShader("resources/shaders/composite.vert.spv");
-        auto& fragCode = Preloader::Get().getShader("resources/shaders/composite.frag.spv");
+        auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/composite.vert.spv");
+        auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/composite.frag.spv");
 
         PipelineConfigInfo configInfo{};
         Pipeline::defaultPipelineConfigInfo(configInfo);
@@ -487,7 +520,7 @@ namespace lve {
         uniformBuffer_->write(&proj, 0, sizeof(glm::mat4));
     }
 
-    void UiRenderer::updateUiDescriptorSet() {
+    void UiRenderer::updateUiDescriptorSet(uint32_t frameIndex) {
         // Allocate SSBOs lazily on first descriptor update
         if (!stylePoolBuffer_) {
             stylePoolBuffer_ = std::make_unique<Buffer>(
@@ -516,7 +549,7 @@ namespace lve {
 
         VkWriteDescriptorSet uboWrite{};
         uboWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        uboWrite.dstSet = uiDescriptorSet_;
+        uboWrite.dstSet = uiDescriptorSets_[frameIndex];
         uboWrite.dstBinding = 0;
         uboWrite.descriptorCount = 1;
         uboWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -530,7 +563,7 @@ namespace lve {
 
         VkWriteDescriptorSet fontWrite{};
         fontWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        fontWrite.dstSet = uiDescriptorSet_;
+        fontWrite.dstSet = uiDescriptorSets_[frameIndex];
         fontWrite.dstBinding = 1;
         fontWrite.descriptorCount = 1;
         fontWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -539,7 +572,7 @@ namespace lve {
         // Write stylePool SSBO binding (2)
         VkWriteDescriptorSet poolWrite{};
         poolWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        poolWrite.dstSet = uiDescriptorSet_;
+        poolWrite.dstSet = uiDescriptorSets_[frameIndex];
         poolWrite.dstBinding = 2;
         poolWrite.descriptorCount = 1;
         poolWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -548,7 +581,7 @@ namespace lve {
         // Write elementStyles SSBO binding (3)
         VkWriteDescriptorSet elemWrite{};
         elemWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        elemWrite.dstSet = uiDescriptorSet_;
+        elemWrite.dstSet = uiDescriptorSets_[frameIndex];
         elemWrite.dstBinding = 3;
         elemWrite.descriptorCount = 1;
         elemWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -562,7 +595,7 @@ namespace lve {
 
         VkWriteDescriptorSet blockWrite{};
         blockWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        blockWrite.dstSet = blockTexSet_;
+        blockWrite.dstSet = blockTexSets_[frameIndex];
         blockWrite.dstBinding = 0;
         blockWrite.descriptorCount = 1;
         blockWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -583,7 +616,7 @@ namespace lve {
             std::vector<VkWriteDescriptorSet>(writes, writes + writeCount));
     }
 
-    void UiRenderer::updateCompositeDescriptorSet() {
+    void UiRenderer::updateCompositeDescriptorSet(uint32_t frameIndex) {
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfo.imageView = offscreenTarget_->getImageView();
@@ -591,7 +624,7 @@ namespace lve {
 
         VkWriteDescriptorSet write{};
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = compositeDescriptorSet_;
+        write.dstSet = compositeDescriptorSets_[frameIndex];
         write.dstBinding = 0;
         write.descriptorCount = 1;
         write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;

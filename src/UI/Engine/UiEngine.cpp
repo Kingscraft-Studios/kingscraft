@@ -50,7 +50,7 @@ namespace lve {
         batchQueue_->begin();
     }
 
-    void UiEngine::renderOffscreen(VkCommandBuffer cmd) {
+    void UiEngine::renderOffscreen(VkCommandBuffer cmd, uint32_t frameIndex) {
         if (!initialized_) return;
 
         if (fontAtlas_->isReady() && !renderer_->hasFontAtlas()) {
@@ -59,12 +59,12 @@ namespace lve {
 
         uploadPendingStyles();
 
-        renderer_->renderOffscreen(cmd, *batchQueue_);
+        renderer_->renderOffscreen(cmd, *batchQueue_, frameIndex);
     }
 
-    void UiEngine::composite(VkCommandBuffer cmd) {
+    void UiEngine::composite(VkCommandBuffer cmd, uint32_t frameIndex) {
         if (!initialized_) return;
-        renderer_->composite(cmd);
+        renderer_->composite(cmd, frameIndex);
     }
 
     void UiEngine::addQuad(const UiVertex verts[4], const uint32_t indices[6]) {

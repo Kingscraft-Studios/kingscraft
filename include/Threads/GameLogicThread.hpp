@@ -6,6 +6,9 @@
 
 #include "Bus/Mailbox.hpp"
 #include "Core/ScreenManager.hpp"
+#include "Core/World/TerrainGenerator.hpp"
+#include "Core/World/World.hpp"
+#include "Renderer/RendererSettings.hpp"
 #include "Util/TimeUtil.hpp"
 
 namespace lve {
@@ -29,7 +32,7 @@ public:
     double getCpuTickMs() const;
     double getDelta() const;
     ScreenManager& getScreenManager() { return *screenManager; }
-
+    World& getWorld() { return *world;}
     template<typename T, typename... Args>
     void setScreen(Args&&... args) {
         screenManager->setScreen<T>(std::forward<Args>(args)...);
@@ -51,6 +54,8 @@ private:
     static constexpr double TICK_INTERVAL = 1.0 / TICK_RATE;
 
     std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
+    DefaultTerrainGenerator terrainGen;
+    std::unique_ptr<World> world;
 };
 
 }

@@ -118,7 +118,7 @@ namespace lve {
         (void)codepoint;
     }
 
-    void UiWrapper::renderOffscreen(VkCommandBuffer cmdBuffer) {
+    void UiWrapper::renderOffscreen(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
         if (!engine_) return;
 
         engine_->beginFrame();
@@ -131,10 +131,10 @@ namespace lve {
             engine_->renderDebugOverlays(elements_);
         }
 
-        engine_->renderOffscreen(cmdBuffer);
+        engine_->renderOffscreen(cmdBuffer, frameIndex);
     }
 
-    void UiWrapper::render(VkCommandBuffer cmdBuffer, VkRenderPass renderPass) {
+    void UiWrapper::render(VkCommandBuffer cmdBuffer, VkRenderPass renderPass, uint32_t frameIndex) {
         if (!engine_) return;
 
         if (renderPass != currentRenderPass_) {
@@ -142,7 +142,7 @@ namespace lve {
             engine_->getRenderer().setTargetRenderPass(renderPass);
         }
 
-        engine_->composite(cmdBuffer);
+        engine_->composite(cmdBuffer, frameIndex);
     }
 
     void UiWrapper::addElement(UiElement* element) {

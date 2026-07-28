@@ -5,28 +5,35 @@
 #include <unordered_map>
 #include <memory>
 
+#include "Validators/PipelineCacheValidator.hpp"
+
 namespace lve {
 
-class Preloader {
+class Bootstrapper {
 public:
     static void Init();
     static void Shutdown();
-    static Preloader& Get();
+    static Bootstrapper& Get();
 
     void loadAll();
 
     const std::vector<char>& getShader(const std::string& path) const;
     const std::vector<char>& getPipelineCacheData() const;
-    bool hasPipelineCacheData() const { return !pipelineCacheData_.empty(); }
+
+    PipelineCacheValidator& getPipelineValidator() { return validator; }
+    PipelineCacheHeader getPipelineCacheHeader() { return header; }
 
 private:
 
     void loadShaderFile(const std::string& path);
+    std::vector<char> loadAndValidatePipelineCache();
 
+    PipelineCacheValidator validator;
     std::unordered_map<std::string, std::vector<char>> shaders_;
+    PipelineCacheHeader header{};
     std::vector<char> pipelineCacheData_;
 
-    static std::unique_ptr<Preloader> instance_;
+    static std::unique_ptr<Bootstrapper> instance_;
 };
 
 } // namespace lve

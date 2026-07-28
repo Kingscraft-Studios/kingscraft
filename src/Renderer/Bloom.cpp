@@ -1,5 +1,5 @@
 #include "Renderer/Bloom.hpp"
-#include "Util/Preloader.hpp"
+#include "../../include/Core/Bootstrapper.hpp"
 #include <array>
 #include <cstring>
 #include <stdexcept>
@@ -387,8 +387,8 @@ void Bloom::updateFrameDescriptor(uint32_t i) {
 }
 
 std::unique_ptr<Pipeline> Bloom::createBlurPipeline(VkRenderPass renderPass, uint32_t blurdirection) {
-    auto& vertCode = Preloader::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.vert.spv");
-    auto& fragCode = Preloader::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.frag.spv");
+    auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.vert.spv");
+    auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.frag.spv");
 
     PipelineConfigInfo configInfo{};
     Pipeline::defaultPipelineConfigInfo(configInfo);
@@ -442,8 +442,8 @@ void Bloom::createPipelines() {
     pipelines_.blurHorz = createBlurPipeline(activeCompositeRenderPass_, 1);
 
     // --- Color pass (glow objects) ---
-    auto& vertCode = Preloader::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.vert.spv");
-    auto& fragCode = Preloader::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.frag.spv");
+    auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.vert.spv");
+    auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.frag.spv");
 
     PipelineConfigInfo configInfo{};
     Pipeline::defaultPipelineConfigInfo(configInfo);

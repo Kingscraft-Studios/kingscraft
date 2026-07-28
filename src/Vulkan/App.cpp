@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "Bus/MessageBus.hpp"
+#include "Core/Registries.hpp"
 #include "Renderer/FrameScene.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/Engine.hpp"
@@ -27,7 +28,7 @@ namespace lve {
 
         // TODO: Move this Into GameLogic
         MessageBus::Get().send(ThreadName::GameLogic, [this]() {
-            GameLogicThread::getInstance().setScreen<MainMenu>(renderer->getRenderPass(), *uiSystem, renderer->getExtent());
+            GameLogicThread::getInstance().setScreen<MainMenu>(*uiSystem);
         });
 
         VkExtent2D extent = InputThread::getInstance().getExtent().toVKExtent();
@@ -37,6 +38,7 @@ namespace lve {
     }
 
     App::~App() {
+        chunkProcessor.cleanup(device);
         vkDeviceWaitIdle(device.device());
     }
 
@@ -45,6 +47,12 @@ namespace lve {
     }
 
     void App::tick() {
+        if (!worldRendererInitialized) {
+            Registries::waitForBuild();
+            textureCache_->updateFromRegistry();
+            worldRenderer.init(device, *textureCache_, renderer->getWorldRenderPass());
+            worldRendererInitialized = true;
+        }
         auto currentExtent = InputThread::getInstance().getExtent();
 
         if ((requestSwapchainRecreate || InputThread::getInstance().wasWindowResized()) && currentExtent.width > 0 && currentExtent.height > 0) {
@@ -61,11 +69,13 @@ namespace lve {
         }
 
         if (renderState == RenderState::Running) {
+            const FrameScene& scene = Engine::Get().getFrameExchange().readFrame();
             currentFrameStart_ = TimeUtil::uptimeSeconds();
             if (GameLogicThread::getInstance().isTickReady()) {
                 GameLogicThread::getInstance().ackTick();
                 profilingCapture_.tick(GameLogicThread::getInstance().getDelta());
-                drawFrame();
+                drawFrame(scene);
+                chunkProcessor.collectDestroyedChunks(scene.terrain.draws);
             }
 
             int maxFps = RendererSettings::get().maxFps;
@@ -106,13 +116,14 @@ namespace lve {
 
         renderer->recreateSwapChain(extent);
         // screenManager->notifyRenderPassChanged(renderer->getRenderPass());
+        worldRenderer.onRenderPassChanged(renderer->getWorldRenderPass());
         // screenManager->notifySwapChainRecreated(extent);
         auto* bloom = static_cast<Bloom*>(postProcessor_->getEffect("bloom"));
         if (bloom) bloom->recreate(extent, renderer->getWorldRenderPass());
     }
 
 
-    void App::drawFrame() {
+    void App::drawFrame(const FrameScene& scene) {
         if (renderState != RenderState::Running) {
             return;
         }
@@ -128,7 +139,6 @@ namespace lve {
         VkExtent2D extent = renderer->getExtent();
         uint32_t imageIndex = renderer->getCurrentImageIndex();
 
-        const FrameScene& scene = Engine::Get().getFrameExchange().readFrame();
         RenderTarget target = renderer->buildRenderTarget(scene);
 
         if (scene.ui.enabled) {
@@ -136,7 +146,7 @@ namespace lve {
             uint32_t qi = renderer->getFrameIndex() * Renderer::QUERIES_PER_FRAME;
             VkQueryPool tsPool = renderer->getGpuQueryPool();
             vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, tsPool, qi + Renderer::TS_UI_START);
-            uiSystem->renderOffscreen(cmd);
+            uiSystem->renderOffscreen(cmd, renderer->getFrameIndex());
             vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool, qi + Renderer::TS_UI_END);
         }
 
@@ -154,11 +164,11 @@ namespace lve {
         frameCtx.cpuSubmitMs = cpuSubmitMs_;
 
         // Pre-scene effects (glow passes, downsampling, etc.)
-        if (!scene.ui.enabled) {
-            postProcessor_->preScene(frameCtx, [](const FrameContext& ctx) {
-                // screenManager->getCurrent()->renderGlow(ctx);
-            });
-        }
+        // if (!scene.ui.enabled) {
+        //     postProcessor_->preScene(frameCtx, [](const FrameContext& ctx) {
+        //         // screenManager->getCurrent()->renderGlow(ctx);
+        //     });
+        // }
 
         RenderPassBegin pass{};
         pass.renderPass = target.renderPass;
@@ -170,13 +180,17 @@ namespace lve {
         pass.clearCount = target.clearCount;
 
         renderer->executeRenderPass(pass, [this, frameCtx, scene, target](VkCommandBuffer cb) {
-            // Temp
-            uiSystem->render(cb,target.renderPass);
+            if (scene.terrain.renderTerrain) {
+                worldRenderer.render(cb, scene.camera.viewProj, scene);
+            }
+            if (scene.ui.enabled) {
+                uiSystem->render(cb, target.renderPass, renderer->getFrameIndex());
+            }
 
             // Post-scene effects (composite, etc.)
-            if (!scene.ui.enabled) {
-                postProcessor_->postScene(frameCtx);
-            }
+            // if (!scene.ui.enabled) {
+            //     postProcessor_->postScene(frameCtx);
+            // }
         });
 
         cpuFrameTimeMs_ = (TimeUtil::uptimeSeconds() - cpuStart) * 1000.0;

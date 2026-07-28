@@ -157,6 +157,8 @@ namespace lve {
 
         SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 
+        void writePipelineCache();
+
         static const char* driverIdToString(VkDriverId id) {
             switch (id) {
                 case VK_DRIVER_ID_AMD_PROPRIETARY:          return "AMD Proprietary";

@@ -18,13 +18,9 @@ namespace lve {
 
         void init() override;
         void tick(double dt) override;
-        void render(const FrameContext& ctx) override;
-        void renderGlow(const FrameContext& ctx) override;
+        void render(FrameScene& scene) override;
         void cleanup() override;
         void onMouseButton(int button, int action, int mods) override;
-        void onRenderPassChanged(VkRenderPass renderPass) override;
-        void onSwapChainRecreated(VkExtent2D extent) override;
-
     private:
         VkExtent2D extent_{};
 

@@ -3,7 +3,7 @@
 #include "Threads/IO.hpp"
 #include "Bus/MessageBus.hpp"
 #include "Util/TimeUtil.hpp"
-#include "Util/Preloader.hpp"
+#include "../../include/Core/Bootstrapper.hpp"
 
 #include <chrono>
 
@@ -21,9 +21,10 @@ namespace lve {
             mailbox_->stop();
             resourceLoader_.stop();
             if (resLoaderThread_.joinable()) resLoaderThread_.join();
-            if (rendererThread_.joinable()) rendererThread_.join();
             GameLogicThread::getInstance().stop();
             if (gameLogicThread_.joinable()) gameLogicThread_.join();
+            RenderThread::getInstance().shutdown();
+            if (rendererThread_.joinable()) rendererThread_.join();
             InputThread::getInstance().Shutdown();
             if (inputThread.joinable()) inputThread.join();
         }
@@ -44,6 +45,7 @@ namespace lve {
     }
 
     void Engine::run() {
+        // TODO: Call a Thread Init in its own Thread NOT on Engine Thread
         TimeUtil::Init();
         IO::Init();
         Logger::Init();
@@ -55,8 +57,8 @@ namespace lve {
         MessageBus::Get().subscribe(ThreadName::Engine, mailbox_);
 
 
-        Preloader::Init();
-        Preloader::Get().loadAll();
+        Bootstrapper::Init();
+        Bootstrapper::Get().loadAll();
 
         // Threads Start up
         resLoaderThread_ = std::thread([this]() { resourceLoader_.run(); });
@@ -75,10 +77,10 @@ namespace lve {
 
 
         LogUtils::info(ThreadName::Engine, "Shutting down");
-        RenderThread::getInstance().shutdown();
-        if (rendererThread_.joinable()) rendererThread_.join();
         GameLogicThread::getInstance().stop();
         if (gameLogicThread_.joinable()) gameLogicThread_.join();
+        RenderThread::getInstance().shutdown();
+        if (rendererThread_.joinable()) rendererThread_.join();
         InputThread::getInstance().Shutdown();
         if (inputThread.joinable()) inputThread.join();
         resourceLoader_.stop();

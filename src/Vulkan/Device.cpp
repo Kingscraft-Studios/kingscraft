@@ -1,6 +1,6 @@
 #include "Vulkan/Device.hpp"
 #include "Vulkan/Buffer.hpp"
-#include "Util/Preloader.hpp"
+#include "../../include/Core/Bootstrapper.hpp"
 
 // std headers
 #include <cstring>
@@ -98,27 +98,87 @@ namespace lve {
 
         VkPipelineCacheCreateInfo cacheInfo{};
         cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-        auto& preloadData = Preloader::Get().getPipelineCacheData();
+        auto& preloadData = Bootstrapper::Get().getPipelineCacheData();
         if (!preloadData.empty()) {
             cacheInfo.initialDataSize = preloadData.size();
             cacheInfo.pInitialData = preloadData.data();
         }
-        vkCreatePipelineCache(device_, &cacheInfo, nullptr, &pipelineCache_);
+        if (vkCreatePipelineCache(device_, &cacheInfo, nullptr, &pipelineCache_) != VK_SUCCESS) {
+            throw std::runtime_error("Couldn't Create Pipeline Cache for Vulkan");
+        }
+    }
+
+    void Device::writePipelineCache() {
+        // TODO: add Logging
+        if (pipelineCache_ != VK_NULL_HANDLE) {
+            size_t dataSize = 0;
+
+            vkGetPipelineCacheData(
+                device_,
+                pipelineCache_,
+                &dataSize,
+                nullptr
+            );
+
+            if (dataSize > 0) {
+                auto fileData = std::make_shared<std::vector<char>>();
+
+                PipelineCacheHeader header{};
+
+                header.magic = PIPELINE_CACHE_MAGIC;
+                header.version = PIPELINE_CACHE_VERSION;
+
+                header.vendorID = properties.vendorID;
+                header.deviceID = properties.deviceID;
+                header.driverVersion = properties.driverVersion;
+
+                std::copy(properties.pipelineCacheUUID, properties.pipelineCacheUUID + VK_UUID_SIZE, header.pipelineCacheUUID.begin());
+
+                // FIXME:
+                header.engineVersion = 1;
+
+
+                // Reserve header + Vulkan blob
+                fileData->resize(
+                    sizeof(PipelineCacheHeader) + dataSize
+                );
+
+
+                // Write header
+                std::memcpy(
+                    fileData->data(),
+                    &header,
+                    sizeof(PipelineCacheHeader)
+                );
+
+
+                // Write Vulkan blob after header
+                vkGetPipelineCacheData(
+                    device_,
+                    pipelineCache_,
+                    &dataSize,
+                    fileData->data() + sizeof(PipelineCacheHeader)
+                );
+
+
+                MessageBus::Get().send(
+                    ThreadName::Engine,
+                    [fileData]()
+                    {
+                        IO::Get().writeFile(
+                            "pipeline_cache.bin",
+                            *fileData
+                        );
+                    }
+                );
+            }
+        }
     }
 
     Device::~Device() {
-        if (pipelineCache_ != VK_NULL_HANDLE) {
-            size_t dataSize;
-            vkGetPipelineCacheData(device_, pipelineCache_, &dataSize, nullptr);
-            if (dataSize > 0) {
-                auto data = std::make_shared<std::vector<char>>(dataSize);
-                vkGetPipelineCacheData(device_, pipelineCache_, &dataSize, data->data());
-                MessageBus::Get().send(ThreadName::Engine, [data]() {
-                    IO::Get().writeFile("pipeline_cache.bin", *data);
-                });
-            }
-            vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
-        }
+        writePipelineCache();
+
+        vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
 
         stagingArena_.reset();
 
@@ -203,6 +263,19 @@ namespace lve {
 
         vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
         properties = properties2.properties;
+
+        // Validate the Pipeline Cache Here
+        PipelineCacheValidationInfo info{};
+
+        info.vendorID = properties.vendorID;
+        info.deviceID = properties.deviceID;
+        info.driverVersion = properties.driverVersion;
+
+        std::copy(properties.pipelineCacheUUID, properties.pipelineCacheUUID + VK_UUID_SIZE, info.pipelineCacheUUID.begin());
+
+        Bootstrapper::Get().getPipelineValidator().validateVulkan(info, Bootstrapper::Get().getPipelineCacheHeader());
+
+        // Continue
 
         std::string deviceName = properties.deviceName;
         uint32_t major = VK_API_VERSION_MAJOR(properties.apiVersion);

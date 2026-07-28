@@ -49,6 +49,42 @@ namespace lve {
             file.write(data.data(), data.size());
     }
 
+    // FIXME: Accessible Through MessageBus
+    bool IO::readHeader(const std::string& path, void* header, size_t headerSize) {
+        std::ifstream file(path, std::ios::binary);
+
+        if (!file.is_open())
+            return false;
+
+        file.read(static_cast<char*>(header), headerSize);
+
+        return file.good();
+    }
+
+    std::vector<char> IO::readData(const std::string& path, size_t offset, size_t size) {
+        std::ifstream file(path, std::ios::binary);
+
+        if (!file.is_open())
+            throw std::runtime_error("failed to open file: " + path);
+
+        file.seekg(offset);
+
+        std::vector<char> buffer(size);
+
+        file.read(buffer.data(), static_cast<std::streamsize>(size));
+
+        return buffer;
+    }
+
+    size_t IO::getFileSize(const std::string& path) {
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
+
+        if (!file.is_open())
+            throw std::runtime_error("failed to open file: " + path);
+
+        return file.tellg();
+    }
+
     void IO::writeLogFile(const std::string& path, const std::string& text) {
 
         // 1. ensure directory exists

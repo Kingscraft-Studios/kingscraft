@@ -2,15 +2,18 @@
 #include <cstring>
 #include <stdexcept>
 
+#include "Bus/MessageBus.hpp"
+#include "Core/World/ChunkKey.hpp"
+#include "Core/World/ChunkUploadData.hpp"
+#include "Threads/Renderer.hpp"
+
 namespace lve {
 
-    Chunk::Chunk(Device& device, glm::ivec2 gridPos, int verticesPerAxis, float spacing, int height)
-        : device_(device)
-        , gridPos_(gridPos)
+    Chunk::Chunk(glm::ivec2 gridPos, int verticesPerAxis, float spacing, int height)
+        : gridPos_(gridPos)
         , verticesPerAxis_(verticesPerAxis)
         , spacing_(spacing)
-        , height_(height)
-    {
+        , height_(height) {
         float size = static_cast<float>(verticesPerAxis) * spacing;
         worldOrigin_ = glm::vec3(
             static_cast<float>(gridPos.x) * size,
@@ -24,10 +27,6 @@ namespace lve {
             sc.yBase = i * static_cast<int>(SUBCHUNK_H);
             subChunks_.push_back(std::move(sc));
         }
-    }
-
-    Chunk::~Chunk() {
-        cleanup();
     }
 
     void Chunk::setBlockData(std::vector<uint8_t> data, int chunkSize, int height) {
@@ -155,22 +154,6 @@ namespace lve {
             return;
         }
 
-        prevVertexBuffer_ = std::move(vertexBuffer_);
-        prevIndexBuffer_ = std::move(indexBuffer_);
-        prevIndexCount_ = indexCount_;
-
-        VkDeviceSize vertexSize = totalVerts * sizeof(ChunkVertex);
-        VkDeviceSize indexSize = totalIndices * sizeof(uint16_t);
-
-        vertexBuffer_ = std::make_unique<Buffer>(
-            device_, vertexSize,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        indexBuffer_ = std::make_unique<Buffer>(
-            device_, indexSize,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
         // Merge all sub-chunks with geometry into combined CPU buffers
         std::vector<ChunkVertex> combinedVerts;
         std::vector<uint16_t> combinedIndices;
@@ -187,98 +170,19 @@ namespace lve {
             baseVertex += static_cast<uint32_t>(sub.vertices.size());
         }
 
-        // Copy to staging and submit transfer
-        StagingAllocation staging = device_.getStagingArena().alloc(vertexSize + indexSize);
-        std::memcpy(staging.data, combinedVerts.data(), vertexSize);
-        std::memcpy(static_cast<char*>(staging.data) + vertexSize,
-                    combinedIndices.data(), indexSize);
+        ChunkUploadData uploadData{};
+        uploadData.chunkKey = makeChunkKey(gridPos_.x, gridPos_.y);
+        uploadData.vertices = std::move(combinedVerts);
+        uploadData.indices = std::move(combinedIndices);
 
-        if (uploadCompleteFence_ == VK_NULL_HANDLE) {
-            VkFenceCreateInfo info{};
-            info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            vkCreateFence(device_.device(), &info, nullptr, &uploadCompleteFence_);
-        } else {
-            vkResetFences(device_.device(), 1, &uploadCompleteFence_);
-        }
-
-        VkCommandBuffer cmd = device_.beginSingleTimeCommands();
-        uploadCmd_ = cmd;
-        {
-            VkBufferCopy copy{};
-            copy.srcOffset = staging.offset;
-            copy.size = vertexSize;
-            vkCmdCopyBuffer(cmd, staging.buffer, vertexBuffer_->getHandle(), 1, &copy);
-        }
-        {
-            VkBufferCopy copy{};
-            copy.srcOffset = staging.offset + vertexSize;
-            copy.size = indexSize;
-            vkCmdCopyBuffer(cmd, staging.buffer, indexBuffer_->getHandle(), 1, &copy);
-        }
-        device_.submitAsync(cmd, uploadCompleteFence_);
-
-        indexCount_ = static_cast<uint32_t>(totalIndices);
+        MessageBus::Get().send(ThreadName::Renderer, [uploadData = std::move(uploadData)]() {
+            RenderThread::getInstance().getUploader().upload(uploadData);
+        });
 
         // Sub-chunk CPU data persists for future partial rebuilds
         for (auto& sub : subChunks_) {
             sub.meshNeeded = false;
         }
-    }
-
-    void Chunk::bindAndDraw(VkCommandBuffer cmd) {
-        if (!vertexBuffer_ || !indexBuffer_) return;
-
-        VkBuffer vb;
-        VkBuffer ib;
-        uint32_t count;
-
-        if (uploadCompleteFence_ != VK_NULL_HANDLE) {
-            VkResult r = vkGetFenceStatus(device_.device(), uploadCompleteFence_);
-            if (r == VK_NOT_READY) {
-                if (!prevVertexBuffer_ || !prevIndexBuffer_) return;
-                vb = prevVertexBuffer_->getHandle();
-                ib = prevIndexBuffer_->getHandle();
-                count = prevIndexCount_;
-            } else {
-                if (uploadCmd_ != VK_NULL_HANDLE) {
-                    vkFreeCommandBuffers(device_.device(), device_.getCommandPool(), 1, &uploadCmd_);
-                    uploadCmd_ = VK_NULL_HANDLE;
-                }
-                vkDestroyFence(device_.device(), uploadCompleteFence_, nullptr);
-                uploadCompleteFence_ = VK_NULL_HANDLE;
-                vb = vertexBuffer_->getHandle();
-                ib = indexBuffer_->getHandle();
-                count = indexCount_;
-            }
-        } else {
-            vb = vertexBuffer_->getHandle();
-            ib = indexBuffer_->getHandle();
-            count = indexCount_;
-        }
-
-        VkBuffer bufs[] = {vb};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(cmd, 0, 1, bufs, offsets);
-        vkCmdBindIndexBuffer(cmd, ib, 0, VK_INDEX_TYPE_UINT16);
-        vkCmdDrawIndexed(cmd, count, 1, 0, 0, 0);
-    }
-
-    void Chunk::cleanup() {
-        if (vertexBuffer_ || indexBuffer_ || prevVertexBuffer_ || prevIndexBuffer_) {
-            vkDeviceWaitIdle(device_.device());
-        }
-        if (uploadCompleteFence_ != VK_NULL_HANDLE) {
-            vkDestroyFence(device_.device(), uploadCompleteFence_, nullptr);
-            uploadCompleteFence_ = VK_NULL_HANDLE;
-        }
-        if (uploadCmd_ != VK_NULL_HANDLE) {
-            vkFreeCommandBuffers(device_.device(), device_.getCommandPool(), 1, &uploadCmd_);
-            uploadCmd_ = VK_NULL_HANDLE;
-        }
-        vertexBuffer_.reset();
-        indexBuffer_.reset();
-        prevVertexBuffer_.reset();
-        prevIndexBuffer_.reset();
     }
 
 } // namespace lve

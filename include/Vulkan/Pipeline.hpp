@@ -42,7 +42,7 @@ namespace lve {
                 Device &device,
                 const std::vector<char>& vertCode,
                 const std::vector<char>& fragCode,
-                const PipelineConfigInfo configInfo);
+                const PipelineConfigInfo& configInfo);
 
         ~Pipeline();
 

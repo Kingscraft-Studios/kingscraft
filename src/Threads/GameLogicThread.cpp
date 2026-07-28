@@ -13,6 +13,7 @@ namespace lve {
         prevTime_ = TimeUtil::uptimeSeconds();
         mailbox_ = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::GameLogic, mailbox_);
+        world = std::make_unique<World>(terrainGen, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
         registerAllKeys();
     }
 
@@ -29,7 +30,9 @@ namespace lve {
 
         tick();
     }
-}
+
+    screenManager.reset();
+    }
 
 void GameLogicThread::tick() {
     double currentTime = TimeUtil::uptimeSeconds();
@@ -41,21 +44,30 @@ void GameLogicThread::tick() {
     double tickStart = TimeUtil::uptimeSeconds();
     while (tickAccumulator_ >= TICK_INTERVAL)
     {
-        if (RenderThread::getInstance().isRunning() && screenManager->hasScreen())
-        {
+        if (screenManager->hasScreen()) {
             screenManager->tick(TICK_INTERVAL);
         }
         tickAccumulator_ -= TICK_INTERVAL;
     }
 
     cpuTickMs_ = (TimeUtil::uptimeSeconds() - tickStart) * 1000.0;
+        FrameExchange& exchange = Engine::Get().getFrameExchange();
+        FrameScene& scene = exchange.writeFrame();
+        if (screenManager->hasScreen()) {
+            screenManager->render(scene);
+        }
+        scene.stats.delta = dt_;
+        scene.stats.cpuTickMs = cpuTickMs_;
+        exchange.publish();
+
     tickReady_.store(true, std::memory_order_release);
 }
 
 void GameLogicThread::stop() {
     running_.store(false, std::memory_order_release);
-    if (mailbox_)
+    if (mailbox_) {
         mailbox_->stop();
+    }
         MessageBus::Get().unsubscribe(ThreadName::GameLogic);
 }
 

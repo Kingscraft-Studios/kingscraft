@@ -20,7 +20,7 @@ namespace lve {
     };
 
     struct UiPass {
-        bool enabled = true;
+        bool enabled;
     };
 
     struct FrameStats {

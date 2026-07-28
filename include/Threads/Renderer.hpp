@@ -24,9 +24,9 @@ namespace lve {
         UiWrapper& getUI() { return app->getUiSystem(); }
         ProfilingCapture& getProfilerCapture() { return app->getProfileCapture(); }
         Renderer& getRenderer() { return app->getRenderer(); }
-        World& getWorld() { return app->getWorld(); }
         TextureCache& getTexCache() { return app->getTextureCache();}
         Device& getDevice() { return app->getDevice(); }
+        ChunkUploadProcessor& getUploader() { return  app->getChunkUploadProcessor(); }
     private:
         std::function<void()> quitCallback_;
         std::shared_ptr<Mailbox> mailbox_;

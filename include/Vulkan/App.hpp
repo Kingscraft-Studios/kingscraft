@@ -10,9 +10,11 @@
 #include "UI/Debug/ProfilingCapture.hpp"
 #include <memory>
 
+#include "Core/World/ChunkUploadProcessor.hpp"
 #include "Core/World/World.hpp"
 #include "Core/World/TerrainGenerator.hpp"
 #include "Renderer/RendererSettings.hpp"
+#include "Renderer/WorldRenderer.hpp"
 #include "Threads/InputThread.hpp"
 #include "Util/TimeUtil.hpp"
 
@@ -54,13 +56,13 @@ namespace lve {
         ProfilingCapture& getProfileCapture() {return profilingCapture_;}
         PostProcessing& getPostProcessor() { return *postProcessor_; }
         TextureCache& getTextureCache() { return *textureCache_; }
-        World& getWorld() { return *world_; }
         VkExtent2D getExtent() { return InputThread::getInstance().getExtent().toVKExtent(); }
+        ChunkUploadProcessor& getChunkUploadProcessor() { return chunkProcessor; }
         double getCpuFrameTimeMs() const { return cpuFrameTimeMs_; }
         double getCpuSubmitMs() const { return cpuSubmitMs_; }
 
     private:
-        void drawFrame();
+        void drawFrame(const FrameScene& scene);
         void recreateSwapChain();
         Device device;
         std::unique_ptr<Renderer> renderer = std::make_unique<Renderer>(device, InputThread::getInstance().getExtent().toVKExtent());
@@ -69,9 +71,9 @@ namespace lve {
         std::unique_ptr<PostProcessing> postProcessor_;
         std::unique_ptr<ResourceManager> resourceManager = std::make_unique<ResourceManager>(device);
         std::unique_ptr<UiWrapper> uiSystem = std::make_unique<UiWrapper>();
-        DefaultTerrainGenerator terrainGen_;
-        std::unique_ptr<World> world_ = std::make_unique<World>(device, terrainGen_, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
         ProfilingCapture profilingCapture_;
+        ChunkUploadProcessor chunkProcessor;
+        WorldRenderer worldRenderer;
 
         QueueFamilyIndices indices = device.findPhysicalQueueFamilies();
         bool requestSwapchainRecreate = false;
@@ -80,6 +82,8 @@ namespace lve {
         VkExtent2D lastExtent{0, 0};
         RenderState renderState = RenderState::Running;
         double currentFrameStart_ = 0.0;
+
+        bool worldRendererInitialized = false;
     };
 
 }  // namespace lve

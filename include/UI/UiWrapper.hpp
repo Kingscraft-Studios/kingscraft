@@ -35,8 +35,8 @@ namespace lve {
         void onKey(int key, int action);
         void onChar(unsigned int codepoint);
 
-        void renderOffscreen(VkCommandBuffer cmdBuffer);
-        void render(VkCommandBuffer cmdBuffer, VkRenderPass renderPass);
+        void renderOffscreen(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
+        void render(VkCommandBuffer cmdBuffer, VkRenderPass renderPass, uint32_t frameIndex);
 
         void addElement(UiElement* element);
         void removeElement(UiElement* element);

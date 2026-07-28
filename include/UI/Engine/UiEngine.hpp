@@ -32,8 +32,8 @@ namespace lve {
 
         // Frame lifecycle
         void beginFrame();
-        void renderOffscreen(VkCommandBuffer cmd);
-        void composite(VkCommandBuffer cmd);
+        void renderOffscreen(VkCommandBuffer cmd, uint32_t frameIndex);
+        void composite(VkCommandBuffer cmd, uint32_t frameIndex);
 
         // Draw commands
         void addQuad(const UiVertex verts[4], const uint32_t indices[6]);

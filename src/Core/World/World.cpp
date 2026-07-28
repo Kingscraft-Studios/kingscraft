@@ -1,8 +1,11 @@
 #include "Core/World/World.hpp"
-#include "Vulkan/Device.hpp"
+#include "Core/World/ChunkKey.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+
+#include "Bus/MessageBus.hpp"
+#include "Threads/Renderer.hpp"
 
 namespace {
 
@@ -26,8 +29,8 @@ namespace {
 
 namespace lve {
 
-    World::World(Device& device, ITerrainGenerator& terrainGen, int chunkSize, int height)
-        : device_(device), terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height) {
+    World::World(ITerrainGenerator& terrainGen, int chunkSize, int height)
+        : terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height) {
         genThread_ = std::thread([this]() { genThreadFunc(); });
     }
 
@@ -46,26 +49,21 @@ namespace lve {
         }
     }
 
-    uint64_t World::packKey(int gx, int gz) {
-        return (static_cast<uint64_t>(static_cast<int64_t>(gx)) << 32) |
-                (static_cast<uint64_t>(static_cast<int64_t>(gz)) & 0xFFFFFFFF);
-    }
-
     int World::worldToGrid(float worldCoord, int chunkSize) {
         return static_cast<int>(std::floor(worldCoord / chunkSize));
     }
 
     bool World::isChunkLoaded(int gridX, int gridZ) const {
-        return chunks_.find(packKey(gridX, gridZ)) != chunks_.end();
+        return chunks_.find(makeChunkKey(gridX, gridZ)) != chunks_.end();
     }
 
     Chunk* World::getChunk(int gridX, int gridZ) {
-        auto it = chunks_.find(packKey(gridX, gridZ));
+        auto it = chunks_.find(makeChunkKey(gridX, gridZ));
         return (it != chunks_.end()) ? it->second.get() : nullptr;
     }
 
     const Chunk* World::getChunk(int gridX, int gridZ) const {
-        auto it = chunks_.find(packKey(gridX, gridZ));
+        auto it = chunks_.find(makeChunkKey(gridX, gridZ));
         return (it != chunks_.end()) ? it->second.get() : nullptr;
     }
 
@@ -91,7 +89,7 @@ namespace lve {
         if (worldY < 0 || worldY >= height_) return 0;
         int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
         int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
-        auto it = chunks_.find(packKey(gx, gz));
+        auto it = chunks_.find(makeChunkKey(gx, gz));
         if (it == chunks_.end()) return 0;
         int lx = worldX - gx * chunkSize_;
         int lz = worldZ - gz * chunkSize_;
@@ -115,22 +113,22 @@ namespace lve {
             const std::vector<uint8_t>* pEdgePosZ = nullptr;
             const std::vector<uint8_t>* pEdgeNegZ = nullptr;
 
-            auto itPosX = chunks_.find(packKey(gx + 1, gz));
+            auto itPosX = chunks_.find(makeChunkKey(gx + 1, gz));
             if (itPosX != chunks_.end()) {
                 edgePosX = extractEdgeStrip(itPosX->second->getBlockData(), N, h, 0);
                 pEdgePosX = &edgePosX;
             }
-            auto itNegX = chunks_.find(packKey(gx - 1, gz));
+            auto itNegX = chunks_.find(makeChunkKey(gx - 1, gz));
             if (itNegX != chunks_.end()) {
                 edgeNegX = extractEdgeStrip(itNegX->second->getBlockData(), N, h, 1);
                 pEdgeNegX = &edgeNegX;
             }
-            auto itPosZ = chunks_.find(packKey(gx, gz + 1));
+            auto itPosZ = chunks_.find(makeChunkKey(gx, gz + 1));
             if (itPosZ != chunks_.end()) {
                 edgePosZ = extractEdgeStrip(itPosZ->second->getBlockData(), N, h, 2);
                 pEdgePosZ = &edgePosZ;
             }
-            auto itNegZ = chunks_.find(packKey(gx, gz - 1));
+            auto itNegZ = chunks_.find(makeChunkKey(gx, gz - 1));
             if (itNegZ != chunks_.end()) {
                 edgeNegZ = extractEdgeStrip(itNegZ->second->getBlockData(), N, h, 3);
                 pEdgeNegZ = &edgeNegZ;
@@ -155,7 +153,7 @@ namespace lve {
 
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
-            blockCache_[packKey(gridX, gridZ)] = blockIds;
+            blockCache_[makeChunkKey(gridX, gridZ)] = blockIds;
         }
 
         std::vector<uint8_t> edgePosX, edgeNegX, edgePosZ, edgeNegZ;
@@ -165,17 +163,17 @@ namespace lve {
         const std::vector<uint8_t>* pEdgeNegZ = nullptr;
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
-            auto it = blockCache_.find(packKey(gridX + 1, gridZ));
+            auto it = blockCache_.find(makeChunkKey(gridX + 1, gridZ));
             if (it != blockCache_.end()) { edgePosX = extractEdgeStrip(it->second, N, h, 0); pEdgePosX = &edgePosX; }
-            it = blockCache_.find(packKey(gridX - 1, gridZ));
+            it = blockCache_.find(makeChunkKey(gridX - 1, gridZ));
             if (it != blockCache_.end()) { edgeNegX = extractEdgeStrip(it->second, N, h, 1); pEdgeNegX = &edgeNegX; }
-            it = blockCache_.find(packKey(gridX, gridZ + 1));
+            it = blockCache_.find(makeChunkKey(gridX, gridZ + 1));
             if (it != blockCache_.end()) { edgePosZ = extractEdgeStrip(it->second, N, h, 2); pEdgePosZ = &edgePosZ; }
-            it = blockCache_.find(packKey(gridX, gridZ - 1));
+            it = blockCache_.find(makeChunkKey(gridX, gridZ - 1));
             if (it != blockCache_.end()) { edgeNegZ = extractEdgeStrip(it->second, N, h, 3); pEdgeNegZ = &edgeNegZ; }
         }
 
-        auto chunk = std::make_unique<Chunk>(device_, glm::ivec2(gridX, gridZ), N, 1.0f, h);
+        auto chunk = std::make_unique<Chunk>(glm::ivec2(gridX, gridZ), N, 1.0f, h);
         chunk->setBlockData(blockIds, N, h);
         for (auto& sub : chunk->getSubChunks()) {
             ChunkMesher::generateSubChunk(sub, chunk->getBlockData(), N, h, sub.yBase,
@@ -183,19 +181,28 @@ namespace lve {
         }
         chunk->upload();
 
-        chunks_[packKey(gridX, gridZ)] = std::move(chunk);
+        chunks_[makeChunkKey(gridX, gridZ)] = std::move(chunk);
         chunkCacheDirty_ = true;
     }
 
     void World::unloadChunk(int gridX, int gridZ) {
-        auto it = chunks_.find(packKey(gridX, gridZ));
+        uint64_t key = makeChunkKey(gridX, gridZ);  // compute once
+
+        auto it = chunks_.find(key);
         if (it == chunks_.end()) return;
+
         int idx = static_cast<int>(frameCount_ % pendingCleanup_.size());
         pendingCleanup_[idx].push_back(std::move(it->second));
         chunks_.erase(it);
+
+        // NEW: Signal render thread to defer GPU cleanup
+        MessageBus::Get().send(ThreadName::Renderer, [key]() {
+            RenderThread::getInstance().getUploader().unload(key);
+        });
+
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
-            blockCache_.erase(packKey(gridX, gridZ));
+            blockCache_.erase(key);
         }
         chunkCacheDirty_ = true;
     }
@@ -231,7 +238,7 @@ namespace lve {
 
             {
                 std::lock_guard<std::mutex> lock(cacheMutex_);
-                blockCache_[packKey(gx, gz)] = blockIds;
+                blockCache_[makeChunkKey(gx, gz)] = blockIds;
             }
 
             std::vector<uint8_t> edgePosX, edgeNegX, edgePosZ, edgeNegZ;
@@ -241,17 +248,17 @@ namespace lve {
             const std::vector<uint8_t>* pEdgeNegZ = nullptr;
             {
                 std::lock_guard<std::mutex> lock(cacheMutex_);
-                auto it = blockCache_.find(packKey(gx + 1, gz));
+                auto it = blockCache_.find(makeChunkKey(gx + 1, gz));
                 if (it != blockCache_.end()) { edgePosX = extractEdgeStrip(it->second, N, h, 0); pEdgePosX = &edgePosX; }
-                it = blockCache_.find(packKey(gx - 1, gz));
+                it = blockCache_.find(makeChunkKey(gx - 1, gz));
                 if (it != blockCache_.end()) { edgeNegX = extractEdgeStrip(it->second, N, h, 1); pEdgeNegX = &edgeNegX; }
-                it = blockCache_.find(packKey(gx, gz + 1));
+                it = blockCache_.find(makeChunkKey(gx, gz + 1));
                 if (it != blockCache_.end()) { edgePosZ = extractEdgeStrip(it->second, N, h, 2); pEdgePosZ = &edgePosZ; }
-                it = blockCache_.find(packKey(gx, gz - 1));
+                it = blockCache_.find(makeChunkKey(gx, gz - 1));
                 if (it != blockCache_.end()) { edgeNegZ = extractEdgeStrip(it->second, N, h, 3); pEdgeNegZ = &edgeNegZ; }
             }
 
-            auto tempChunk = std::make_unique<Chunk>(device_, glm::ivec2(gx, gz), N, 1.0f, h);
+            auto tempChunk = std::make_unique<Chunk>(glm::ivec2(gx, gz), N, 1.0f, h);
             tempChunk->setBlockData(blockIds, N, h);
             for (auto& sub : tempChunk->getSubChunks()) {
                 ChunkMesher::generateSubChunk(sub, tempChunk->getBlockData(), N, h, sub.yBase,
@@ -278,7 +285,7 @@ namespace lve {
         }
 
         for (auto& r : results) {
-            uint64_t key = packKey(r.gx, r.gz);
+            uint64_t key = makeChunkKey(r.gx, r.gz);
             {
                 std::lock_guard<std::mutex> lock(genMutex_);
                 pendingRequests_.erase(key);
@@ -333,7 +340,7 @@ namespace lve {
             std::lock_guard<std::mutex> lock(genMutex_);
             for (int r = HIGH_PRIO_RADIUS + 1; r <= renderDistance; ++r) {
                 auto tryQueue = [&](int gx, int gz) {
-                    uint64_t key = packKey(gx, gz);
+                    uint64_t key = makeChunkKey(gx, gz);
                     if (chunks_.count(key)) return;
                     if (pendingRequests_.count(key)) return;
                     if (queued >= MAX_REQUESTS_PER_FRAME) return;

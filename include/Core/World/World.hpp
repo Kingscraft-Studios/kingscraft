@@ -17,11 +17,9 @@
 
 namespace lve {
 
-    class Device;
-
     class World {
     public:
-        World(Device& device, ITerrainGenerator& terrainGen, int chunkSize, int height);
+        World(ITerrainGenerator& terrainGen, int chunkSize, int height);
         ~World();
 
         void unloadChunk(int gridX, int gridZ);
@@ -52,7 +50,7 @@ namespace lve {
         };
 
         Chunk* getChunk(int gridX, int gridZ);
-        static uint64_t packKey(int gx, int gz);
+
         void loadChunkSync(int gridX, int gridZ);
         void genThreadFunc();
 
@@ -60,7 +58,6 @@ namespace lve {
         static constexpr int MAX_REQUESTS_PER_FRAME = 50;
         static constexpr int CLEANUP_DELAY = 4;
 
-        Device& device_;
         ITerrainGenerator& terrainGen_;
         int chunkSize_;
         int height_;

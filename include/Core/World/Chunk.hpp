@@ -58,8 +58,7 @@ namespace lve {
 
     class Chunk {
     public:
-        Chunk(Device& device, glm::ivec2 gridPos, int verticesPerAxis, float spacing, int height);
-        ~Chunk();
+        Chunk(glm::ivec2 gridPos, int verticesPerAxis, float spacing, int height);
 
         glm::ivec2 getGridPos() const { return gridPos_; }
         glm::vec3 getWorldOrigin() const { return worldOrigin_; }
@@ -87,14 +86,9 @@ namespace lve {
         void markDirty();
         void markRemeshed();
 
-        uint32_t getIndexCount() const { return indexCount_; }
-
         void upload();
-        void bindAndDraw(VkCommandBuffer cmd);
-        void cleanup();
 
     private:
-        Device& device_;
         glm::ivec2 gridPos_;
         glm::vec3 worldOrigin_;
         int verticesPerAxis_;
@@ -112,15 +106,6 @@ namespace lve {
 
         void rebuildHeightmap();
         void updateMinMaxHeight();
-
-        std::unique_ptr<Buffer> vertexBuffer_;
-        std::unique_ptr<Buffer> indexBuffer_;
-        std::unique_ptr<Buffer> prevVertexBuffer_;
-        std::unique_ptr<Buffer> prevIndexBuffer_;
-        uint32_t indexCount_ = 0;
-        uint32_t prevIndexCount_ = 0;
-        VkFence uploadCompleteFence_ = VK_NULL_HANDLE;
-        VkCommandBuffer uploadCmd_ = VK_NULL_HANDLE;
     };
 
 } // namespace lve

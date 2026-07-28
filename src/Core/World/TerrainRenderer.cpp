@@ -1,9 +1,10 @@
 #include "Core/World/TerrainRenderer.hpp"
+#include "Core/World/ChunkKey.hpp"
 #include "Core/Frustum.hpp"
 #include "Vulkan/TextureCache.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Util/TimeUtil.hpp"
-#include "Util/Preloader.hpp"
+#include "../../../include/Core/Bootstrapper.hpp"
 #include "Core/World/Chunk.hpp"
 #include <algorithm>
 #include <cmath>
@@ -12,20 +13,10 @@
 
 namespace lve {
 
-    struct TerrainPushConstants {
-        glm::mat4 viewProj;     // 64 bytes
-        glm::vec4 chunkOrigin;  // 16 bytes
-    };
-
     static constexpr float FRUSTUM_MARGIN = 1.0f;
     static constexpr float OCCLUSION_EPSILON = 1.5f;
     static constexpr float OCCLUSION_NEAR_FACTOR = 4.0f;
     static constexpr float DDA_SAMPLE_OFFSET = 0.001f;
-
-    static uint64_t makeChunkKey(int x, int z) {
-        return (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32) |
-               static_cast<uint32_t>(z);
-    }
 
     // DDA traversal of a single ray through chunk columns on the XZ plane.
     // Marks every column the ray passes through as "reached".
@@ -37,8 +28,7 @@ namespace lve {
         const glm::vec3& origin, const glm::vec3& dir,
         float maxDist, float cs, float epsilon,
         ChunkLookupFn lookupFn, void* lookupContext,
-        std::unordered_set<uint64_t>& reached)
-    {
+        std::unordered_set<uint64_t>& reached) {
         int gx = static_cast<int>(std::floor(origin.x / cs));
         int gz = static_cast<int>(std::floor(origin.z / cs));
 
@@ -106,78 +96,10 @@ namespace lve {
         }
     }
 
-    TerrainRenderer::~TerrainRenderer() {
-        cleanup();
-    }
-
-    void TerrainRenderer::init(Device& device, TextureCache& textureCache, VkRenderPass renderPass) {
-        device_ = &device;
-        textureCache_ = &textureCache;
-        renderPass_ = renderPass;
-        createPipelineLayout(textureCache);
-        lastDisableTextures_ = RendererSettings::get().disableTextures;
-        createPipeline(lastDisableTextures_);
-    }
-
-    void TerrainRenderer::cleanup() {
-        pipeline_.reset();
-        if (pipelineLayout_ != VK_NULL_HANDLE && device_) {
-            vkDestroyPipelineLayout(device_->device(), pipelineLayout_, nullptr);
-            pipelineLayout_ = VK_NULL_HANDLE;
-        }
-    }
-
-    void TerrainRenderer::createPipelineLayout(TextureCache& textureCache) {
-        VkPushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(TerrainPushConstants);
-
-        VkDescriptorSetLayout texLayout = textureCache.getLayout();
-
-        VkPipelineLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        layoutInfo.pushConstantRangeCount = 1;
-        layoutInfo.pPushConstantRanges = &pushConstantRange;
-        layoutInfo.setLayoutCount = (texLayout != VK_NULL_HANDLE) ? 1 : 0;
-        layoutInfo.pSetLayouts = (texLayout != VK_NULL_HANDLE) ? &texLayout : nullptr;
-
-        if (vkCreatePipelineLayout(device_->device(), &layoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create pipeline layout!");
-        }
-    }
-
-    void TerrainRenderer::createPipeline(bool disableTextures) {
-        auto& vertShaderCode = Preloader::Get().getShader("resources/shaders/terrain.vert.spv");
-        auto& fragShaderCode = Preloader::Get().getShader("resources/shaders/terrain.frag.spv");
-
-        PipelineConfigInfo configInfo{};
-        Pipeline::defaultPipelineConfigInfo(configInfo);
-        configInfo.rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-
-        VkSpecializationMapEntry entry{};
-        entry.constantID = 0;
-        entry.offset = 0;
-        entry.size = sizeof(uint32_t);
-        configInfo.specMapEntries = {entry};
-        uint32_t specValue = disableTextures ? 1 : 0;
-        configInfo.specData = {specValue};
-
-        auto bindingDesc = ChunkVertex::getBindingDescription();
-        auto attributeDescs = ChunkVertex::getAttributeDescriptions();
-        configInfo.bindingDescriptions = {bindingDesc};
-        configInfo.attributeDescriptions = {attributeDescs.begin(), attributeDescs.end()};
-
-        configInfo.renderPass = renderPass_;
-        configInfo.pipelineLayout = pipelineLayout_;
-
-        pipeline_ = std::make_unique<Pipeline>(*device_, vertShaderCode, fragShaderCode, configInfo);
-    }
 
     void TerrainRenderer::computeFrustumVisibleChunks(
         const glm::vec3& cameraPos, const glm::mat4& viewProj,
-        float cs, ChunkLookupFn lookupFn, void* lookupContext)
-    {
+        float cs, ChunkLookupFn lookupFn, void* lookupContext) {
         reachedSet_.clear();
 
         // Underground detection.
@@ -240,7 +162,7 @@ namespace lve {
         }
     }
 
-    void TerrainRenderer::render(VkCommandBuffer cmd, const std::vector<Chunk*>& chunks,
+    void TerrainRenderer::render(FrameScene& scene, const std::vector<Chunk*>& chunks,
                                  const glm::mat4& viewProj, const glm::vec3& cameraPos,
                                  bool enableFrustumCulling, float worldHeight,
                                  ChunkLookupFn lookupFn, void* lookupContext,
@@ -248,27 +170,9 @@ namespace lve {
                                   uint32_t* outVisibleChunks,
                                   uint32_t* outVisibleSubChunks,
                                   uint32_t* outOcclusionTested,
-                                  uint32_t* outOcclusionRemoved)
-    {
-        if (!pipeline_) return;
+                                  uint32_t* outOcclusionRemoved) {
 
-        bool currentDisableTextures = RendererSettings::get().disableTextures;
-        if (currentDisableTextures != lastDisableTextures_) {
-            lastDisableTextures_ = currentDisableTextures;
-            pipeline_.reset();
-            createPipeline(currentDisableTextures);
-        }
-
-        pipeline_->bind(cmd);
-
-        if (textureCache_) {
-            VkDescriptorSet texSet = textureCache_->getDescriptorSet();
-            if (texSet != VK_NULL_HANDLE) {
-                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        pipelineLayout_, 0, 1, &texSet, 0, nullptr);
-            }
-        }
-
+        scene.camera.position = cameraPos;
         std::vector<Chunk*> visible;
         visible.reserve(chunks.size());
 
@@ -286,7 +190,7 @@ namespace lve {
                 glm::vec3 min = origin - glm::vec3(FRUSTUM_MARGIN, 0.0f, FRUSTUM_MARGIN);
                 glm::vec3 max = origin + glm::vec3(chunkSize + FRUSTUM_MARGIN, worldHeight, chunkSize + FRUSTUM_MARGIN);
                 if (!frustum.isVisible(min, max)) continue;
-                if (chunk->getIndexCount() == 0) continue;
+                if (chunk->getSubChunks().empty()) continue;
                 visible.push_back(chunk);
                 for (auto& sub : chunk->getSubChunks())
                     if (sub.indexCount > 0) visibleSubCount++;
@@ -301,7 +205,7 @@ namespace lve {
                 });
         } else {
             for (Chunk* chunk : chunks) {
-                if (chunk->getIndexCount() == 0) continue;
+                if (chunk->getSubChunks().empty()) continue;
                 visible.push_back(chunk);
                 for (auto& sub : chunk->getSubChunks())
                     if (sub.indexCount > 0) visibleSubCount++;
@@ -343,12 +247,12 @@ namespace lve {
             *outFrustumMs = (TimeUtil::uptimeSeconds() - frustumStart) * 1000.0;
 
         double drawStart = TimeUtil::uptimeSeconds();
-        TerrainPushConstants pc{};
-        pc.viewProj = viewProj;
-        for (Chunk* chunk : visible) {
-            pc.chunkOrigin = glm::vec4(chunk->getWorldOrigin(), 0.0f);
-            vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(TerrainPushConstants), &pc);
-            chunk->bindAndDraw(cmd);
+        scene.terrain.draws.clear();
+        scene.terrain.renderTerrain = !visible.empty();
+        for (Chunk* c : visible) {
+            scene.terrain.draws.push_back({
+            makeChunkKey(c->getGridPos().x, c->getGridPos().y),
+            c->getWorldOrigin()});
         }
         if (outDrawMs)
             *outDrawMs = (TimeUtil::uptimeSeconds() - drawStart) * 1000.0;
@@ -357,10 +261,7 @@ namespace lve {
             *outVisibleChunks = static_cast<uint32_t>(visible.size());
         if (outVisibleSubChunks)
             *outVisibleSubChunks = visibleSubCount;
-    }
-
-    void TerrainRenderer::onRenderPassChanged(VkRenderPass renderPass) {
-        renderPass_ = renderPass;
+        scene.ui.enabled = true;
     }
 
 } // namespace lve
