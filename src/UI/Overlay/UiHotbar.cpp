@@ -110,12 +110,13 @@ namespace lve {
         screenH_ = screenH;
     }
 
-    void UiHotbar::selectSlot(int index) {
+    void UiHotbar::selectSlot(UiWrapper& ui, int index) {
+        UiGuard guard(ui);
         selectedSlot_ = ((index % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
 
         float totalW = totalWidth();
         float anchorX = -totalW / 2.0f;
-        float offsetX = anchorX + selectedSlot_ * (SLOT_SIZE + SLOT_GAP);
+        float offsetX = anchorX + selectedSlot_.load(std::memory_order_relaxed) * (SLOT_SIZE + SLOT_GAP);
         selection_.setPixelOffset({offsetX, -SLOT_SIZE - BOTTOM_MARGIN});
         selection_.updateLayout(screenW_, screenH_);
     }

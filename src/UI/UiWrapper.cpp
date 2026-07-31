@@ -13,6 +13,7 @@ namespace lve {
     }
 
     void UiWrapper::init(Device& device, DescriptorManager& descriptorManager, VkExtent2D extent) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         if (initialized_) return;
 
         width_ = static_cast<int>(extent.width);
@@ -27,6 +28,7 @@ namespace lve {
     }
 
     void UiWrapper::shutdown() {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         if (!initialized_) return;
         elements_.clear();
         engine_->shutdown();
@@ -35,10 +37,12 @@ namespace lve {
     }
 
     void UiWrapper::update(double deltaTime) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         (void)deltaTime;
     }
 
     void UiWrapper::resize(int width, int height) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         width_ = width;
         height_ = height;
         if (engine_) {
@@ -50,6 +54,7 @@ namespace lve {
     }
 
     void UiWrapper::onMouseMove(double x, double y) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         if (!engine_) return;
 
         if (engine_->isDebugModeOn()) {
@@ -74,6 +79,7 @@ namespace lve {
     }
 
     void UiWrapper::onMouseButton(int button, int action, int mods, double x, double y) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         (void)mods;
         if (!engine_) return;
 
@@ -107,18 +113,22 @@ namespace lve {
     }
 
     void UiWrapper::onScroll(double dx, double dy) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         if (scrollCallback_) scrollCallback_(dx, dy);
     }
 
     void UiWrapper::onKey(int key, int action) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         (void)key; (void)action;
     }
 
     void UiWrapper::onChar(unsigned int codepoint) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         (void)codepoint;
     }
 
     void UiWrapper::renderOffscreen(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         if (!engine_) return;
 
         engine_->beginFrame();
@@ -135,6 +145,7 @@ namespace lve {
     }
 
     void UiWrapper::render(VkCommandBuffer cmdBuffer, VkRenderPass renderPass, uint32_t frameIndex) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         if (!engine_) return;
 
         if (renderPass != currentRenderPass_) {
@@ -146,6 +157,7 @@ namespace lve {
     }
 
     void UiWrapper::addElement(UiElement* element) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         uint32_t id = engine_->allocateElementId();
         element->setElementId(id);
         engine_->setElementStyle(id, element->getStyleIndex());
@@ -153,6 +165,7 @@ namespace lve {
     }
 
     void UiWrapper::removeElement(UiElement* element) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         auto it = std::find(elements_.begin(), elements_.end(), element);
         if (it != elements_.end()) {
             elements_.erase(it);
@@ -161,6 +174,7 @@ namespace lve {
     }
 
     void UiWrapper::markDirty(uint32_t elementId) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         if (!engine_) return;
         int styleIndex = -1;
         for (auto* element : elements_) {
@@ -173,7 +187,43 @@ namespace lve {
     }
 
     void UiWrapper::registerButtonHandler(std::string name, std::function<void()> handler) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         buttonHandlers_[name] = std::move(handler);
+    }
+
+    void UiWrapper::setScrollCallback(ScrollCallback cb) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        scrollCallback_ = std::move(cb);
+    }
+
+    uint32_t UiWrapper::registerStyle(const UiStyle& style) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        return engine_ ? engine_->registerStyle(style) : 0;
+    }
+
+    void UiWrapper::updateStylePool() {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        if (engine_) engine_->updateStylePool();
+    }
+
+    void UiWrapper::setBlockTexture(VkImageView imageView, VkSampler sampler) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        if (engine_) engine_->getRenderer().setBlockTexture(imageView, sampler);
+    }
+
+    void UiWrapper::setDebugMode(bool on) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        if (engine_) engine_->setDebugMode(on);
+    }
+
+    bool UiWrapper::isDebugModeOn() const {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        return engine_ && engine_->isDebugModeOn();
+    }
+
+    void UiWrapper::logSelectedElementPosition() {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        if (engine_) engine_->logSelectedElementPosition();
     }
 
 } // namespace lve

@@ -7,6 +7,7 @@
 #include "Engine/UiStyle.hpp"
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -31,7 +32,7 @@ namespace lve {
         void onMouseButton(int button, int action, int mods, double x, double y);
         using ScrollCallback = std::function<void(double, double)>;
         void onScroll(double dx, double dy);
-        void setScrollCallback(ScrollCallback cb) { scrollCallback_ = std::move(cb); }
+        void setScrollCallback(ScrollCallback cb);
         void onKey(int key, int action);
         void onChar(unsigned int codepoint);
 
@@ -43,19 +44,24 @@ namespace lve {
         void registerButtonHandler(std::string name, std::function<void()> handler);
 
         // Style system — delegates to engine
-        uint32_t registerStyle(const UiStyle& style) { return engine_ ? engine_->registerStyle(style) : 0; }
-        void updateStylePool() { if (engine_) engine_->updateStylePool(); }
+        uint32_t registerStyle(const UiStyle& style);
+        void updateStylePool();
         void markDirty(uint32_t elementId);
 
         // Block texture — delegates to renderer
-        void setBlockTexture(VkImageView imageView, VkSampler sampler) {
-            if (engine_) engine_->getRenderer().setBlockTexture(imageView, sampler);
-        }
+        void setBlockTexture(VkImageView imageView, VkSampler sampler);
 
         // Debug editing mode — delegates to engine
-        void setDebugMode(bool on) { if (engine_) engine_->setDebugMode(on); }
-        bool isDebugModeOn() const { return engine_ && engine_->isDebugModeOn(); }
-        void logSelectedElementPosition() { if (engine_) engine_->logSelectedElementPosition(); }
+        void setDebugMode(bool on);
+        bool isDebugModeOn() const;
+        void logSelectedElementPosition();
+
+        // Cross-thread UI mutation. The UI layer is owned by the render thread
+        // but is mutated by the game thread (screen init/cleanup, FPS text) and
+        // the input thread (key/scroll shortcuts). All public methods lock this
+        // mutex so element/engine state is never accessed concurrently.
+        void lockUI() const { uiMutex_.lock(); }
+        void unlockUI() const { uiMutex_.unlock(); }
 
     private:
         bool initialized_ = false;
@@ -69,6 +75,19 @@ namespace lve {
         VkRenderPass currentRenderPass_ = VK_NULL_HANDLE;
         std::unordered_map<std::string, std::function<void()>> buttonHandlers_;
         ScrollCallback scrollCallback_;
+        mutable std::recursive_mutex uiMutex_;
+    };
+
+    // RAII guard for mutating UI elements from a non-render thread.
+    class UiGuard {
+    public:
+        explicit UiGuard(const UiWrapper& ui) : ui_(ui) { ui_.lockUI(); }
+        ~UiGuard() { ui_.unlockUI(); }
+        UiGuard(const UiGuard&) = delete;
+        UiGuard& operator=(const UiGuard&) = delete;
+
+    private:
+        const UiWrapper& ui_;
     };
 
 } // namespace lve

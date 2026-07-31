@@ -4,6 +4,7 @@
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiImage.hpp"
 #include "Core/RegistryKey.hpp"
+#include <atomic>
 
 namespace lve { class Block; }
 
@@ -25,8 +26,8 @@ namespace lve {
         void cleanup(UiWrapper& ui);
 
         void resize(float screenW, float screenH);
-        void selectSlot(int index);
-        int getSelectedSlot() const { return selectedSlot_; }
+        void selectSlot(UiWrapper& ui, int index);
+        int getSelectedSlot() const { return selectedSlot_.load(std::memory_order_relaxed); }
 
         const RegistryKey<Block>* getSlotBlock(int slot) const {
             return (slot >= 0 && slot < SLOT_COUNT) ? slotBlocks_[slot] : nullptr;
@@ -37,7 +38,7 @@ namespace lve {
             return SLOT_COUNT * SLOT_SIZE + (SLOT_COUNT - 1) * SLOT_GAP;
         }
 
-        int selectedSlot_ = 0;
+        std::atomic<int> selectedSlot_{0};
         float screenW_ = 0.0f;
         float screenH_ = 0.0f;
 

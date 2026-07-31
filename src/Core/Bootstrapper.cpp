@@ -40,7 +40,7 @@ void Bootstrapper::loadAll() {
     // Pipeline cache
     try {
         pipelineCacheData_ = loadAndValidatePipelineCache();
-    } catch (std::runtime_error e) {
+    } catch (std::runtime_error& e) {
         LogUtils::error(ThreadName::Renderer, StringBuilder::build("Error: ", e.what()));
     }
 }

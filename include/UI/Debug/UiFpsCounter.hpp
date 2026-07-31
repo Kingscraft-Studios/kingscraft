@@ -10,7 +10,7 @@ namespace lve {
     class UiFpsCounter {
     public:
         void init(UiWrapper& ui);
-        void update();
+        void update(UiWrapper& ui);
         void setCpuGpuTimes(
             double cpuFrameMs, double gpuTotalMs,
             double worldGpuMs, double uiGpuMs,

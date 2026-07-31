@@ -24,13 +24,7 @@ public:
     void run();
     void stop();
 
-    void registerAllKeys();
-    void registerUICallbacks();
-
-    bool isTickReady() const;
-    void ackTick();
-    double getCpuTickMs() const;
-    double getDelta() const;
+    // Public Getters
     ScreenManager& getScreenManager() { return *screenManager; }
     World& getWorld() { return *world;}
     template<typename T, typename... Args>
@@ -40,10 +34,11 @@ public:
 
 private:
     void tick();
+    void registerAllKeys();
+    void registerUICallbacks();
 
     std::atomic<bool> running_{true};
     std::shared_ptr<Mailbox> mailbox_;
-    std::atomic<bool> tickReady_{false};
 
     double prevTime_ = 0.0;
     double dt_ = 0.0;

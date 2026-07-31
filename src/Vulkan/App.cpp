@@ -70,22 +70,18 @@ namespace lve {
 
         if (renderState == RenderState::Running) {
             const FrameScene& scene = Engine::Get().getFrameExchange().readFrame();
-            currentFrameStart_ = TimeUtil::uptimeSeconds();
-            if (GameLogicThread::getInstance().isTickReady()) {
-                GameLogicThread::getInstance().ackTick();
-                profilingCapture_.tick(GameLogicThread::getInstance().getDelta());
-                drawFrame(scene);
-                chunkProcessor.collectDestroyedChunks(scene.terrain.draws);
-            }
+            drawFrame(scene);
+            chunkProcessor.collectDestroyedChunks(scene.terrain.draws);
+            profilingCapture_.tick(scene.stats.delta);
 
             int maxFps = RendererSettings::get().maxFps;
             if (maxFps > 0) {
-                double frameTime = TimeUtil::uptimeSeconds() - currentFrameStart_;
                 double target = 1.0 / maxFps;
-                if (frameTime < target) {
-                    std::this_thread::sleep_for(std::chrono::duration<double>(target - frameTime));
+                if (scene.stats.delta < target) {
+                    std::this_thread::sleep_for(std::chrono::duration<double>(target - scene.stats.delta));
                 }
             }
+            Engine::Get().getFrameExchange().endRead();
         }
     }
 

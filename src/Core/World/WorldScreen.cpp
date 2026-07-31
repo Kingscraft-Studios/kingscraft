@@ -51,16 +51,16 @@ namespace lve {
 
         RenderThread::getInstance().getUI().setScrollCallback([this](double, double dy) {
             if (dy > 0)
-                hotbar_.selectSlot(hotbar_.getSelectedSlot() - 1);
+                hotbar_.selectSlot(RenderThread::getInstance().getUI(), hotbar_.getSelectedSlot() - 1);
             else if (dy < 0)
-                hotbar_.selectSlot(hotbar_.getSelectedSlot() + 1);
+                hotbar_.selectSlot(RenderThread::getInstance().getUI(), hotbar_.getSelectedSlot() + 1);
         });
 
         for (int i = 0; i < UiHotbar::SLOT_COUNT; ++i) {
             int key = Keys::_1 + i;
             MessageBus::Get().send(ThreadName::Input, [key, i, this]() {
                 InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Screen, {key}, [this, i]() {
-                    hotbar_.selectSlot(i);
+                    hotbar_.selectSlot(RenderThread::getInstance().getUI(), i);
                 });
             });
         }
@@ -106,7 +106,8 @@ namespace lve {
     }
 
     void WorldScreen::render(FrameScene& scene) {
-        fpsCounter_.update();
+        //TODO: Move to a Engine and make so Both Threads Reports
+        fpsCounter_.update(RenderThread::getInstance().getUI());
 
         auto& settings = RendererSettings::get();
         playerController_.updateProjection(extent_, settings.fov,

@@ -43,7 +43,8 @@ namespace lve {
         lastTime_ = TimeUtil::uptimeSeconds();
     }
 
-    void UiFpsCounter::update() {
+    void UiFpsCounter::update(UiWrapper& ui) {
+        UiGuard guard(ui);
         double now = TimeUtil::uptimeSeconds();
         double dt = now - lastTime_;
         lastTime_ = now;

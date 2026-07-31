@@ -4,7 +4,6 @@
 #include "Core/Keys.hpp"
 #include "Core/World/WorldScreen.hpp"
 #include "Threads/Engine.hpp"
-#include "Vulkan/App.hpp"
 #include "Util/TimeUtil.hpp"
 #include "Util/LogUtils.hpp"
 
@@ -19,59 +18,59 @@ namespace lve {
 
     void GameLogicThread::run() {
 
-
         registerUICallbacks();
-    while (running_) {
-        Message msg;
-        while (mailbox_->try_pop(msg))
-        {
-            if (msg.payload) msg.payload();
+        while (running_) {
+            Message msg;
+            while (mailbox_->try_pop(msg)) {
+                if (msg.payload) msg.payload();
+            }
+
+            tick();
         }
 
-        tick();
+        screenManager.reset();
     }
 
-    screenManager.reset();
-    }
+    void GameLogicThread::tick() {
+        double currentTime = TimeUtil::uptimeSeconds();
+        dt_ = currentTime - prevTime_;
+        prevTime_ = currentTime;
+        if (dt_ > 0.25) dt_ = 0.25;
 
-void GameLogicThread::tick() {
-    double currentTime = TimeUtil::uptimeSeconds();
-    dt_ = currentTime - prevTime_;
-    prevTime_ = currentTime;
-    if (dt_ > 0.25) dt_ = 0.25;
-
-    tickAccumulator_ += dt_;
-    double tickStart = TimeUtil::uptimeSeconds();
-    while (tickAccumulator_ >= TICK_INTERVAL)
-    {
-        if (screenManager->hasScreen()) {
-            screenManager->tick(TICK_INTERVAL);
+        tickAccumulator_ += dt_;
+        double tickStart = TimeUtil::uptimeSeconds();
+        while (tickAccumulator_ >= TICK_INTERVAL) {
+            // Tick Within 100hz Timer
+            if (screenManager->hasScreen()) {
+                screenManager->tick(TICK_INTERVAL);
+            }
+            tickAccumulator_ -= TICK_INTERVAL;
         }
-        tickAccumulator_ -= TICK_INTERVAL;
-    }
 
-    cpuTickMs_ = (TimeUtil::uptimeSeconds() - tickStart) * 1000.0;
+        cpuTickMs_ = (TimeUtil::uptimeSeconds() - tickStart) * 1000.0;
         FrameExchange& exchange = Engine::Get().getFrameExchange();
-        FrameScene& scene = exchange.writeFrame();
-        if (screenManager->hasScreen()) {
-            screenManager->render(scene);
+        FrameScene* scene = exchange.writeFrame();
+        if (!scene) {
+            return;
         }
-        scene.stats.delta = dt_;
-        scene.stats.cpuTickMs = cpuTickMs_;
+        if (screenManager->hasScreen()) {
+            screenManager->render(*scene);
+        }
+        // Set Statistics
+        scene->stats.delta = dt_;
+        scene->stats.cpuTickMs = cpuTickMs_;
         exchange.publish();
-
-    tickReady_.store(true, std::memory_order_release);
-}
-
-void GameLogicThread::stop() {
-    running_.store(false, std::memory_order_release);
-    if (mailbox_) {
-        mailbox_->stop();
     }
-        MessageBus::Get().unsubscribe(ThreadName::GameLogic);
-}
 
-void GameLogicThread::registerAllKeys() {
+    void GameLogicThread::stop() {
+        running_.store(false, std::memory_order_release);
+        if (mailbox_) {
+            mailbox_->stop();
+        }
+        MessageBus::Get().unsubscribe(ThreadName::GameLogic);
+    }
+
+    void GameLogicThread::registerAllKeys() {
 
         MessageBus::Get().send(ThreadName::Input, []() {
             InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F11}, []() {
@@ -119,8 +118,10 @@ void GameLogicThread::registerAllKeys() {
             InputThread::getInstance().setMouseButtonCallback([this](int button, int action, int mods) {
                 double x = InputThread::getInstance().getLastX();
                 double y = InputThread::getInstance().getLastY();
-                MessageBus::Get().send(ThreadName::Renderer, [this, button, action, mods, x, y]() {
+                MessageBus::Get().send(ThreadName::Renderer, [button, action, mods, x, y]() {
                     RenderThread::getInstance().getUI().onMouseButton(button, action, mods, x, y);
+                });
+                MessageBus::Get().send(ThreadName::GameLogic, [this, button, action, mods]() {
                     if (screenManager->getCurrent())
                         screenManager->getCurrent()->onMouseButton(button, action, mods);
                 });
@@ -153,7 +154,7 @@ void GameLogicThread::registerAllKeys() {
                 RenderThread::getInstance().getUI().onChar(codepoint);
             });
         });
-}
+    }
 
     void GameLogicThread::registerUICallbacks() {
         RenderThread::getInstance().getUI().registerButtonHandler(BTN_QUIT_GAME, []() {
@@ -167,17 +168,6 @@ void GameLogicThread::registerAllKeys() {
                 screenManager->setScreen<WorldScreen>();
             });
         });
-}
-
-bool GameLogicThread::isTickReady() const {
-    return tickReady_.load(std::memory_order_acquire);
-}
-
-void GameLogicThread::ackTick() {
-    tickReady_.store(false, std::memory_order_relaxed);
-}
-
-double GameLogicThread::getCpuTickMs() const { return cpuTickMs_; }
-double GameLogicThread::getDelta() const { return dt_; }
+    }
 
 }
