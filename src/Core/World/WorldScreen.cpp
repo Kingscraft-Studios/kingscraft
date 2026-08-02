@@ -13,6 +13,7 @@
 #include "Threads/GameLogicThread.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/Renderer.hpp"
+#include "Threads/Engine.hpp"
 
 namespace lve {
 
@@ -45,6 +46,11 @@ namespace lve {
             InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
         });
         fpsCounter_.init(RenderThread::getInstance().getUI());
+        Engine::Get().getDiagnostics().setDispatcher(ThreadName::Renderer,
+            [this](const FrameMetrics& frame) {
+                fpsCounter_.setFrame(frame);
+                fpsCounter_.update(RenderThread::getInstance().getUI());
+            });
         hotbar_.init(RenderThread::getInstance().getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         RenderThread::getInstance().getUI().resize(static_cast<int>(extent_.width),
                              static_cast<int>(extent_.height));
@@ -106,9 +112,6 @@ namespace lve {
     }
 
     void WorldScreen::render(FrameScene& scene) {
-        //TODO: Move to a Engine and make so Both Threads Reports
-        fpsCounter_.update(RenderThread::getInstance().getUI());
-
         auto& settings = RendererSettings::get();
         playerController_.updateProjection(extent_, settings.fov,
                                            settings.nearPlane, settings.farPlane);
@@ -128,52 +131,22 @@ namespace lve {
                                 &visibleSubChunks, &occlusionTested,
                                 &occlusionRemoved);
 
-        fpsCounter_.setCpuGpuTimes(
-            scene.stats.cpuFrameTimeMs,
-            RenderThread::getInstance().getRenderer().getGpuFrameTimeMs(),
-            RenderThread::getInstance().getRenderer().getWorldGpuMs(),
-            RenderThread::getInstance().getRenderer().getUiGpuMs(),
-            scene.stats.cpuTickMs,
-            0.0,
-            RenderThread::getInstance().getRenderer().getCmdRecordMs(),
-            frustumMs, drawMs,
-            RenderThread::getInstance().getRenderer().getMemBandwidthGBs(),
-            RenderThread::getInstance().getRenderer().getOverdraw(),
-            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_IA_VERTICES),
-            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_IA_PRIMITIVES),
-            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
-            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
-            RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_CLIP_PRIMS),
-            visibleChunks,
-            visibleSubChunks,
-            occlusionTested,
-            occlusionRemoved);
+        auto& cpuMetrics = Engine::Get().getDiagnostics().getCPUMetrics();
+        cpuMetrics.frustumMs = frustumMs;
+        cpuMetrics.drawMs = drawMs;
+        cpuMetrics.visibleChunks = visibleChunks;
+        cpuMetrics.visibleSubChunks = visibleSubChunks;
+        cpuMetrics.occlusionTested = occlusionTested;
+        cpuMetrics.occlusionRemoved = occlusionRemoved;
 
         if (RenderThread::getInstance().getProfilerCapture().isActive()) {
             RenderThread::getInstance().getProfilerCapture().feedFrame(
-                scene.stats.cpuFrameTimeMs,
-                RenderThread::getInstance().getRenderer().getGpuFrameTimeMs(),
-                RenderThread::getInstance().getRenderer().getWorldGpuMs(),
-                RenderThread::getInstance().getRenderer().getUiGpuMs(),
-                scene.stats.cpuTickMs,
-                0.0,
-                RenderThread::getInstance().getRenderer().getCmdRecordMs(),
-                frustumMs, drawMs,
-                RenderThread::getInstance().getRenderer().getMemBandwidthGBs(),
-                RenderThread::getInstance().getRenderer().getOverdraw(),
-                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_IA_VERTICES),
-                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_IA_PRIMITIVES),
-                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_VS_INVOCATIONS),
-                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_FS_INVOCATIONS),
-                RenderThread::getInstance().getRenderer().getPipelineStat(Renderer::STAT_CLIP_PRIMS),
-                visibleChunks,
-                visibleSubChunks,
-                occlusionTested,
-                occlusionRemoved);
+                Engine::Get().getDiagnostics().snapshot());
             scene.ui.enabled = true;
         }
     }
     void WorldScreen::cleanup() {
+        Engine::Get().getDiagnostics().clearDispatcher(ThreadName::Renderer);
         RenderThread::getInstance().getUI().setScrollCallback(nullptr);
         hotbar_.cleanup(RenderThread::getInstance().getUI());
         fpsCounter_.cleanup(RenderThread::getInstance().getUI());

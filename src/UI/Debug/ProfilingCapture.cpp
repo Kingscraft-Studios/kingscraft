@@ -47,42 +47,30 @@ namespace lve {
         }
     }
 
-    void ProfilingCapture::feedFrame(
-        double cpuFrameMs, double gpuTotalMs,
-        double worldGpuMs, double uiGpuMs,
-        double cpuTickMs, double cpuSubmitMs, double cmdRecordMs,
-        double frustumMs, double drawMs,
-        double memBwGBs, double overdraw,
-        uint64_t iaVerts, uint64_t iaPrims,
-        uint64_t vsInvoc, uint64_t fsInvoc,
-        uint64_t clipPrims,
-        uint32_t visibleChunks,
-        uint32_t visibleSubChunks,
-        uint32_t occlusionTested,
-        uint32_t occlusionRemoved)
+    void ProfilingCapture::feedFrame(const FrameMetrics& frame)
     {
         if (!active_) return;
 
-        cpuFrameMs_.push_back(cpuFrameMs);
-        gpuTotalMs_.push_back(gpuTotalMs);
-        worldGpuMs_.push_back(worldGpuMs);
-        uiGpuMs_.push_back(uiGpuMs);
-        cpuTickMs_.push_back(cpuTickMs);
-        cpuSubmitMs_.push_back(cpuSubmitMs);
-        cmdRecordMs_.push_back(cmdRecordMs);
-        frustumMs_.push_back(frustumMs);
-        drawMs_.push_back(drawMs);
-        memBwGBs_.push_back(memBwGBs);
-        overdraw_.push_back(overdraw);
-        iaVerts_.push_back(iaVerts);
-        iaPrims_.push_back(iaPrims);
-        vsInvoc_.push_back(vsInvoc);
-        fsInvoc_.push_back(fsInvoc);
-        clipPrims_.push_back(clipPrims);
-        visibleChunks_.push_back(visibleChunks);
-        visibleSubChunks_.push_back(visibleSubChunks);
-        occlusionTested_.push_back(occlusionTested);
-        occlusionRemoved_.push_back(occlusionRemoved);
+        cpuFrameMs_.push_back(frame.gpu.cpuFrameMs);
+        gpuTotalMs_.push_back(frame.gpu.gpuFrameMs);
+        worldGpuMs_.push_back(frame.gpu.worldGpuMs);
+        uiGpuMs_.push_back(frame.gpu.uiGpuMs);
+        cpuTickMs_.push_back(frame.cpu.tickMs);
+        cpuSubmitMs_.push_back(frame.gpu.cpuSubmitMs);
+        cmdRecordMs_.push_back(frame.gpu.cmdRecordMs);
+        frustumMs_.push_back(frame.cpu.frustumMs);
+        drawMs_.push_back(frame.cpu.drawMs);
+        memBwGBs_.push_back(frame.gpu.memBandwidthGBs);
+        overdraw_.push_back(frame.gpu.overdraw);
+        iaVerts_.push_back(frame.gpu.pipeline.iaVertices);
+        iaPrims_.push_back(frame.gpu.pipeline.iaPrimitives);
+        vsInvoc_.push_back(frame.gpu.pipeline.vsInvocations);
+        fsInvoc_.push_back(frame.gpu.pipeline.fsInvocations);
+        clipPrims_.push_back(frame.gpu.pipeline.clipPrims);
+        visibleChunks_.push_back(frame.cpu.visibleChunks);
+        visibleSubChunks_.push_back(frame.cpu.visibleSubChunks);
+        occlusionTested_.push_back(frame.cpu.occlusionTested);
+        occlusionRemoved_.push_back(frame.cpu.occlusionRemoved);
 
         frameCount_++;
     }

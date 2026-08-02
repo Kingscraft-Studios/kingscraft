@@ -50,11 +50,12 @@ namespace lve {
         lastTime_ = now;
 
         elapsed_ += dt;
-        frameCount_++;
+        frameCount_ += (latestFrames_ > prevFrames_) ? static_cast<int>(latestFrames_ - prevFrames_) : 0;
+        prevFrames_ = latestFrames_;
 
         if (elapsed_ >= 0.25) {
-            float fps = frameCount_ / static_cast<float>(elapsed_);
-            float ms = (elapsed_ / static_cast<double>(frameCount_)) * 1000.0f;
+            float fps = (frameCount_ > 0) ? frameCount_ / static_cast<float>(elapsed_) : 0.0f;
+            float ms = (frameCount_ > 0) ? (elapsed_ / static_cast<double>(frameCount_)) * 1000.0f : 0.0f;
 
             char buf[256];
             int n = snprintf(buf, sizeof(buf),
@@ -75,15 +76,12 @@ namespace lve {
             line2_.setText(std::string(buf2, n2));
 
             double cpuTotal = latestCpuMs_ + latestCpuTickMs_ + latestCpuSubmitMs_;
-            double wallMs = ms;
-            double gpuIdleMs = wallMs - latestGpuMs_ - cpuTotal;
-            if (gpuIdleMs < 0.0) gpuIdleMs = 0.0;
 
             char buf3[256];
             int n3 = snprintf(buf3, sizeof(buf3),
-                "CPU:%.1fms [Cmd:%.2f  Draw:%.1f  Sub:%.2f]  Idle:%.1fms  Occl:%u/%u",
+                "CPU:%.1fms [Cmd:%.2f  Draw:%.1f  Sub:%.2f]  CIdle:%.1fms  Occl:%u/%u",
                 cpuTotal, latestCmdRecordMs_, latestDrawMs_, latestCpuSubmitMs_,
-                gpuIdleMs, latestOcclusionRemoved_, latestOcclusionTested_);
+                latestCIdle_, latestOcclusionRemoved_, latestOcclusionTested_);
             line3_.setText(std::string(buf3, n3));
 
             elapsed_ = 0.0;
@@ -91,40 +89,29 @@ namespace lve {
         }
     }
 
-    void UiFpsCounter::setCpuGpuTimes(
-        double cpuFrameMs, double gpuTotalMs,
-        double worldGpuMs, double uiGpuMs,
-        double cpuTickMs, double cpuSubmitMs, double cmdRecordMs,
-        double frustumMs, double drawMs,
-        double memBwGBs, double overdraw,
-        uint64_t iaVerts, uint64_t iaPrims,
-        uint64_t vsInvoc, uint64_t fsInvoc,
-        uint64_t clipPrims,
-        uint32_t visibleChunks,
-        uint32_t visibleSubChunks,
-        uint32_t occlusionTested,
-        uint32_t occlusionRemoved)
-    {
-        latestCpuMs_ = cpuFrameMs;
-        latestGpuMs_ = gpuTotalMs;
-        latestWorldGpuMs_ = worldGpuMs;
-        latestUiGpuMs_ = uiGpuMs;
-        latestCpuTickMs_ = cpuTickMs;
-        latestCpuSubmitMs_ = cpuSubmitMs;
-        latestCmdRecordMs_ = cmdRecordMs;
-        latestFrustumMs_ = frustumMs;
-        latestDrawMs_ = drawMs;
-        latestMemBwGBs_ = memBwGBs;
-        latestOverdraw_ = overdraw;
-        latestIaVerts_ = iaVerts;
-        latestIaPrims_ = iaPrims;
-        latestVsInvoc_ = vsInvoc;
-        latestFsInvoc_ = fsInvoc;
-        latestClipPrims_ = clipPrims;
-        latestVisibleChunks_ = visibleChunks;
-        latestVisibleSubChunks_ = visibleSubChunks;
-        latestOcclusionTested_ = occlusionTested;
-        latestOcclusionRemoved_ = occlusionRemoved;
+    void UiFpsCounter::setFrame(const FrameMetrics& frame) {
+        latestCpuMs_ = frame.gpu.cpuFrameMs;
+        latestGpuMs_ = frame.gpu.gpuFrameMs;
+        latestWorldGpuMs_ = frame.gpu.worldGpuMs;
+        latestUiGpuMs_ = frame.gpu.uiGpuMs;
+        latestCpuTickMs_ = frame.cpu.tickMs;
+        latestCpuSubmitMs_ = frame.gpu.cpuSubmitMs;
+        latestCmdRecordMs_ = frame.gpu.cmdRecordMs;
+        latestFrustumMs_ = frame.cpu.frustumMs;
+        latestDrawMs_ = frame.cpu.drawMs;
+        latestMemBwGBs_ = frame.gpu.memBandwidthGBs;
+        latestOverdraw_ = frame.gpu.overdraw;
+        latestIaVerts_ = frame.gpu.pipeline.iaVertices;
+        latestIaPrims_ = frame.gpu.pipeline.iaPrimitives;
+        latestVsInvoc_ = frame.gpu.pipeline.vsInvocations;
+        latestFsInvoc_ = frame.gpu.pipeline.fsInvocations;
+        latestClipPrims_ = frame.gpu.pipeline.clipPrims;
+        latestVisibleChunks_ = frame.cpu.visibleChunks;
+        latestVisibleSubChunks_ = frame.cpu.visibleSubChunks;
+        latestOcclusionTested_ = frame.cpu.occlusionTested;
+        latestOcclusionRemoved_ = frame.cpu.occlusionRemoved;
+        latestFrames_ = frame.gpu.frames;
+        latestCIdle_ = frame.gpu.cIdle;
     }
 
     void UiFpsCounter::cleanup(UiWrapper& ui) {

@@ -1,6 +1,7 @@
 #include "Renderer/Renderer.hpp"
 #include "Core/Constants.hpp"
 #include "Util/TimeUtil.hpp"
+#include "Util/ScopedTimer.hpp"
 #include <stdexcept>
 #include <limits>
 #include <array>
@@ -82,13 +83,17 @@ void Renderer::recreateSwapChain(VkExtent2D newExtent) {
 }
 
 bool Renderer::beginFrame() {
+    cIdleMs_ = 0.0;
     VkFence inFlightFence = syncObjects_->getInFlight(currentFrame_);
-    vkWaitForFences(
-        device_.device(),
-        1,
-        &inFlightFence,
-        VK_TRUE,
-        std::numeric_limits<uint64_t>::max());
+    {
+        ScopedTimer t(cIdleMs_);
+        vkWaitForFences(
+            device_.device(),
+            1,
+            &inFlightFence,
+            VK_TRUE,
+            std::numeric_limits<uint64_t>::max());
+    }
 
     device_.getStagingArena().advanceFrame();
 
@@ -135,7 +140,11 @@ bool Renderer::beginFrame() {
         }
     }
 
-    auto result = swapchain_->acquireNextImage(&currentImageIndex_, syncObjects_->getImageAvailable(currentFrame_));
+    VkResult result;
+    {
+        ScopedTimer t(cIdleMs_);
+        result = swapchain_->acquireNextImage(&currentImageIndex_, syncObjects_->getImageAvailable(currentFrame_));
+    }
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         return false;
     }
@@ -208,6 +217,7 @@ bool Renderer::endFrame() {
     }
 
     if (imagesInFlight_[currentImageIndex_] != VK_NULL_HANDLE) {
+        ScopedTimer t(cIdleMs_);
         vkWaitForFences(device_.device(), 1, &imagesInFlight_[currentImageIndex_], VK_TRUE, UINT64_MAX);
     }
     imagesInFlight_[currentImageIndex_] = syncObjects_->getInFlight(currentFrame_);

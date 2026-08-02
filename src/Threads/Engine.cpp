@@ -68,11 +68,16 @@ namespace lve {
         rendererThread_ = std::thread([]() { RenderThread::getInstance().run(); });
         gameLogicThread_ = std::thread([]() { GameLogicThread::getInstance().run(); });
 
+        diagnostics.start();
+
         while (running_) {
             Message msg;
             while (mailbox_->pop_for(msg, std::chrono::milliseconds(100))) {
                 if (msg.payload) msg.payload();
             }
+
+            diagnostics.update();
+            diagnostics.send();
         }
 
 
@@ -93,6 +98,7 @@ namespace lve {
         }
 
         MessageBus::Get().unsubscribe(ThreadName::Engine);
+        diagnostics.cleanup();
         Logger::Shutdown();
         IO::Shutdown();
         MessageBus::Get().signalQuit();

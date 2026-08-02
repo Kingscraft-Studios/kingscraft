@@ -2,6 +2,7 @@
 
 #include "UI/Elements/UiTextBlock.hpp"
 #include "Util/TimeUtil.hpp"
+#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
 
 namespace lve {
 
@@ -11,19 +12,7 @@ namespace lve {
     public:
         void init(UiWrapper& ui);
         void update(UiWrapper& ui);
-        void setCpuGpuTimes(
-            double cpuFrameMs, double gpuTotalMs,
-            double worldGpuMs, double uiGpuMs,
-            double cpuTickMs, double cpuSubmitMs, double cmdRecordMs,
-            double frustumMs, double drawMs,
-            double memBwGBs, double overdraw,
-            uint64_t iaVerts, uint64_t iaPrims,
-            uint64_t vsInvoc, uint64_t fsInvoc,
-            uint64_t clipPrims,
-            uint32_t visibleChunks,
-            uint32_t visibleSubChunks,
-            uint32_t occlusionTested = 0,
-            uint32_t occlusionRemoved = 0);
+        void setFrame(const FrameMetrics& frame);
         void cleanup(UiWrapper& ui);
 
     private:
@@ -34,6 +23,9 @@ namespace lve {
         double lastTime_ = 0.0;
         double elapsed_ = 0.0;
         int frameCount_ = 0;
+        uint64_t latestFrames_ = 0;
+        uint64_t prevFrames_ = 0;
+        double latestCIdle_ = 0.0;
 
         double latestCpuMs_ = 0.0;
         double latestGpuMs_ = 0.0;

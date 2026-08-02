@@ -26,7 +26,7 @@ namespace lve {
         // Performance toggles
         bool vsync = false;
         bool enableFrustumCulling = true;
-        bool enableOcclusionCulling = true;
+        bool enableOcclusionCulling = false;
         bool disableTextures = false;
         int maxFps = 0; // 0 = None
 

@@ -96,6 +96,7 @@ public:
     uint64_t getPipelineStat(PipeStatsIdx idx) const { return pipelineStats_[idx]; }
     double getMemBandwidthGBs() const { return memBandwidthGBs_; }
     double getOverdraw() const { return overdraw_; }
+    double getCIdleMs() const { return cIdleMs_; }
 
     VkQueryPool getGpuQueryPool() const { return gpuQueryPool_; }
     VkQueryPool getPipelineStatsPool() const { return pipelineStatsPool_; }
@@ -170,6 +171,7 @@ private:
 
     double memBandwidthGBs_ = 0.0;
     double overdraw_ = 0.0;
+    double cIdleMs_ = 0.0;
 };
 
 } // namespace lve

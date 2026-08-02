@@ -59,6 +59,10 @@ namespace lve {
         // Set Statistics
         scene->stats.delta = dt_;
         scene->stats.cpuTickMs = cpuTickMs_;
+
+        auto& cpuMetrics = Engine::Get().getDiagnostics().getCPUMetrics();
+        cpuMetrics.delta = dt_;
+        cpuMetrics.tickMs = cpuTickMs_;
         exchange.publish();
     }
 

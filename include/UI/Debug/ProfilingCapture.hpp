@@ -3,6 +3,8 @@
 #include <vector>
 #include <cstdint>
 
+#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
+
 namespace lve {
 
     class ProfilingCapture {
@@ -11,19 +13,7 @@ namespace lve {
 
         void start();
         void tick(double dt);
-        void feedFrame(
-            double cpuFrameMs, double gpuTotalMs,
-            double worldGpuMs, double uiGpuMs,
-            double cpuTickMs, double cpuSubmitMs, double cmdRecordMs,
-            double frustumMs, double drawMs,
-            double memBwGBs, double overdraw,
-            uint64_t iaVerts, uint64_t iaPrims,
-            uint64_t vsInvoc, uint64_t fsInvoc,
-            uint64_t clipPrims,
-            uint32_t visibleChunks,
-            uint32_t visibleSubChunks,
-            uint32_t occlusionTested = 0,
-            uint32_t occlusionRemoved = 0);
+        void feedFrame(const FrameMetrics& frame);
 
         bool isActive() const { return active_; }
 

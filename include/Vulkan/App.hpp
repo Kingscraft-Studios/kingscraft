@@ -79,6 +79,7 @@ namespace lve {
         bool requestSwapchainRecreate = false;
         double cpuFrameTimeMs_ = 0.0;
         double cpuSubmitMs_ = 0.0;
+        double sleepIdleMs_ = 0.0;
         VkExtent2D lastExtent{0, 0};
         RenderState renderState = RenderState::Running;
 

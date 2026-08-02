@@ -5,6 +5,7 @@
 #include <atomic>
 
 #include "Bus/Mailbox.hpp"
+#include "Core/Diagnostics/Diagnostics.hpp"
 #include "Renderer/FrameExchange.hpp"
 #include "Threads/Renderer.hpp"
 #include "Threads/ResourceLoader.hpp"
@@ -27,6 +28,7 @@ namespace lve {
 
     Mailbox& getMailbox() { return *mailbox_; }
     FrameExchange& getFrameExchange() { return exchange; }
+    Diagnostics& getDiagnostics() { return diagnostics; }
 
 private:
     std::atomic<bool> running_{true};
@@ -40,6 +42,7 @@ private:
     std::atomic<bool> shutdownComplete_{false};
 
     FrameExchange exchange;
+    Diagnostics diagnostics;
 
     static std::unique_ptr<Engine> instance_;
 };

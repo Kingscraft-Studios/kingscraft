@@ -12,6 +12,7 @@
 #include "Threads/InputThread.hpp"
 #include "Threads/Engine.hpp"
 #include "Util/LogUtils.hpp"
+#include "Util/ScopedTimer.hpp"
 
 namespace lve {
 
@@ -78,7 +79,13 @@ namespace lve {
             if (maxFps > 0) {
                 double target = 1.0 / maxFps;
                 if (scene.stats.delta < target) {
-                    std::this_thread::sleep_for(std::chrono::duration<double>(target - scene.stats.delta));
+                    sleepIdleMs_ = 0.0;
+                    {
+                        ScopedTimer t(sleepIdleMs_);
+                        std::this_thread::sleep_for(std::chrono::duration<double>(target - scene.stats.delta));
+                    }
+                } else {
+                    sleepIdleMs_ = 0.0;
                 }
             }
             Engine::Get().getFrameExchange().endRead();
@@ -131,6 +138,7 @@ namespace lve {
             return;
         }
         double cpuStart = TimeUtil::uptimeSeconds();
+        Engine::Get().getDiagnostics().getGPUMetrics().frames++;
         VkCommandBuffer cmd = renderer->getActiveCommandBuffer();
         VkExtent2D extent = renderer->getExtent();
         uint32_t imageIndex = renderer->getCurrentImageIndex();
@@ -201,6 +209,23 @@ namespace lve {
             uiSystem->resize(newExtent.width, newExtent.height);
         }
         cpuSubmitMs_ = (TimeUtil::uptimeSeconds() - submitStart) * 1000.0;
+
+        auto& gpuMetrics = Engine::Get().getDiagnostics().getGPUMetrics();
+        gpuMetrics.cpuFrameMs = cpuFrameTimeMs_;
+        gpuMetrics.cpuSubmitMs = cpuSubmitMs_;
+        gpuMetrics.cmdRecordMs = renderer->getCmdRecordMs();
+        gpuMetrics.gpuFrameMs = renderer->getGpuFrameTimeMs();
+        gpuMetrics.worldGpuMs = renderer->getWorldGpuMs();
+        gpuMetrics.uiGpuMs = renderer->getUiGpuMs();
+        gpuMetrics.memBandwidthGBs = renderer->getMemBandwidthGBs();
+        gpuMetrics.overdraw = renderer->getOverdraw();
+        gpuMetrics.pipeline.iaVertices = renderer->getPipelineStat(Renderer::STAT_IA_VERTICES);
+        gpuMetrics.pipeline.iaPrimitives = renderer->getPipelineStat(Renderer::STAT_IA_PRIMITIVES);
+        gpuMetrics.pipeline.vsInvocations = renderer->getPipelineStat(Renderer::STAT_VS_INVOCATIONS);
+        gpuMetrics.pipeline.fsInvocations = renderer->getPipelineStat(Renderer::STAT_FS_INVOCATIONS);
+        gpuMetrics.pipeline.clipInvocations = renderer->getPipelineStat(Renderer::STAT_CLIP_INVOC);
+        gpuMetrics.pipeline.clipPrims = renderer->getPipelineStat(Renderer::STAT_CLIP_PRIMS);
+        gpuMetrics.cIdle = renderer->getCIdleMs() + sleepIdleMs_;
     }
 
 }  // namespace lve
