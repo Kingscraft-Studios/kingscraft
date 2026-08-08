@@ -38,6 +38,7 @@ namespace lve {
 
         bool setBlock(int worldX, int worldY, int worldZ, uint8_t blockId);
         uint8_t getBlock(int worldX, int worldY, int worldZ) const;
+        int getSurfaceHeight(int worldX, int worldZ) const;
         void remeshDirtyChunks();
 
         static int worldToGrid(float worldCoord, int chunkSize);

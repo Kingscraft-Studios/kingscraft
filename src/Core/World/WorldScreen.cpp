@@ -34,7 +34,8 @@ namespace lve {
     void WorldScreen::init() {
         RenderThread::getInstance().getUI().setBlockTexture(RenderThread::getInstance().getTexCache().getImageView(), RenderThread::getInstance().getTexCache().getSampler());
 
-        camera_.setPosition({67.5f, 15.0f, 67.5f});
+        playerController_.setBodyPosition({67.5f, 15.0f - PlayerController::EYE_HEIGHT, 67.5f});
+        camera_.setPosition(playerController_.getBodyPosition() + glm::vec3(0.0f, PlayerController::EYE_HEIGHT, 0.0f));
         camera_.setRotation(0.0f, -35.0f);
 
         playerController_.init(camera_, InputThread::getInstance().getKeyBindHandler());
@@ -97,12 +98,12 @@ namespace lve {
             playerController_.resetMouse();
         }
 
-        playerController_.tick(dt);
-
-        GameLogicThread::getInstance().getWorld().update(camera_.getPosition().x, camera_.getPosition().z,
-                       RendererSettings::get().renderDistance);
-        GameLogicThread::getInstance().getWorld().flushPendingCleanup();
-        GameLogicThread::getInstance().getWorld().processCompletedChunks();
+        auto& world = GameLogicThread::getInstance().getWorld();
+        world.update(camera_.getPosition().x, camera_.getPosition().z,
+                     RendererSettings::get().renderDistance);
+        world.flushPendingCleanup();
+        world.processCompletedChunks();
+        playerController_.tick(dt, world);
 
         VkExtent2D currentExtent = InputThread::getInstance().getExtent().toVKExtent();
         if (currentExtent.width != extent_.width || currentExtent.height != extent_.height) {

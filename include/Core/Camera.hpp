@@ -18,7 +18,7 @@ namespace lve {
             position_ += dir * amount;
         }
         void moveRight(float amount) { position_ += right_ * amount; }
-        void moveUp(float amount) { position_ += up_ * amount; }
+        void moveUp(float amount) { position_.y += amount; }
 
         void rotate(float yawDelta, float pitchDelta) {
             yaw_ += yawDelta;

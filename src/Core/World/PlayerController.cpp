@@ -1,8 +1,11 @@
 #include "Core/World/PlayerController.hpp"
 #include "Core/KeyBindHandler.hpp"
 #include "Core/Keys.hpp"
+#include "Core/World/Physics/CollisionSystem.hpp"
+#include "Core/World/World.hpp"
 #include "Threads/InputThread.hpp"
 #include "Vulkan/Window.hpp"
+#include <cmath>
 
 namespace lve {
 
@@ -13,17 +16,39 @@ namespace lve {
         lastMouseY_ = InputThread::getInstance().getLastY();
     }
 
-    void PlayerController::tick(double dt) {
+    void PlayerController::tick(double dt, World& world) {
         if (!camera_ || !keybinds_ || !InputThread::getInstance().isInitialized()) return;
         if (!cursorCaptured_) return;
 
-        float speed = 3.0f * static_cast<float>(dt);
-        if (keybinds_->isDown(Keys::W)) camera_->moveForward(speed);
-        if (keybinds_->isDown(Keys::S)) camera_->moveForward(-speed);
-        if (keybinds_->isDown(Keys::A)) camera_->moveRight(-speed);
-        if (keybinds_->isDown(Keys::D)) camera_->moveRight(speed);
-        if (keybinds_->isDown(Keys::SPACE)) camera_->moveUp(speed);
-        if (keybinds_->isDown(Keys::LEFT_SHIFT)) camera_->moveUp(-speed);
+        if (spawnPending_) {
+            int surface = world.getSurfaceHeight(
+                static_cast<int>(std::floor(bodyPos_.x)),
+                static_cast<int>(std::floor(bodyPos_.z)));
+            if (surface >= 0) {
+                bodyPos_.y = static_cast<float>(surface) + 1.0f;
+                spawnPending_ = false;
+            }
+        }
+
+        const float dtf = static_cast<float>(dt);
+        const glm::vec3 forward = camera_->getForward();
+        const glm::vec3 forwardH = glm::normalize(glm::vec3(forward.x, 0.0f, forward.z));
+        const glm::vec3 rightH = glm::normalize(glm::cross(forwardH, glm::vec3(0.0f, 1.0f, 0.0f)));
+
+        glm::vec3 velocity(0.0f);
+        if (keybinds_->isDown(Keys::W)) velocity += forwardH * WALK_SPEED;
+        if (keybinds_->isDown(Keys::S)) velocity -= forwardH * WALK_SPEED;
+        if (keybinds_->isDown(Keys::A)) velocity -= rightH * WALK_SPEED;
+        if (keybinds_->isDown(Keys::D)) velocity += rightH * WALK_SPEED;
+        if (keybinds_->isDown(Keys::SPACE)) velocity.y += WALK_SPEED;
+        if (keybinds_->isDown(Keys::LEFT_SHIFT)) velocity.y -= WALK_SPEED;
+
+        AABB box = AABB::fromPosition(bodyPos_,
+            glm::vec3(PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH));
+        CollisionSystem::moveEntity(world, box, velocity, dtf);
+        bodyPos_ = box.min;
+
+        camera_->setPosition(bodyPos_ + glm::vec3(PLAYER_WIDTH * 0.5f, EYE_HEIGHT, PLAYER_WIDTH * 0.5f));
 
         double mx = InputThread::getInstance().getLastX();
         double my = InputThread::getInstance().getLastY();

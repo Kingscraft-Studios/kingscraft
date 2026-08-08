@@ -96,6 +96,16 @@ namespace lve {
         return it->second->getBlock(lx, worldY, lz);
     }
 
+    int World::getSurfaceHeight(int worldX, int worldZ) const {
+        int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
+        int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
+        const Chunk* chunk = getChunk(gx, gz);
+        if (!chunk) return -1;
+        int lx = worldX - gx * chunkSize_;
+        int lz = worldZ - gz * chunkSize_;
+        return static_cast<int>(chunk->getHeightAt(lx, lz));
+    }
+
     void World::remeshDirtyChunks() {
         int N = chunkSize_;
         int h = height_;
