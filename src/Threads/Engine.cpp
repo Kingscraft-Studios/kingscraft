@@ -58,7 +58,7 @@ namespace lve {
 
 
         Bootstrapper::Init();
-        Bootstrapper::Get().loadAll();
+        Bootstrapper::Get().load();
 
         // Threads Start up
         resLoaderThread_ = std::thread([this]() { resourceLoader_.run(); });

@@ -15,7 +15,7 @@ public:
     static void Shutdown();
     static Bootstrapper& Get();
 
-    void loadAll();
+    void load();
 
     const std::vector<char>& getShader(const std::string& path) const;
     const std::vector<char>& getPipelineCacheData() const;
@@ -26,7 +26,7 @@ public:
 private:
 
     void loadShaderFile(const std::string& path);
-    std::vector<char> loadAndValidatePipelineCache();
+    std::vector<char> loadAndValidatePC();
 
     PipelineCacheValidator validator;
     std::unordered_map<std::string, std::vector<char>> shaders_;
