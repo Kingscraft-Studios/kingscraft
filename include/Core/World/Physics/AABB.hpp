@@ -20,6 +20,17 @@ namespace lve {
         }
 
         glm::vec3 getSize() const { return max - min; }
+
+        bool isEmpty() const {
+            return max.x <= min.x || max.y <= min.y || max.z <= min.z;
+        }
+
+        bool overlaps(const AABB& other) const {
+            if (isEmpty() || other.isEmpty()) return false;
+            return min.x < other.max.x && max.x > other.min.x &&
+                   min.y < other.max.y && max.y > other.min.y &&
+                   min.z < other.max.z && max.z > other.min.z;
+        }
     };
 
 } // namespace lve

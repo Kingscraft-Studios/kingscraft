@@ -33,9 +33,11 @@ private:
             {
                 logModelInfo(model);
 
+                auto block = std::make_unique<T>(std::move(model));
+
                 registry.add(
                     key,
-                    std::make_unique<T>(std::move(model))
+                    std::move(block)
                 );
 
                 pending--;

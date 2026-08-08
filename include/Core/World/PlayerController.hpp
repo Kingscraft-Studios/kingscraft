@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Camera.hpp"
+#include "Core/World/Physics/AABB.hpp"
 #include <vulkan/vulkan.h>
 
 namespace lve {
@@ -29,6 +30,10 @@ namespace lve {
 
         glm::vec3 getBodyPosition() const { return bodyPos_; }
         void setBodyPosition(const glm::vec3& pos) { bodyPos_ = pos; }
+        AABB getBodyAABB() const {
+            return AABB::fromPosition(bodyPos_,
+                glm::vec3(PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH));
+        }
 
     private:
         Camera* camera_ = nullptr;

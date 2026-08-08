@@ -10,6 +10,7 @@
 #include "Core/Keys.hpp"
 #include "Core/Raycast.hpp"
 #include "Core/Blocks/Blocks.hpp"
+#include "Core/World/Physics/CollisionSystem.hpp"
 #include "Threads/GameLogicThread.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/Renderer.hpp"
@@ -194,6 +195,12 @@ namespace lve {
         if (!key || key->getId() == 0) return;
 
         uint8_t blockId = static_cast<uint8_t>(key->getId());
+
+        if (playerController_.getBodyAABB().overlaps(
+                CollisionSystem::blockAABBAt(blockId, placeX, placeY, placeZ))) {
+            return;
+        }
+
         GameLogicThread::getInstance().getWorld().setBlock(placeX, placeY, placeZ, blockId);
         GameLogicThread::getInstance().getWorld().remeshDirtyChunks();
     }

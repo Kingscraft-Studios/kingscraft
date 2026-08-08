@@ -28,7 +28,8 @@ namespace lve {
     void Blocks::registerBlocks(int& pending) {
         auto& registry = Registry<Block>::getRegistry();
 
-        registry.add(AIR, std::make_unique<AirBlock>());
+        auto air = std::make_unique<AirBlock>();
+        registry.add(AIR, std::move(air));
 
         loadBlock<GrassBlock>(
             GRASS_BLOCK,

@@ -8,13 +8,39 @@
 namespace lve {
 
     bool CollisionSystem::isSolidBlock(const World& world, int x, int y, int z) {
-        if (y < 0 || y >= world.getHeight()) return false;
+        return getWorldBlockAABB(world, x, y, z).has_value();
+    }
 
-        uint8_t blockId = world.getBlock(x, y, z);
-        if (blockId == 0) return false;
+    const AABB& CollisionSystem::getBlockCollisionBox(uint8_t blockId) {
+        static const AABB empty(glm::vec3(0.0f), glm::vec3(0.0f));
+        if (blockId == 0) return empty;
 
         const Block* block = Registry<Block>::getRegistry().get(blockId);
-        return block != nullptr && block->isSolid();
+        if (!block) return empty;
+
+        const AABB& box = block->getCollisionBox();
+        return box.isEmpty() ? empty : box;
+    }
+
+    AABB CollisionSystem::blockAABBAt(uint8_t blockId, int x, int y, int z) {
+        const AABB& box = getBlockCollisionBox(blockId);
+        if (box.isEmpty()) return box;
+
+        const glm::vec3 base(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        return AABB(base + box.min, base + box.max);
+    }
+
+    std::optional<AABB> CollisionSystem::getWorldBlockAABB(const World& world, int x, int y, int z) {
+        if (y < 0 || y >= world.getHeight()) return std::nullopt;
+
+        const uint8_t blockId = world.getBlock(x, y, z);
+        if (blockId == 0) return std::nullopt;
+
+        const AABB& box = getBlockCollisionBox(blockId);
+        if (box.isEmpty()) return std::nullopt;
+
+        const glm::vec3 base(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        return AABB(base + box.min, base + box.max);
     }
 
     bool CollisionSystem::aabbCollides(const World& world, const AABB& box) {
@@ -27,8 +53,10 @@ namespace lve {
 
         for (int y = y0; y <= y1; ++y)
             for (int z = z0; z <= z1; ++z)
-                for (int x = x0; x <= x1; ++x)
-                    if (isSolidBlock(world, x, y, z)) return true;
+                for (int x = x0; x <= x1; ++x) {
+                    auto cellBox = getWorldBlockAABB(world, x, y, z);
+                    if (cellBox && box.overlaps(*cellBox)) return true;
+                }
 
         return false;
     }
@@ -37,47 +65,56 @@ namespace lve {
         const glm::vec3 delta = velocity * dt;
         const glm::vec3 size = box.getSize();
 
-        if (delta.x != 0.0f) {
-            box = box.translate({delta.x, 0.0f, 0.0f});
-            if (aabbCollides(world, box)) {
-                if (delta.x > 0.0f) {
-                    box.max.x = std::floor(box.max.x);
-                    box.min.x = box.max.x - size.x;
-                } else {
-                    box.min.x = std::ceil(box.min.x);
-                    box.max.x = box.min.x + size.x;
-                }
-                velocity.x = 0.0f;
-            }
-        }
+        auto resolveAxis = [&](int axis, float deltaAxis) {
+            if (deltaAxis == 0.0f) return;
 
-        if (delta.z != 0.0f) {
-            box = box.translate({0.0f, 0.0f, delta.z});
-            if (aabbCollides(world, box)) {
-                if (delta.z > 0.0f) {
-                    box.max.z = std::floor(box.max.z);
-                    box.min.z = box.max.z - size.z;
-                } else {
-                    box.min.z = std::ceil(box.min.z);
-                    box.max.z = box.min.z + size.z;
-                }
-                velocity.z = 0.0f;
-            }
-        }
+            glm::vec3 shift(0.0f);
+            shift[axis] = deltaAxis;
+            box = box.translate(shift);
 
-        if (delta.y != 0.0f) {
-            box = box.translate({0.0f, delta.y, 0.0f});
-            if (aabbCollides(world, box)) {
-                if (delta.y > 0.0f) {
-                    box.max.y = std::floor(box.max.y);
-                    box.min.y = box.max.y - size.y;
+            int x0 = static_cast<int>(std::floor(box.min.x));
+            int x1 = static_cast<int>(std::ceil(box.max.x)) - 1;
+            int y0 = static_cast<int>(std::floor(box.min.y));
+            int y1 = static_cast<int>(std::ceil(box.max.y)) - 1;
+            int z0 = static_cast<int>(std::floor(box.min.z));
+            int z1 = static_cast<int>(std::ceil(box.max.z)) - 1;
+
+            float face = 0.0f;
+            bool hit = false;
+
+            for (int y = y0; y <= y1; ++y)
+                for (int z = z0; z <= z1; ++z)
+                    for (int x = x0; x <= x1; ++x) {
+                        auto cellBox = getWorldBlockAABB(world, x, y, z);
+                        if (!cellBox || !box.overlaps(*cellBox)) continue;
+
+                        if (deltaAxis > 0.0f) {
+                            float f = cellBox->min[axis];
+                            if (f < box.min[axis]) continue;
+                            if (!hit || f < face) face = f;
+                        } else {
+                            float f = cellBox->max[axis];
+                            if (f > box.max[axis]) continue;
+                            if (!hit || f > face) face = f;
+                        }
+                        hit = true;
+                    }
+
+            if (hit) {
+                if (deltaAxis > 0.0f) {
+                    box.max[axis] = face;
+                    box.min[axis] = box.max[axis] - size[axis];
                 } else {
-                    box.min.y = std::ceil(box.min.y);
-                    box.max.y = box.min.y + size.y;
+                    box.min[axis] = face;
+                    box.max[axis] = box.min[axis] + size[axis];
                 }
-                velocity.y = 0.0f;
+                velocity[axis] = 0.0f;
             }
-        }
+        };
+
+        resolveAxis(0, delta.x);
+        resolveAxis(2, delta.z);
+        resolveAxis(1, delta.y);
     }
 
 } // namespace lve
