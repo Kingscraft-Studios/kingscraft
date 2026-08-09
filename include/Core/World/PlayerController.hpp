@@ -29,6 +29,8 @@ namespace lve {
         glm::vec3 getBodyPosition() const { return bodyPos_; }
         float getVelocityY() const { return velocityY_; }
         void setVelocityY(float v) { velocityY_ = v; }
+        bool isDead() const { return dead_; }
+        void respawn();
         AABB getBodyAABB() const {
             return AABB::fromPosition(bodyPos_,
                 glm::vec3(Attributes::PLAYER_WIDTH, Attributes::PLAYER_HEIGHT, Attributes::PLAYER_WIDTH));
@@ -46,6 +48,7 @@ namespace lve {
         float respawnGrace_ = 0.0f;
         bool jumpRequested_ = false;
         bool spawnPending_ = true;
+        bool dead_ = false;
     };
 
 } // namespace lve

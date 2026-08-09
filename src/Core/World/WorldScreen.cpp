@@ -50,6 +50,7 @@ namespace lve {
                 fpsCounter_.update(RenderThread::getInstance().getUI());
             });
         hotbar_.init(RenderThread::getInstance().getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+        deathScreen_.init(RenderThread::getInstance().getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         RenderThread::getInstance().getUI().resize(static_cast<int>(extent_.width),
                              static_cast<int>(extent_.height));
 
@@ -74,7 +75,7 @@ namespace lve {
         auto& world = GameLogicThread::getInstance().getWorld();
         bool debug = RenderThread::getInstance().getUI().isDebugModeOn();
 
-        if (debug != wasDebugOn_) {
+        if (debug != wasDebugOn_ && !world.getPlayerController().isDead()) {
             wasDebugOn_ = debug;
             if (debug) {
                 MessageBus::Get().send(ThreadName::Input, []() {
@@ -95,10 +96,31 @@ namespace lve {
 
         world.tick(dt);
 
+        bool dead = world.getPlayerController().isDead();
+        if (dead && !wasDead_) {
+            MessageBus::Get().send(ThreadName::Input, []() {
+                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
+            });
+            world.getPlayerController().setCaptured(false);
+            world.getPlayerController().resetMouse();
+            deathScreen_.show(RenderThread::getInstance().getUI());
+        } else if (!dead && wasDead_) {
+            MessageBus::Get().send(ThreadName::Input, []() {
+                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
+            });
+            world.getPlayerController().setCaptured(true);
+            world.getPlayerController().resetMouse();
+            deathScreen_.hide(RenderThread::getInstance().getUI());
+        }
+        wasDead_ = dead;
+
         VkExtent2D currentExtent = InputThread::getInstance().getExtent().toVKExtent();
         if (currentExtent.width != extent_.width || currentExtent.height != extent_.height) {
             extent_ = currentExtent;
             hotbar_.resize(static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+            deathScreen_.resize(static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         }
     }
 
@@ -142,6 +164,7 @@ namespace lve {
         RenderThread::getInstance().getUI().setScrollCallback(nullptr);
         hotbar_.cleanup(RenderThread::getInstance().getUI());
         fpsCounter_.cleanup(RenderThread::getInstance().getUI());
+        deathScreen_.cleanup(RenderThread::getInstance().getUI());
         if (InputThread::getInstance().isInitialized()) {
             MessageBus::Get().send(ThreadName::Input, []() {
                 InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);

@@ -172,6 +172,12 @@ namespace lve {
                 screenManager->setScreen<WorldScreen>();
             });
         });
+
+        RenderThread::getInstance().getUI().registerButtonHandler(BTN_RESPAWN, []() {
+            MessageBus::Get().send(ThreadName::GameLogic, []() {
+                GameLogicThread::getInstance().getWorld().getPlayerController().respawn();
+            });
+        });
     }
 
 }

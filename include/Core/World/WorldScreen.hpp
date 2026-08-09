@@ -5,6 +5,7 @@
 #include "Core/World/World.hpp"
 #include "UI/Debug/UiFpsCounter.hpp"
 #include "UI/Overlay/UiHotbar.hpp"
+#include "UI/Overlay/UiDeathScreen.hpp"
 #include <memory>
 #include <glm/glm.hpp>
 
@@ -26,7 +27,9 @@ namespace lve {
         TerrainRenderer terrainRenderer_;
         UiFpsCounter fpsCounter_;
         bool wasDebugOn_ = false;
+        bool wasDead_ = false;
         UiHotbar hotbar_;
+        UiDeathScreen deathScreen_;
     };
 
 } // namespace lve

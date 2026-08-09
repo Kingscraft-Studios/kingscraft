@@ -30,6 +30,7 @@ namespace lve {
 
     void PlayerController::tick(World& world, double dt) {
         if (!keybinds_ || !InputThread::getInstance().isInitialized()) return;
+        if (dead_) return;
         if (!cursorCaptured_) return;
 
         if (spawnPending_) {
@@ -74,10 +75,10 @@ namespace lve {
         bodyPos_ = box.min;
 
         if (bodyPos_.y < VOID_KILL_Y) {
-            bodyPos_ = spawnPos_;
+            dead_ = true;
             velocityY_ = 0.0f;
-            respawnGrace_ = 0.4f;
-            spawnPending_ = true;
+            jumpRequested_ = false;
+            return;
         }
 
         camera_.setPosition(bodyPos_ + glm::vec3(Attributes::PLAYER_WIDTH * 0.5f, Attributes::EYE_HEIGHT, Attributes::PLAYER_WIDTH * 0.5f));
@@ -92,6 +93,14 @@ namespace lve {
         if (dx != 0.0 || dy != 0.0) {
             camera_.rotate(static_cast<float>(dx) * 0.1f, static_cast<float>(dy) * 0.1f);
         }
+    }
+
+    void PlayerController::respawn() {
+        bodyPos_ = spawnPos_;
+        velocityY_ = 0.0f;
+        respawnGrace_ = 0.4f;
+        spawnPending_ = true;
+        dead_ = false;
     }
 
     void PlayerController::updateProjection(VkExtent2D extent, float fov, float nearPlane, float farPlane) {
