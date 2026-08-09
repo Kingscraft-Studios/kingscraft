@@ -138,6 +138,15 @@ namespace lve {
         if (minHeight_ == static_cast<uint16_t>(height_)) minHeight_ = 0;
     }
 
+    uint64_t Chunk::hashBytes(const uint8_t* data, size_t size) {
+        uint64_t hash = 1469598103934665603ull;
+        for (size_t i = 0; i < size; ++i) {
+            hash ^= data[i];
+            hash *= 1099511628211ull;
+        }
+        return hash;
+    }
+
     void Chunk::upload() {
         // Pass 1: count total geometry across all sub-chunks with geometry
         size_t totalVerts = 0;
@@ -151,6 +160,19 @@ namespace lve {
         if (totalVerts == 0 || totalIndices == 0) {
             for (auto& sub : subChunks_)
                 sub.meshNeeded = false;
+
+            // Remove previously uploaded GPU buffers if the chunk now has no geometry
+            if (hasUploaded_) {
+                ChunkUploadData emptyData{};
+                emptyData.chunkKey = makeChunkKey(gridPos_.x, gridPos_.y);
+
+                MessageBus::Get().send(ThreadName::Renderer, [emptyData = std::move(emptyData)]() {
+                    RenderThread::getInstance().getUploader().upload(emptyData);
+                });
+
+                hasUploaded_ = false;
+                lastMeshHash_ = 0;
+            }
             return;
         }
 
@@ -170,6 +192,19 @@ namespace lve {
             baseVertex += static_cast<uint32_t>(sub.vertices.size());
         }
 
+        // Skip re-upload when the merged geometry is unchanged
+        uint64_t hash = hashBytes(
+            reinterpret_cast<const uint8_t*>(combinedVerts.data()),
+            combinedVerts.size() * sizeof(ChunkVertex));
+        hash = hashBytes(reinterpret_cast<const uint8_t*>(combinedIndices.data()),
+                         combinedIndices.size() * sizeof(uint16_t)) ^ hash;
+
+        if (hasUploaded_ && hash == lastMeshHash_) {
+            for (auto& sub : subChunks_)
+                sub.meshNeeded = false;
+            return;
+        }
+
         ChunkUploadData uploadData{};
         uploadData.chunkKey = makeChunkKey(gridPos_.x, gridPos_.y);
         uploadData.vertices = std::move(combinedVerts);
@@ -178,6 +213,9 @@ namespace lve {
         MessageBus::Get().send(ThreadName::Renderer, [uploadData = std::move(uploadData)]() {
             RenderThread::getInstance().getUploader().upload(uploadData);
         });
+
+        lastMeshHash_ = hash;
+        hasUploaded_ = true;
 
         // Sub-chunk CPU data persists for future partial rebuilds
         for (auto& sub : subChunks_) {

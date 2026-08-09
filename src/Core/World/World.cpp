@@ -5,6 +5,9 @@
 #include <cstdint>
 
 #include "Bus/MessageBus.hpp"
+#include "Core/World/Physics/Gravity.hpp"
+#include "Renderer/RendererSettings.hpp"
+#include "Threads/InputThread.hpp"
 #include "Threads/Renderer.hpp"
 
 namespace {
@@ -32,6 +35,7 @@ namespace lve {
     World::World(ITerrainGenerator& terrainGen, int chunkSize, int height)
         : terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height) {
         genThread_ = std::thread([this]() { genThreadFunc(); });
+        playerController_.init(InputThread::getInstance().getKeyBindHandler());
     }
 
     World::~World() {
@@ -103,7 +107,7 @@ namespace lve {
         if (!chunk) return -1;
         int lx = worldX - gx * chunkSize_;
         int lz = worldZ - gz * chunkSize_;
-        return static_cast<int>(chunk->getHeightAt(lx, lz));
+        return chunk->getHeightAt(lx, lz);
     }
 
     void World::remeshDirtyChunks() {
@@ -309,7 +313,11 @@ namespace lve {
         }
     }
 
-    void World::update(float cameraX, float cameraZ, int renderDistance) {
+    void World::tick(double dt) {
+        float cameraX = playerController_.getCamera().getPosition().x;
+        float cameraZ = playerController_.getCamera().getPosition().z;
+        int renderDistance = RendererSettings::get().renderDistance;
+
         int centerX = worldToGrid(cameraX, chunkSize_);
         int centerZ = worldToGrid(cameraZ, chunkSize_);
 
@@ -380,6 +388,14 @@ namespace lve {
             }
         }
         if (queued > 0) genCV_.notify_one();
+
+        flushPendingCleanup();
+        processCompletedChunks();
+
+        if (playerController_.isCursorCaptured()) {
+            playerController_.setVelocityY(Gravity::apply(playerController_.getVelocityY(), static_cast<float>(dt)));
+            playerController_.tick(*this, dt);
+        }
     }
 
     std::vector<Chunk*> World::getLoadedChunks() const {

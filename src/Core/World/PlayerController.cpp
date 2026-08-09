@@ -9,15 +9,27 @@
 
 namespace lve {
 
-    void PlayerController::init(Camera& camera, KeyBindHandler& keybinds) {
-        camera_ = &camera;
+    namespace {
+        constexpr float VOID_KILL_Y = -8.0f;
+    }
+
+    void PlayerController::init(KeyBindHandler& keybinds) {
         keybinds_ = &keybinds;
         lastMouseX_ = InputThread::getInstance().getLastX();
         lastMouseY_ = InputThread::getInstance().getLastY();
+        bodyPos_ = spawnPos_;
+        velocityY_ = 0.0f;
+
+        camera_.setPosition(bodyPos_ + glm::vec3(Attributes::PLAYER_WIDTH * 0.5f, Attributes::EYE_HEIGHT, Attributes::PLAYER_WIDTH * 0.5f));
+        camera_.setRotation(0.0f, -35.0f);
+
+        keybinds_->onPress(BindLayer::Screen, {Keys::SPACE}, [this]() {
+            if (cursorCaptured_) jumpRequested_ = true;
+        });
     }
 
-    void PlayerController::tick(double dt, World& world) {
-        if (!camera_ || !keybinds_ || !InputThread::getInstance().isInitialized()) return;
+    void PlayerController::tick(World& world, double dt) {
+        if (!keybinds_ || !InputThread::getInstance().isInitialized()) return;
         if (!cursorCaptured_) return;
 
         if (spawnPending_) {
@@ -31,24 +43,38 @@ namespace lve {
         }
 
         const float dtf = static_cast<float>(dt);
-        const glm::vec3 forward = camera_->getForward();
+        const glm::vec3 forward = camera_.getForward();
         const glm::vec3 forwardH = glm::normalize(glm::vec3(forward.x, 0.0f, forward.z));
         const glm::vec3 rightH = glm::normalize(glm::cross(forwardH, glm::vec3(0.0f, 1.0f, 0.0f)));
 
         glm::vec3 velocity(0.0f);
-        if (keybinds_->isDown(Keys::W)) velocity += forwardH * WALK_SPEED;
-        if (keybinds_->isDown(Keys::S)) velocity -= forwardH * WALK_SPEED;
-        if (keybinds_->isDown(Keys::A)) velocity -= rightH * WALK_SPEED;
-        if (keybinds_->isDown(Keys::D)) velocity += rightH * WALK_SPEED;
-        if (keybinds_->isDown(Keys::SPACE)) velocity.y += WALK_SPEED;
-        if (keybinds_->isDown(Keys::LEFT_SHIFT)) velocity.y -= WALK_SPEED;
+        if (keybinds_->isDown(Keys::W)) velocity += forwardH * Attributes::WALK_SPEED;
+        if (keybinds_->isDown(Keys::S)) velocity -= forwardH * Attributes::WALK_SPEED;
+        if (keybinds_->isDown(Keys::A)) velocity -= rightH * Attributes::WALK_SPEED;
+        if (keybinds_->isDown(Keys::D)) velocity += rightH * Attributes::WALK_SPEED;
 
         AABB box = AABB::fromPosition(bodyPos_,
-            glm::vec3(PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH));
+            glm::vec3(Attributes::PLAYER_WIDTH, Attributes::PLAYER_HEIGHT, Attributes::PLAYER_WIDTH));
+        if (CollisionSystem::aabbCollides(world, box.translate(glm::vec3(0.0f, -0.05f, 0.0f)))) {
+            velocityY_ = 0.0f;
+            if (jumpRequested_) {
+                jumpRequested_ = false;
+                velocityY_ = Attributes::JUMP_STRENGTH;
+            }
+        }
+        velocity.y = velocityY_;
+
         CollisionSystem::moveEntity(world, box, velocity, dtf);
+        velocityY_ = velocity.y;
         bodyPos_ = box.min;
 
-        camera_->setPosition(bodyPos_ + glm::vec3(PLAYER_WIDTH * 0.5f, EYE_HEIGHT, PLAYER_WIDTH * 0.5f));
+        if (bodyPos_.y < VOID_KILL_Y) {
+            bodyPos_ = spawnPos_;
+            velocityY_ = 0.0f;
+            spawnPending_ = true;
+        }
+
+        camera_.setPosition(bodyPos_ + glm::vec3(Attributes::PLAYER_WIDTH * 0.5f, Attributes::EYE_HEIGHT, Attributes::PLAYER_WIDTH * 0.5f));
 
         double mx = InputThread::getInstance().getLastX();
         double my = InputThread::getInstance().getLastY();
@@ -58,17 +84,16 @@ namespace lve {
         lastMouseY_ = my;
 
         if (dx != 0.0 || dy != 0.0) {
-            camera_->rotate(static_cast<float>(dx) * 0.1f, static_cast<float>(dy) * 0.1f);
+            camera_.rotate(static_cast<float>(dx) * 0.1f, static_cast<float>(dy) * 0.1f);
         }
     }
 
     void PlayerController::updateProjection(VkExtent2D extent, float fov, float nearPlane, float farPlane) {
-        if (!camera_) return;
         float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-        camera_->setAspectRatio(aspect);
-        camera_->setFov(fov);
-        camera_->setNearPlane(nearPlane);
-        camera_->setFarPlane(farPlane);
+        camera_.setAspectRatio(aspect);
+        camera_.setFov(fov);
+        camera_.setNearPlane(nearPlane);
+        camera_.setFarPlane(farPlane);
     }
 
     void PlayerController::resetMouse() {
@@ -79,8 +104,7 @@ namespace lve {
     }
 
     glm::mat4 PlayerController::getViewProj() const {
-        if (!camera_) return glm::mat4(1.0f);
-        return camera_->getProjectionMatrix() * camera_->getViewMatrix();
+        return camera_.getProjectionMatrix() * camera_.getViewMatrix();
     }
 
 } // namespace lve

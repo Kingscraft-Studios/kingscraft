@@ -32,6 +32,8 @@ public:
         screenManager->setScreen<T>(std::forward<Args>(args)...);
     }
 
+    double getDelta() { return dt_; }
+
 private:
     void tick();
     void registerAllKeys();

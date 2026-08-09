@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Core/Screen.hpp"
-#include "Core/World/PlayerController.hpp"
 #include "Core/World/TerrainRenderer.hpp"
 #include "Core/World/World.hpp"
 #include "UI/Debug/UiFpsCounter.hpp"
@@ -24,9 +23,7 @@ namespace lve {
     private:
         VkExtent2D extent_{};
 
-        PlayerController playerController_;
         TerrainRenderer terrainRenderer_;
-        Camera camera_;
         UiFpsCounter fpsCounter_;
         bool wasDebugOn_ = false;
         UiHotbar hotbar_;

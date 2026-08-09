@@ -33,14 +33,10 @@ namespace lve {
     }
 
     void WorldScreen::init() {
+        auto& world = GameLogicThread::getInstance().getWorld();
         RenderThread::getInstance().getUI().setBlockTexture(RenderThread::getInstance().getTexCache().getImageView(), RenderThread::getInstance().getTexCache().getSampler());
 
-        playerController_.setBodyPosition({67.5f, 15.0f - PlayerController::EYE_HEIGHT, 67.5f});
-        camera_.setPosition(playerController_.getBodyPosition() + glm::vec3(0.0f, PlayerController::EYE_HEIGHT, 0.0f));
-        camera_.setRotation(0.0f, -35.0f);
-
-        playerController_.init(camera_, InputThread::getInstance().getKeyBindHandler());
-        playerController_.setCaptured(true);
+        world.getPlayerController().setCaptured(true);
         MessageBus::Get().send(ThreadName::Input, []() {
             InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         });
@@ -75,6 +71,7 @@ namespace lve {
     }
 
     void WorldScreen::tick(double dt) {
+        auto& world = GameLogicThread::getInstance().getWorld();
         bool debug = RenderThread::getInstance().getUI().isDebugModeOn();
 
         if (debug != wasDebugOn_) {
@@ -82,29 +79,21 @@ namespace lve {
             if (debug) {
                 MessageBus::Get().send(ThreadName::Input, []() {
                     InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-                });
-                MessageBus::Get().send(ThreadName::Input, []() {
                     InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
                 });
-                playerController_.setCaptured(false);
+                world.getPlayerController().setCaptured(false);
             } else {
                 MessageBus::Get().send(ThreadName::Input, []() {
                     InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                });
-                MessageBus::Get().send(ThreadName::Input, []() {
                     InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
                 });
-                playerController_.setCaptured(true);
+        world.getPlayerController().setCaptured(true);
+        world.getPlayerController().resetMouse();
             }
-            playerController_.resetMouse();
+            world.getPlayerController().resetMouse();
         }
 
-        auto& world = GameLogicThread::getInstance().getWorld();
-        world.update(camera_.getPosition().x, camera_.getPosition().z,
-                     RendererSettings::get().renderDistance);
-        world.flushPendingCleanup();
-        world.processCompletedChunks();
-        playerController_.tick(dt, world);
+        world.tick(dt);
 
         VkExtent2D currentExtent = InputThread::getInstance().getExtent().toVKExtent();
         if (currentExtent.width != extent_.width || currentExtent.height != extent_.height) {
@@ -114,11 +103,12 @@ namespace lve {
     }
 
     void WorldScreen::render(FrameScene& scene) {
+        auto& world = GameLogicThread::getInstance().getWorld();
         auto& settings = RendererSettings::get();
-        playerController_.updateProjection(extent_, settings.fov,
+        world.getPlayerController().updateProjection(extent_, settings.fov,
                                            settings.nearPlane, settings.farPlane);
 
-        glm::mat4 viewProj = playerController_.getViewProj();
+        glm::mat4 viewProj = world.getPlayerController().getViewProj();
         scene.camera.viewProj = viewProj;
         float worldHeight = static_cast<float>(GameLogicThread::getInstance().getWorld().getHeight());
 
@@ -126,7 +116,7 @@ namespace lve {
         uint32_t visibleChunks = 0, visibleSubChunks = 0;
         uint32_t occlusionTested = 0, occlusionRemoved = 0;
         terrainRenderer_.render(scene, GameLogicThread::getInstance().getWorld().getLoadedChunks(),
-                                viewProj, camera_.getPosition(),
+                                viewProj, world.getPlayerController().getCamera().getPosition(),
                                 settings.enableFrustumCulling, worldHeight,
                                 worldChunkLookup, &GameLogicThread::getInstance().getWorld(),
                                 &frustumMs, &drawMs, &visibleChunks,
@@ -161,10 +151,11 @@ namespace lve {
 
     void WorldScreen::onMouseButton(int button, int action, int mods) {
         (void)mods;
+        auto& world = GameLogicThread::getInstance().getWorld();
         if (action != GLFW_PRESS) return;
-        if (!playerController_.isCursorCaptured()) return;
+        if (!world.getPlayerController().isCursorCaptured()) return;
 
-        const Camera& cam = playerController_.getCamera();
+        const Camera& cam = world.getPlayerController().getCamera();
         glm::vec3 origin = cam.getPosition();
         glm::vec3 dir = cam.getForward();
 
@@ -196,7 +187,7 @@ namespace lve {
 
         uint8_t blockId = static_cast<uint8_t>(key->getId());
 
-        if (playerController_.getBodyAABB().overlaps(
+        if (world.getPlayerController().getBodyAABB().overlaps(
                 CollisionSystem::blockAABBAt(blockId, placeX, placeY, placeZ))) {
             return;
         }

@@ -4,6 +4,8 @@
 #include "Core/World/Physics/AABB.hpp"
 #include <vulkan/vulkan.h>
 
+#include "Core/Attributes.hpp"
+
 namespace lve {
 
     class KeyBindHandler;
@@ -12,36 +14,36 @@ namespace lve {
 
     class PlayerController {
     public:
-        static constexpr float PLAYER_WIDTH = 0.6f;
-        static constexpr float PLAYER_HEIGHT = 1.8f;
-        static constexpr float EYE_HEIGHT = 1.62f;
-        static constexpr float WALK_SPEED = 3.0f;
 
-        void init(Camera& camera, KeyBindHandler& keybinds);
-        void tick(double dt, World& world);
+        void init(KeyBindHandler& keybinds);
+        void tick(World& world, double dt);
         void updateProjection(VkExtent2D extent, float fov, float nearPlane, float farPlane);
 
-        Camera& getCamera() { return *camera_; }
-        const Camera& getCamera() const { return *camera_; }
+        Camera& getCamera() { return camera_; }
+        const Camera& getCamera() const { return camera_; }
         glm::mat4 getViewProj() const;
         bool isCursorCaptured() const { return cursorCaptured_; }
         void setCaptured(bool captured) { cursorCaptured_ = captured; }
         void resetMouse();
 
         glm::vec3 getBodyPosition() const { return bodyPos_; }
-        void setBodyPosition(const glm::vec3& pos) { bodyPos_ = pos; }
+        float getVelocityY() const { return velocityY_; }
+        void setVelocityY(float v) { velocityY_ = v; }
         AABB getBodyAABB() const {
             return AABB::fromPosition(bodyPos_,
-                glm::vec3(PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH));
+                glm::vec3(Attributes::PLAYER_WIDTH, Attributes::PLAYER_HEIGHT, Attributes::PLAYER_WIDTH));
         }
 
     private:
-        Camera* camera_ = nullptr;
+        Camera camera_;
         KeyBindHandler* keybinds_ = nullptr;
         double lastMouseX_ = 0.0;
         double lastMouseY_ = 0.0;
         bool cursorCaptured_ = false;
         glm::vec3 bodyPos_{0.0f};
+        glm::vec3 spawnPos_{67.5f, 15.0f - Attributes::EYE_HEIGHT, 67.5f};
+        float velocityY_ = 0.0f;
+        bool jumpRequested_ = false;
         bool spawnPending_ = true;
     };
 

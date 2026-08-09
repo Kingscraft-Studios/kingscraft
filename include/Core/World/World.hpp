@@ -15,6 +15,8 @@
 #include <deque>
 #include <atomic>
 
+#include "PlayerController.hpp"
+
 namespace lve {
 
     class World {
@@ -25,7 +27,7 @@ namespace lve {
         void unloadChunk(int gridX, int gridZ);
         bool isChunkLoaded(int gridX, int gridZ) const;
 
-        void update(float cameraX, float cameraZ, int renderDistance);
+        void tick(double dt);
         void flushPendingCleanup();
         void processCompletedChunks();
 
@@ -42,6 +44,8 @@ namespace lve {
         void remeshDirtyChunks();
 
         static int worldToGrid(float worldCoord, int chunkSize);
+
+        PlayerController& getPlayerController() { return playerController_; }
 
     private:
         struct ChunkGenResult {
@@ -79,6 +83,8 @@ namespace lve {
 
         mutable std::vector<Chunk*> chunkCache_;
         mutable bool chunkCacheDirty_ = false;
+
+        PlayerController playerController_;
     };
 
 } // namespace lve

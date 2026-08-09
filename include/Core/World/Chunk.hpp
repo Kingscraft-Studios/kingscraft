@@ -104,8 +104,13 @@ namespace lve {
         uint16_t maxHeight_ = 0;
         uint16_t minHeight_ = 0;
 
+        uint64_t lastMeshHash_ = 0;
+        bool hasUploaded_ = false;
+
         void rebuildHeightmap();
         void updateMinMaxHeight();
+
+        static uint64_t hashBytes(const uint8_t* data, size_t size);
     };
 
 } // namespace lve
