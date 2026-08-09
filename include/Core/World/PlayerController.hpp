@@ -43,6 +43,7 @@ namespace lve {
         glm::vec3 bodyPos_{0.0f};
         glm::vec3 spawnPos_{67.5f, 15.0f - Attributes::EYE_HEIGHT, 67.5f};
         float velocityY_ = 0.0f;
+        float respawnGrace_ = 0.0f;
         bool jumpRequested_ = false;
         bool spawnPending_ = true;
     };

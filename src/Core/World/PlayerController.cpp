@@ -10,7 +10,7 @@
 namespace lve {
 
     namespace {
-        constexpr float VOID_KILL_Y = -8.0f;
+        constexpr float VOID_KILL_Y = -32.0f;
     }
 
     void PlayerController::init(KeyBindHandler& keybinds) {
@@ -48,18 +48,23 @@ namespace lve {
         const glm::vec3 rightH = glm::normalize(glm::cross(forwardH, glm::vec3(0.0f, 1.0f, 0.0f)));
 
         glm::vec3 velocity(0.0f);
-        if (keybinds_->isDown(Keys::W)) velocity += forwardH * Attributes::WALK_SPEED;
-        if (keybinds_->isDown(Keys::S)) velocity -= forwardH * Attributes::WALK_SPEED;
-        if (keybinds_->isDown(Keys::A)) velocity -= rightH * Attributes::WALK_SPEED;
-        if (keybinds_->isDown(Keys::D)) velocity += rightH * Attributes::WALK_SPEED;
-
         AABB box = AABB::fromPosition(bodyPos_,
             glm::vec3(Attributes::PLAYER_WIDTH, Attributes::PLAYER_HEIGHT, Attributes::PLAYER_WIDTH));
-        if (CollisionSystem::aabbCollides(world, box.translate(glm::vec3(0.0f, -0.05f, 0.0f)))) {
-            velocityY_ = 0.0f;
-            if (jumpRequested_) {
-                jumpRequested_ = false;
-                velocityY_ = Attributes::JUMP_STRENGTH;
+        if (respawnGrace_ > 0.0f) {
+            respawnGrace_ -= dtf;
+            jumpRequested_ = false;
+        } else {
+            if (keybinds_->isDown(Keys::W)) velocity += forwardH * Attributes::WALK_SPEED;
+            if (keybinds_->isDown(Keys::S)) velocity -= forwardH * Attributes::WALK_SPEED;
+            if (keybinds_->isDown(Keys::A)) velocity -= rightH * Attributes::WALK_SPEED;
+            if (keybinds_->isDown(Keys::D)) velocity += rightH * Attributes::WALK_SPEED;
+
+            if (CollisionSystem::aabbCollides(world, box.translate(glm::vec3(0.0f, -0.05f, 0.0f)))) {
+                velocityY_ = 0.0f;
+                if (jumpRequested_) {
+                    jumpRequested_ = false;
+                    velocityY_ = Attributes::JUMP_STRENGTH;
+                }
             }
         }
         velocity.y = velocityY_;
@@ -71,6 +76,7 @@ namespace lve {
         if (bodyPos_.y < VOID_KILL_Y) {
             bodyPos_ = spawnPos_;
             velocityY_ = 0.0f;
+            respawnGrace_ = 0.4f;
             spawnPending_ = true;
         }
 
