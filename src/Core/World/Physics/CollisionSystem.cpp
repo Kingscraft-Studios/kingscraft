@@ -30,6 +30,10 @@ namespace lve {
         return AABB(base + box.min, base + box.max);
     }
 
+    AABB CollisionSystem::blockAABBAt(const Block& block, int x, int y, int z) {
+        return blockAABBAt(static_cast<uint8_t>(block.getId()), x, y, z);
+    }
+
     std::optional<AABB> CollisionSystem::getWorldBlockAABB(const World& world, int x, int y, int z) {
         if (y < 0 || y >= world.getHeight()) return std::nullopt;
 

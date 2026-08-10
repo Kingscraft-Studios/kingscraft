@@ -5,6 +5,7 @@
 #include "UI/Debug/ProfilingCapture.hpp"
 #include "Vulkan/TextureCache.hpp"
 #include "UI/UiWrapper.hpp"
+#include "UI/Engine/UiStyle.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Core/KeyBindHandler.hpp"
 #include "Core/Keys.hpp"
@@ -51,6 +52,21 @@ namespace lve {
             });
         hotbar_.init(RenderThread::getInstance().getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         deathScreen_.init(RenderThread::getInstance().getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+
+        crosshairStyle_ = RenderThread::getInstance().getUI().registerStyle(UiStyle{
+            .mode = RenderMode::Solid,
+            .color1 = {1.0f, 1.0f, 1.0f, 0.9f},
+        });
+        crosshairH_.setAnchor({0.5f, 0.5f}, {-10.0f, -1.0f});
+        crosshairH_.setSize({20.0f, 2.0f});
+        crosshairH_.setStyleIndex(crosshairStyle_);
+        crosshairH_.setName("CrosshairH");
+        RenderThread::getInstance().getUI().addElement(&crosshairH_);
+        crosshairV_.setAnchor({0.5f, 0.5f}, {-1.0f, -10.0f});
+        crosshairV_.setSize({2.0f, 20.0f});
+        crosshairV_.setStyleIndex(crosshairStyle_);
+        crosshairV_.setName("CrosshairV");
+        RenderThread::getInstance().getUI().addElement(&crosshairV_);
         RenderThread::getInstance().getUI().resize(static_cast<int>(extent_.width),
                              static_cast<int>(extent_.height));
 
@@ -134,6 +150,19 @@ namespace lve {
         scene.camera.viewProj = viewProj;
         float worldHeight = static_cast<float>(GameLogicThread::getInstance().getWorld().getHeight());
 
+        scene.highlight.enabled = false;
+        if (world.getPlayerController().isCursorCaptured()) {
+            const Camera& cam = world.getPlayerController().getCamera();
+            RaycastHit hit = raycastBlock(cam.getPosition(), cam.getForward(), 8.0f,
+                                          GameLogicThread::getInstance().getWorld());
+            if (hit.hit) {
+                scene.highlight.enabled = true;
+                scene.highlight.position = glm::vec3(static_cast<float>(hit.x),
+                                                     static_cast<float>(hit.y),
+                                                     static_cast<float>(hit.z));
+            }
+        }
+
         double frustumMs = 0.0, drawMs = 0.0;
         uint32_t visibleChunks = 0, visibleSubChunks = 0;
         uint32_t occlusionTested = 0, occlusionRemoved = 0;
@@ -165,6 +194,8 @@ namespace lve {
         hotbar_.cleanup(RenderThread::getInstance().getUI());
         fpsCounter_.cleanup(RenderThread::getInstance().getUI());
         deathScreen_.cleanup(RenderThread::getInstance().getUI());
+        RenderThread::getInstance().getUI().removeElement(&crosshairH_);
+        RenderThread::getInstance().getUI().removeElement(&crosshairV_);
         if (InputThread::getInstance().isInitialized()) {
             MessageBus::Get().send(ThreadName::Input, []() {
                 InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -186,7 +217,7 @@ namespace lve {
         if (!hit.hit) return;
 
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            GameLogicThread::getInstance().getWorld().setBlock(hit.x, hit.y, hit.z, 0);
+            GameLogicThread::getInstance().getWorld().setBlock(hit.x, hit.y, hit.z, Blocks::AIR);
             GameLogicThread::getInstance().getWorld().remeshDirtyChunks();
             return;
         }
@@ -206,16 +237,17 @@ namespace lve {
         if (placeY < 0 || placeY >= GameLogicThread::getInstance().getWorld().getHeight()) return;
 
         auto* key = hotbar_.getSlotBlock(hotbar_.getSelectedSlot());
-        if (!key || key->getId() == 0) return;
+        if (!key) return;
 
-        uint8_t blockId = static_cast<uint8_t>(key->getId());
+        const Block& block = *key;
+        if (&block == Blocks::AIR) return;
 
         if (world.getPlayerController().getBodyAABB().overlaps(
-                CollisionSystem::blockAABBAt(blockId, placeX, placeY, placeZ))) {
+                CollisionSystem::blockAABBAt(block, placeX, placeY, placeZ))) {
             return;
         }
 
-        GameLogicThread::getInstance().getWorld().setBlock(placeX, placeY, placeZ, blockId);
+        GameLogicThread::getInstance().getWorld().setBlock(placeX, placeY, placeZ, block);
         GameLogicThread::getInstance().getWorld().remeshDirtyChunks();
     }
 

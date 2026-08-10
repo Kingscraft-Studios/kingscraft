@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "Bus/MessageBus.hpp"
+#include "Core/Blocks/Block.hpp"
 #include "Core/World/Physics/Gravity.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Threads/InputThread.hpp"
@@ -71,7 +72,7 @@ namespace lve {
         return (it != chunks_.end()) ? it->second.get() : nullptr;
     }
 
-    bool World::setBlock(int worldX, int worldY, int worldZ, uint8_t blockId) {
+    bool World::setBlock(int worldX, int worldY, int worldZ, const Block& block) {
         if (worldY < 0 || worldY >= height_) return false;
         int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
         int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
@@ -79,7 +80,7 @@ namespace lve {
         if (!chunk) return false;
         int lx = worldX - gx * chunkSize_;
         int lz = worldZ - gz * chunkSize_;
-        chunk->setBlock(lx, worldY, lz, blockId);
+        chunk->setBlock(lx, worldY, lz, static_cast<uint8_t>(block.getId()));
 
         if (lx == 0) { Chunk* n = getChunk(gx - 1, gz); if (n) n->markDirty(); }
         if (lx == chunkSize_ - 1) { Chunk* n = getChunk(gx + 1, gz); if (n) n->markDirty(); }

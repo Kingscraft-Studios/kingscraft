@@ -37,6 +37,12 @@ public:
     }
 
     int size() const { return static_cast<int>(entries_.size()); }
+
+    int getID(const T* entry) const {
+        for (size_t i = 0; i < entries_.size(); ++i)
+            if (entries_[i].get() == entry) return static_cast<int>(i);
+        return -1;
+    }
 };
 
 template<typename T>
@@ -47,6 +53,11 @@ T* RegistryKey<T>::operator->() const {
 template<typename T>
 RegistryKey<T>::operator T*() const {
     return Registry<T>::getRegistry().get(id_);
+}
+
+template<typename T>
+RegistryKey<T>::operator T&() const {
+    return *Registry<T>::getRegistry().get(id_);
 }
 
 } // namespace lve

@@ -23,6 +23,11 @@ namespace lve {
         bool enabled;
     };
 
+    struct HighlightPass {
+        bool enabled = false;
+        glm::vec3 position{0.0f};
+    };
+
     struct FrameStats {
         float delta;
 
@@ -40,6 +45,8 @@ struct FrameScene {
     TerrainPass terrain;
 
     UiPass ui;
+
+    HighlightPass highlight;
 
     Settings settings;
 

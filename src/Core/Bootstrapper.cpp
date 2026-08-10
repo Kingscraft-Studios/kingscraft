@@ -32,6 +32,8 @@ namespace lve {
         loadShaderFile("resources/shaders/ui.frag.spv");
         loadShaderFile("resources/shaders/composite.vert.spv");
         loadShaderFile("resources/shaders/composite.frag.spv");
+        loadShaderFile("resources/shaders/highlight.vert.spv");
+        loadShaderFile("resources/shaders/highlight.frag.spv");
         loadShaderFile("resources/shaders/PostProcess/bloom/gaussblur.vert.spv");
         loadShaderFile("resources/shaders/PostProcess/bloom/gaussblur.frag.spv");
         loadShaderFile("resources/shaders/PostProcess/bloom/colorpass.vert.spv");

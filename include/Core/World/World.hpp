@@ -19,6 +19,8 @@
 
 namespace lve {
 
+    class Block;
+
     class World {
     public:
         World(ITerrainGenerator& terrainGen, int chunkSize, int height);
@@ -38,7 +40,7 @@ namespace lve {
 
         const Chunk* getChunk(int gridX, int gridZ) const;
 
-        bool setBlock(int worldX, int worldY, int worldZ, uint8_t blockId);
+        bool setBlock(int worldX, int worldY, int worldZ, const Block& block);
         uint8_t getBlock(int worldX, int worldY, int worldZ) const;
         int getSurfaceHeight(int worldX, int worldZ) const;
         void remeshDirtyChunks();

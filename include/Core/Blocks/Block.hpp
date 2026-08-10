@@ -2,6 +2,7 @@
 
 #include "Core/Resources/BlockModel.hpp"
 #include "Core/World/Physics/AABB.hpp"
+#include "Core/Registry.hpp"
 
 namespace lve {
 
@@ -19,6 +20,8 @@ public:
     virtual ~Block() = default;
 
     const BlockModel& getModel() const { return model_; }
+
+    int getId() const { return Registry<Block>::getRegistry().getID(this); }
 
     int getTextureBaseOffset() const { return textureBaseOffset_; }
     void setTextureBaseOffset(int offset) { textureBaseOffset_ = offset; }

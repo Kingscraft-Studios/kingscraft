@@ -6,6 +6,7 @@
 #include "UI/Debug/UiFpsCounter.hpp"
 #include "UI/Overlay/UiHotbar.hpp"
 #include "UI/Overlay/UiDeathScreen.hpp"
+#include "UI/Elements/UiRect.hpp"
 #include <memory>
 #include <glm/glm.hpp>
 
@@ -30,6 +31,9 @@ namespace lve {
         bool wasDead_ = false;
         UiHotbar hotbar_;
         UiDeathScreen deathScreen_;
+        UiRect crosshairH_;
+        UiRect crosshairV_;
+        uint32_t crosshairStyle_ = 0;
     };
 
 } // namespace lve
