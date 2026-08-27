@@ -23,68 +23,55 @@ namespace lve {
     }
 
     std::vector<char> IO::readFile(const std::string& path) {
-        std::ifstream file{path, std::ios::ate | std::ios::binary};
+        auto& file = getFile(path, std::ios::in | std::ios::out | std::ios::binary);
 
-        if (!file.is_open()) {
-            throw std::runtime_error("failed to open file: " + path);
-        }
-
-        size_t fileSize = static_cast<size_t>(file.tellg());
-        std::vector<char> buffer(fileSize);
-
-        file.seekg(0);
-        file.read(buffer.data(), fileSize);
-
-        file.close();
-        return buffer;
+        return file.read();
     }
 
     void IO::writeFile(const std::string& path, const std::vector<char>& data) {
-        auto parent = std::filesystem::path(path).parent_path();
-        if (!parent.empty())
-            std::filesystem::create_directories(parent);
-
-        std::ofstream file(path, std::ios::binary);
-        if (file.is_open())
-            file.write(data.data(), data.size());
+        getFile(path, std::ios::in | std::ios::out | std::ios::binary).writeTruncate(data);
     }
 
-    // FIXME: Accessible Through MessageBus
+    void IO::writeFileAt(const std::string& path, std::size_t offset, const std::vector<char>& data) {
+        getFile(path, std::ios::in | std::ios::out | std::ios::binary).writeAt(offset, data);
+    }
+
+
     bool IO::readHeader(const std::string& path, void* header, size_t headerSize) {
-        std::ifstream file(path, std::ios::binary);
-
-        if (!file.is_open())
+        // don't create file on pure read - match old ifstream behavior (return false)
+        if (!std::filesystem::exists(path))
             return false;
-
-        file.read(static_cast<char*>(header), headerSize);
-
-        return file.good();
+        try {
+            auto& file = getFile(path, std::ios::in | std::ios::out | std::ios::binary);
+            return file.readHeader(header, headerSize);
+        } catch (const std::runtime_error&) {
+            return false;
+        }
     }
 
     std::vector<char> IO::readData(const std::string& path, size_t offset, size_t size) {
-        std::ifstream file(path, std::ios::binary);
-
-        if (!file.is_open())
+        if (!std::filesystem::exists(path))
             throw std::runtime_error("failed to open file: " + path);
-
-        file.seekg(offset);
-
-        std::vector<char> buffer(size);
-
-        file.read(buffer.data(), static_cast<std::streamsize>(size));
-
-        return buffer;
+        try {
+            auto& file = getFile(path, std::ios::in | std::ios::out | std::ios::binary);
+            return file.readData(offset, size);
+        } catch (const std::runtime_error&) {
+            throw std::runtime_error("failed to open file: " + path);
+        }
     }
 
     size_t IO::getFileSize(const std::string& path) {
-        std::ifstream file(path, std::ios::binary | std::ios::ate);
-
-        if (!file.is_open())
+        if (!std::filesystem::exists(path))
             throw std::runtime_error("failed to open file: " + path);
-
-        return file.tellg();
+        try {
+            auto& file = getFile(path, std::ios::in | std::ios::out | std::ios::binary);
+            return file.getFileSize();
+        } catch (const std::runtime_error&) {
+            throw std::runtime_error("failed to open file: " + path);
+        }
     }
 
+    // FIXME: Make a LogFile Which is same as DiskOperations
     void IO::writeLogFile(const std::string& path, const std::string& text) {
 
         // 1. ensure directory exists
@@ -98,4 +85,22 @@ namespace lve {
         }
     }
 
+    DiskOperations& IO::getFile(const std::string& path, std::ios::openmode mode) {
+        auto it = files_.find(path);
+
+        if (it != files_.end()) {
+            if (it->second.getMode() != mode) {
+                throw std::runtime_error(
+                    "File already opened with different mode: " + path
+                );
+            }
+
+            return it->second;
+        }
+
+        auto [entry, inserted] =
+            files_.try_emplace(path, path, mode);
+
+        return entry->second;
+    }
 } // namespace lve

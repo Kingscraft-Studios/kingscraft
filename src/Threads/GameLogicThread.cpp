@@ -72,6 +72,8 @@ namespace lve {
             mailbox_->stop();
         }
         MessageBus::Get().unsubscribe(ThreadName::GameLogic);
+        world.reset();
+        screenManager.reset();
     }
 
     void GameLogicThread::registerAllKeys() {

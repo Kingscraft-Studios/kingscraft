@@ -9,7 +9,9 @@
 #include "Core/World/Physics/Gravity.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Threads/InputThread.hpp"
+#include "Threads/IO.hpp"
 #include "Threads/Renderer.hpp"
+#include "Util/LogUtils.hpp"
 
 namespace {
 
@@ -43,6 +45,21 @@ namespace lve {
         genRunning_ = false;
         genCV_.notify_all();
         if (genThread_.joinable()) genThread_.join();
+
+        // Save all loaded chunks
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex_);
+            for (auto& [key, blockData] : blockCache_) {
+                int gx = static_cast<int>(key >> 32);
+                int gz = static_cast<int>(key & 0xFFFFFFFF);
+
+                auto dataCopy = blockData;  // TODO: Copying 25K bytes isn't great
+                MessageBus::Get().send(ThreadName::Engine, [gx, gz, blockData = std::move(dataCopy)]() {
+                    IO::Get().getBuiltinTemplates().getChunkTemplate().save(gx, gz, blockData);
+                });
+            }
+        }
+
         {
             std::lock_guard<std::mutex> lock(genMutex_);
             pendingGen_.clear();
@@ -81,6 +98,18 @@ namespace lve {
         int lx = worldX - gx * chunkSize_;
         int lz = worldZ - gz * chunkSize_;
         chunk->setBlock(lx, worldY, lz, static_cast<uint8_t>(block.getId()));
+
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex_);
+            auto it = blockCache_.find(makeChunkKey(gx, gz));
+            if (it != blockCache_.end()) {
+                size_t idx = static_cast<size_t>(worldY) * chunkSize_ * chunkSize_
+                           + static_cast<size_t>(lz) * chunkSize_
+                           + static_cast<size_t>(lx);
+                if (idx < it->second.size())
+                    it->second[idx] = static_cast<uint8_t>(block.getId());
+            }
+        }
 
         if (lx == 0) { Chunk* n = getChunk(gx - 1, gz); if (n) n->markDirty(); }
         if (lx == chunkSize_ - 1) { Chunk* n = getChunk(gx + 1, gz); if (n) n->markDirty(); }
@@ -164,7 +193,11 @@ namespace lve {
         int N = chunkSize_;
         int h = height_;
 
-        std::vector<uint8_t> blockIds = terrainGen_.generateBlocks(gridX, gridZ, N, h);
+        // TODO: Using IO Sequentially isn't a great idea
+        auto blockIds = IO::Get().getBuiltinTemplates().getChunkTemplate().load(gridX, gridZ);
+        if (blockIds.empty()) {
+            blockIds = terrainGen_.generateBlocks(gridX, gridZ, N, h);
+        }
 
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
@@ -202,6 +235,20 @@ namespace lve {
 
     void World::unloadChunk(int gridX, int gridZ) {
         uint64_t key = makeChunkKey(gridX, gridZ);  // compute once
+
+        // Save to disk before unloading
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex_);
+            auto cacheIt = blockCache_.find(key);
+            if (cacheIt != blockCache_.end()) {
+
+                // TODO: Copying 25K bytes isn't a good idea consider another approach!
+                auto blockData = cacheIt->second;  // copy
+                MessageBus::Get().send(ThreadName::Engine, [gridX, gridZ, blockData = std::move(blockData)]() {
+                    IO::Get().getBuiltinTemplates().getChunkTemplate().save(gridX, gridZ, blockData);
+                });
+            }
+        }
 
         auto it = chunks_.find(key);
         if (it == chunks_.end()) return;
@@ -249,7 +296,11 @@ namespace lve {
             int N = chunkSize_;
             int h = height_;
 
-            std::vector<uint8_t> blockIds = terrainGen_.generateBlocks(gx, gz, N, h);
+            // TODO: Using IO Sequentially isn't a great idea
+            auto blockIds = IO::Get().getBuiltinTemplates().getChunkTemplate().load(gx, gz);
+            if (blockIds.empty()) {
+                blockIds = terrainGen_.generateBlocks(gx, gz, N, h);
+            }
 
             {
                 std::lock_guard<std::mutex> lock(cacheMutex_);
