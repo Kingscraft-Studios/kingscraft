@@ -3,6 +3,7 @@
 #include "UI/Elements/UiRect.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiImage.hpp"
+#include "UI/Elements/UiGroup.hpp"
 #include "Core/RegistryKey.hpp"
 #include <atomic>
 
@@ -38,6 +39,7 @@ namespace lve {
             return SLOT_COUNT * SLOT_SIZE + (SLOT_COUNT - 1) * SLOT_GAP;
         }
 
+        UiGroup group_;
         std::atomic<int> selectedSlot_{0};
         float screenW_ = 0.0f;
         float screenH_ = 0.0f;

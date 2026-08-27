@@ -60,13 +60,13 @@ namespace lve {
         bg_.setSize({totalW + pad * 2, SLOT_SIZE + pad * 2});
         bg_.setStyleIndex(bgStyle_);
         bg_.setName("HotbarBg");
-        ui.addElement(&bg_);
+        group_.add(&bg_);
 
         selection_.setAnchor({0.5f, 1.0f}, {anchorX, -SLOT_SIZE - BOTTOM_MARGIN});
         selection_.setSize({SLOT_SIZE, SLOT_SIZE});
         selection_.setStyleIndex(selectionStyle_);
         selection_.setName("HotbarSel");
-        ui.addElement(&selection_);
+        group_.add(&selection_);
 
         for (int i = 0; i < SLOT_COUNT; ++i) {
             float offsetX = anchorX + i * (SLOT_SIZE + SLOT_GAP);
@@ -75,13 +75,13 @@ namespace lve {
             slots_[i].setSize({SLOT_SIZE, SLOT_SIZE});
             slots_[i].setStyleIndex(slotStyle_);
             slots_[i].setName("HotbarSlot_" + std::to_string(i));
-            ui.addElement(&slots_[i]);
+            group_.add(&slots_[i]);
 
             slotIcons_[i].setAnchor({0.5f, 1.0f}, {offsetX + 2, -SLOT_SIZE - BOTTOM_MARGIN + 2});
             slotIcons_[i].setSize({SLOT_SIZE - 4, SLOT_SIZE - 4});
             slotIcons_[i].setStyleIndex(iconStyles_[i]);
             slotIcons_[i].setName("HotbarIcon_" + std::to_string(i));
-            ui.addElement(&slotIcons_[i]);
+            group_.add(&slotIcons_[i]);
 
             slotNumbers_[i].setAnchor({0.5f, 1.0f}, {offsetX + 4, -SLOT_SIZE - BOTTOM_MARGIN + 4});
             slotNumbers_[i].setSize({16, 16});
@@ -91,18 +91,14 @@ namespace lve {
             slotNumbers_[i].setColor({1.0f, 1.0f, 1.0f, 0.7f});
             slotNumbers_[i].setStyleIndex(slotStyle_);
             slotNumbers_[i].setName("HotbarNum_" + std::to_string(i));
-            ui.addElement(&slotNumbers_[i]);
+            group_.add(&slotNumbers_[i]);
         }
+
+        group_.addToWrapper(ui);
     }
 
     void UiHotbar::cleanup(UiWrapper& ui) {
-        ui.removeElement(&bg_);
-        ui.removeElement(&selection_);
-        for (int i = 0; i < SLOT_COUNT; ++i) {
-            ui.removeElement(&slots_[i]);
-            ui.removeElement(&slotIcons_[i]);
-            ui.removeElement(&slotNumbers_[i]);
-        }
+        group_.removeFromWrapper(ui);
     }
 
     void UiHotbar::resize(float screenW, float screenH) {

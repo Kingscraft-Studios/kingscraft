@@ -31,7 +31,7 @@ namespace lve {
         tint_.setStyleIndex(tintStyle_);
         tint_.setName("DeathTint");
         tint_.setVisible(false);
-        ui.addElement(&tint_);
+        group_.add(&tint_);
 
         buttonBg_.setAnchor({0.5f, 0.5f}, {-140.0f, -25.0f});
         buttonBg_.setSize({280.0f, 50.0f});
@@ -41,7 +41,7 @@ namespace lve {
         }));
         buttonBg_.setName("RespawnButtonBg");
         buttonBg_.setVisible(false);
-        ui.addElement(&buttonBg_);
+        group_.add(&buttonBg_);
 
         title_.setAnchor({0.5f, 0.35f}, {0.0f, 0.0f});
         title_.setNormalizedSize({0.6f, 0.12f});
@@ -52,7 +52,7 @@ namespace lve {
         title_.setStyleIndex(titleStyle_);
         title_.setName("DeathTitle");
         title_.setVisible(false);
-        ui.addElement(&title_);
+        group_.add(&title_);
 
         respawnButton_.setAnchor({0.5f, 0.5f}, {-140.0f, -25.0f});
         respawnButton_.setSize({280.0f, 50.0f});
@@ -68,22 +68,18 @@ namespace lve {
         respawnButton_.setHandlerName(BTN_RESPAWN);
         respawnButton_.setName("RespawnButton");
         respawnButton_.setVisible(false);
-        ui.addElement(&respawnButton_);
+        group_.add(&respawnButton_);
+
+        group_.addToWrapper(ui);
     }
 
     void UiDeathScreen::cleanup(UiWrapper& ui) {
-        ui.removeElement(&tint_);
-        ui.removeElement(&buttonBg_);
-        ui.removeElement(&title_);
-        ui.removeElement(&respawnButton_);
+        group_.removeFromWrapper(ui);
     }
 
     void UiDeathScreen::show(UiWrapper& ui) {
         UiGuard guard(ui);
-        tint_.setVisible(true);
-        buttonBg_.setVisible(true);
-        title_.setVisible(true);
-        respawnButton_.setVisible(true);
+        group_.setVisible(true);
         tint_.updateLayout(screenW_, screenH_);
         buttonBg_.updateLayout(screenW_, screenH_);
         title_.updateLayout(screenW_, screenH_);
@@ -92,10 +88,7 @@ namespace lve {
 
     void UiDeathScreen::hide(UiWrapper& ui) {
         UiGuard guard(ui);
-        tint_.setVisible(false);
-        buttonBg_.setVisible(false);
-        title_.setVisible(false);
-        respawnButton_.setVisible(false);
+        group_.setVisible(false);
     }
 
     void UiDeathScreen::resize(float screenW, float screenH) {

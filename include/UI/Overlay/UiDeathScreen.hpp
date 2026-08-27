@@ -3,6 +3,7 @@
 #include "UI/Elements/UiRect.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiButton.hpp"
+#include "UI/Elements/UiGroup.hpp"
 
 namespace lve {
 
@@ -28,6 +29,7 @@ namespace lve {
         float screenW_ = 0.0f;
         float screenH_ = 0.0f;
 
+        UiGroup group_;
         UiRect tint_;
         UiRect buttonBg_;
         UiTextBlock title_;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Elements/UiTextBlock.hpp"
+#include "UI/Elements/UiGroup.hpp"
 #include "Util/TimeUtil.hpp"
 #include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
 
@@ -16,6 +17,7 @@ namespace lve {
         void cleanup(UiWrapper& ui);
 
     private:
+        UiGroup group_;
         UiTextBlock line1_;
         UiTextBlock line2_;
         UiTextBlock line3_;

@@ -18,7 +18,7 @@ namespace lve {
         line1_.setColor({1.0f, 1.0f, 1.0f, 1.0f});
         line1_.setStyleIndex(styleIndex_);
         line1_.setName("FpsLine1");
-        ui.addElement(&line1_);
+        group_.add(&line1_);
 
         line2_.setAnchor({0.0f, 0.03f}, {10.0f, 10.0f});
         line2_.setNormalizedSize({0.65f, 0.035f});
@@ -28,7 +28,7 @@ namespace lve {
         line2_.setColor({0.6f, 1.0f, 0.6f, 1.0f});
         line2_.setStyleIndex(styleIndex_);
         line2_.setName("FpsLine2");
-        ui.addElement(&line2_);
+        group_.add(&line2_);
 
         line3_.setAnchor({0.0f, 0.055f}, {10.0f, 10.0f});
         line3_.setNormalizedSize({0.65f, 0.035f});
@@ -38,7 +38,9 @@ namespace lve {
         line3_.setColor({0.7f, 0.7f, 1.0f, 1.0f});
         line3_.setStyleIndex(styleIndex_);
         line3_.setName("FpsLine3");
-        ui.addElement(&line3_);
+        group_.add(&line3_);
+
+        group_.addToWrapper(ui);
 
         lastTime_ = TimeUtil::uptimeSeconds();
     }
@@ -115,9 +117,7 @@ namespace lve {
     }
 
     void UiFpsCounter::cleanup(UiWrapper& ui) {
-        ui.removeElement(&line1_);
-        ui.removeElement(&line2_);
-        ui.removeElement(&line3_);
+        group_.removeFromWrapper(ui);
     }
 
 } // namespace lve
