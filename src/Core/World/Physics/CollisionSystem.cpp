@@ -3,7 +3,10 @@
 #include "Core/Blocks/Block.hpp"
 #include "Core/Registry.hpp"
 #include "Core/World/World.hpp"
+#include <algorithm>
 #include <cmath>
+#include <limits>
+#include <vector>
 
 namespace lve {
 
@@ -72,6 +75,7 @@ namespace lve {
         auto resolveAxis = [&](int axis, float deltaAxis) {
             if (deltaAxis == 0.0f) return;
 
+            const AABB before = box;
             glm::vec3 shift(0.0f);
             shift[axis] = deltaAxis;
             box = box.translate(shift);
@@ -91,6 +95,11 @@ namespace lve {
                     for (int x = x0; x <= x1; ++x) {
                         auto cellBox = getWorldBlockAABB(world, x, y, z);
                         if (!cellBox || !box.overlaps(*cellBox)) continue;
+                        // The box was already inside this cell before the move:
+                        // it is an embed (e.g. chunk popped in around the
+                        // player), not a wall. Defer to depenetration below
+                        // instead of ejecting the box the wrong way.
+                        if (before.overlaps(*cellBox)) continue;
 
                         if (deltaAxis > 0.0f) {
                             float f = cellBox->min[axis];
@@ -116,9 +125,89 @@ namespace lve {
             }
         };
 
+        // Depenetration: recover gracefully from embeds (a chunk loaded around
+        // the player, or spawning inside terrain). Always rest upward first so
+        // the player pops onto the surface instead of sliding into a neighbor
+        // block; only slide horizontally if a ceiling blocks the upward escape.
+        // Never push downward.
+        auto depenetrate = [&]() {
+            const auto maxF = std::numeric_limits<float>::max();
+            for (int iter = 0; iter < 4; ++iter) {
+                int x0 = static_cast<int>(std::floor(box.min.x));
+                int x1 = static_cast<int>(std::ceil(box.max.x)) - 1;
+                int y0 = static_cast<int>(std::floor(box.min.y));
+                int y1 = static_cast<int>(std::ceil(box.max.y)) - 1;
+                int z0 = static_cast<int>(std::floor(box.min.z));
+                int z1 = static_cast<int>(std::ceil(box.max.z)) - 1;
+
+                std::vector<AABB> hits;
+                for (int y = y0; y <= y1; ++y)
+                    for (int z = z0; z <= z1; ++z)
+                        for (int x = x0; x <= x1; ++x) {
+                            auto cellBox = getWorldBlockAABB(world, x, y, z);
+                            if (cellBox && box.overlaps(*cellBox))
+                                hits.push_back(*cellBox);
+                        }
+                if (hits.empty()) return true;
+
+                // Preferred path: rest upward on the highest surface whose top
+                // is inside the body, so a ground embed pops onto the surface.
+                float bestTop = box.min.y;
+                bool hasTop = false;
+                for (auto const& c : hits) {
+                    if (c.max.y < box.max.y && c.max.y > bestTop) {
+                        bestTop = c.max.y;
+                        hasTop = true;
+                    }
+                }
+                if (hasTop) {
+                    AABB cand = box;
+                    cand.min.y = bestTop;
+                    cand.max.y = bestTop + size.y;
+                    if (!aabbCollides(world, cand)) {
+                        box = cand;
+                        if (velocity.y < 0.0f) velocity.y = 0.0f;
+                        continue;
+                    }
+                }
+
+                // Fallback: slide out along the least-penetration horizontal
+                // axis. Use the max distance across ALL overlapping cells so a
+                // single deterministic move clears every known overlap instead
+                // of hopping between two blocks frame to frame.
+                float needXp = 0.0f, needXm = 0.0f, needZp = 0.0f, needZm = 0.0f;
+                for (auto const& c : hits) {
+                    needXp = std::max(needXp, box.max.x - c.min.x);
+                    needXm = std::max(needXm, c.max.x - box.min.x);
+                    needZp = std::max(needZp, box.max.z - c.min.z);
+                    needZm = std::max(needZm, c.max.z - box.min.z);
+                }
+
+                const glm::vec3 dirs[4] = {
+                    {1.0f, 0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f},
+                    {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}
+                };
+                const float needs[4] = {needXp, needXm, needZp, needZm};
+
+                float bestLen = maxF;
+                glm::vec3 bestDir(0.0f);
+                for (int d = 0; d < 4; ++d) {   // fixed order = deterministic tie-break
+                    if (needs[d] > 0.0f && needs[d] < bestLen) {
+                        bestLen = needs[d];
+                        bestDir = dirs[d];
+                    }
+                }
+
+                if (bestLen >= maxF) return false;
+                box = box.translate(bestDir * bestLen);
+            }
+            return !aabbCollides(world, box);
+        };
+
         resolveAxis(0, delta.x);
         resolveAxis(2, delta.z);
         resolveAxis(1, delta.y);
+        depenetrate();
     }
 
 } // namespace lve

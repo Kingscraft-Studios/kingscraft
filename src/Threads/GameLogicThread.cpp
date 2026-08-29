@@ -29,6 +29,11 @@ namespace lve {
         }
 
         screenManager.reset();
+
+        // Destroy the world on the game thread, AFTER the run loop stops.
+        // stop() only signals; the engine thread joins us, so world teardown
+        // completes before any other thread could still dereference it.
+        world.reset();
     }
 
     void GameLogicThread::tick() {
@@ -72,8 +77,6 @@ namespace lve {
             mailbox_->stop();
         }
         MessageBus::Get().unsubscribe(ThreadName::GameLogic);
-        world.reset();
-        screenManager.reset();
     }
 
     void GameLogicThread::registerAllKeys() {

@@ -56,6 +56,10 @@ namespace lve {
         bool meshNeeded = true;
     };
 
+    // Immutable block grid, shared between blockCache_ and live chunks. Mesh
+    // tasks grab the handle (no 25KB copy); block edits copy-on-write.
+    using BlockDataPtr = std::shared_ptr<const std::vector<uint8_t>>;
+
     class Chunk {
     public:
         Chunk(glm::ivec2 gridPos, int verticesPerAxis, float spacing, int height);
@@ -67,8 +71,12 @@ namespace lve {
         std::vector<SubChunk>& getSubChunks() { return subChunks_; }
         const std::vector<SubChunk>& getSubChunks() const { return subChunks_; }
 
-        const std::vector<uint8_t>& getBlockData() const { return blockData_; }
-        void setBlockData(std::vector<uint8_t> data, int chunkSize, int height);
+        const std::vector<uint8_t>& getBlockData() const {
+            static const std::vector<uint8_t> kEmpty;
+            return blockData_ ? *blockData_ : kEmpty;
+        }
+        BlockDataPtr getBlockDataPtr() const { return blockData_; }
+        void setBlockData(BlockDataPtr data, int chunkSize, int height);
         uint8_t getBlock(int x, int y, int z) const;
         void setBlock(int x, int y, int z, uint8_t blockId);
 
@@ -94,11 +102,11 @@ namespace lve {
         int verticesPerAxis_;
         float spacing_;
 
-        std::vector<uint8_t> blockData_;
+        std::vector<SubChunk> subChunks_;
+
+        BlockDataPtr blockData_;
         int chunkSize_ = 0;
         int height_ = 0;
-
-        std::vector<SubChunk> subChunks_;
 
         std::vector<uint16_t> heightMap_;
         uint16_t maxHeight_ = 0;

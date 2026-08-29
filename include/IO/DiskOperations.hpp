@@ -2,6 +2,7 @@
 #include <fstream>
 #include <ios>
 #include <iosfwd>
+#include <mutex>
 #include <vector>
 
 namespace lve {
@@ -36,5 +37,6 @@ namespace lve {
         const std::string path_;
         const std::ios::openmode mode_;
         std::fstream file;
+        mutable std::mutex opMutex_;
     };
 }

@@ -10,18 +10,26 @@ namespace lve {
     }
 
     size_t DiskOperations::getFileSize() {
+        std::lock_guard<std::mutex> lock(opMutex_);
         file.clear();
 
         const auto current = file.tellg();
         file.seekg(0, std::ios::end);
 
-        const auto size = static_cast<std::size_t>(file.tellg());
+        const auto endPos = file.tellg();
+        if (endPos < 0) {
+            file.seekg(current);
+            return 0;
+        }
+
+        const auto size = static_cast<std::size_t>(endPos);
         file.seekg(current);
 
         return size;
     }
 
     bool DiskOperations::readHeader(void* header, size_t headerSize) {
+        std::lock_guard<std::mutex> lock(opMutex_);
         file.clear();
         file.seekg(0);
 
@@ -31,11 +39,14 @@ namespace lve {
     }
 
     std::vector<char> DiskOperations::read() {
+        std::lock_guard<std::mutex> lock(opMutex_);
         file.clear();
 
         file.seekg(0, std::ios::end);
-        const auto fileSize = static_cast<std::size_t>(file.tellg());
+        const auto endPos = file.tellg();
+        if (endPos < 0) return {};   // failed stream (e.g. racing write) — fail safe
 
+        const auto fileSize = static_cast<std::size_t>(endPos);
         file.seekg(0);
 
         std::vector<char> buffer(fileSize);
@@ -49,10 +60,14 @@ namespace lve {
     }
 
     std::vector<char> DiskOperations::readData(size_t offset) {
+        std::lock_guard<std::mutex> lock(opMutex_);
         file.clear();
         file.seekg(0, std::ios::end);
 
-        const auto fileSize = static_cast<std::size_t>(file.tellg());
+        const auto endPos = file.tellg();
+        if (endPos < 0) return {};   // failed stream — fail safe
+
+        const auto fileSize = static_cast<std::size_t>(endPos);
 
         if (offset > fileSize)
             return {};
@@ -74,10 +89,14 @@ namespace lve {
     }
 
     std::vector<char> DiskOperations::readData(size_t offset, size_t size) {
+        std::lock_guard<std::mutex> lock(opMutex_);
         file.clear();
         file.seekg(0, std::ios::end);
 
-        const auto fileSize = static_cast<std::size_t>(file.tellg());
+        const auto endPos = file.tellg();
+        if (endPos < 0) return {};   // failed stream — fail safe
+
+        const auto fileSize = static_cast<std::size_t>(endPos);
 
         if (offset > fileSize)
             return {};
@@ -114,11 +133,13 @@ namespace lve {
     }
 
     void DiskOperations::write(const std::vector<char>& data) {
+        std::lock_guard<std::mutex> lock(opMutex_);
         // positional write at current put position - does not truncate
         file.write(data.data(), static_cast<std::streamsize>(data.size()));
     }
 
     void DiskOperations::writeAt(std::size_t offset, const std::vector<char>& data) {
+        std::lock_guard<std::mutex> lock(opMutex_);
         file.clear();
         file.seekp(static_cast<std::streamoff>(offset));
         file.write(data.data(), static_cast<std::streamsize>(data.size()));
@@ -126,6 +147,7 @@ namespace lve {
     }
 
     void DiskOperations::writeTruncate(const std::vector<char>& data) {
+        std::lock_guard<std::mutex> lock(opMutex_);
         file.clear();
         file.close();
 

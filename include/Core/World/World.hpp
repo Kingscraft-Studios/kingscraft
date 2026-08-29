@@ -32,6 +32,7 @@ namespace lve {
         void tick(double dt);
         void flushPendingCleanup();
         void processCompletedChunks();
+        void processGateRemeshResults();
 
         std::vector<Chunk*> getLoadedChunks() const;
 
@@ -56,13 +57,32 @@ namespace lve {
             std::unique_ptr<Chunk> chunk;
         };
 
+        struct GateRemeshResult {
+            int gx;
+            int gz;
+            uint8_t mask;               // gates evaluated (bits 2..5 = PosZ,NegZ,PosX,NegX)
+            std::vector<SubChunk> slabs; // 1 per sub-chunk: the freshly emitted gate faces
+        };
+
+        struct ChunkEditResult {
+            int gx;
+            int gz;
+            uint32_t mask;              // subchunks rebuilt (1 bit per subchunk)
+            std::vector<SubChunk> subs; // rebuilt geometry, one per set bit (ascending)
+        };
+
         Chunk* getChunk(int gridX, int gridZ);
 
         void loadChunkSync(int gridX, int gridZ);
-        void genThreadFunc();
+        void noiseThreadFunc();
+        void meshThreadFunc();
+        void markNeighborsForBorder(int gx, int gz);
+        void queueGateRemesh(int gx, int gz, int gate);
+        void processEditResults();
 
         static constexpr int HIGH_PRIO_RADIUS = 1;
         static constexpr int MAX_REQUESTS_PER_FRAME = 50;
+        static constexpr int MAX_REMESH_PER_FRAME = 16;
         static constexpr int CLEANUP_DELAY = 4;
 
         ITerrainGenerator& terrainGen_;
@@ -72,15 +92,40 @@ namespace lve {
         std::array<std::vector<std::unique_ptr<Chunk>>, CLEANUP_DELAY + 1> pendingCleanup_;
         uint64_t frameCount_ = 0;
 
-        std::thread genThread_;
-        std::atomic<bool> genRunning_{true};
-        std::mutex genMutex_;
-        std::condition_variable genCV_;
+        std::thread noiseThread_;
+        std::atomic<bool> noiseRunning_{true};
+        std::condition_variable noiseCV_;
+
+        std::thread meshThread_;
+        std::atomic<bool> meshRunning_{true};
+        std::condition_variable meshCV_;
+
+        std::mutex queueMutex_;   // guards the hand-off queues both threads share
+
         std::deque<std::pair<int,int>> pendingGen_;
+        std::deque<uint64_t> toMesh_;              // block data ready, awaiting meshing
         std::deque<ChunkGenResult> completedGen_;
         std::unordered_set<uint64_t> pendingRequests_;
+        std::deque<uint64_t> remeshQueue_;
+        std::deque<GateRemeshResult> completedGateRemesh_;
+        std::unordered_map<uint64_t, uint8_t> remeshGates_;
+        std::deque<uint64_t> editQueue_;           // block edits awaiting mesher rebuild
+        std::unordered_map<uint64_t, uint32_t> editMasks_;   // queued subchunk masks per key
+        std::deque<ChunkEditResult> completedEdits_;
+        int remeshRequestsThisTick_ = 0;
 
-        std::unordered_map<uint64_t, std::vector<uint8_t>> blockCache_;
+        bool hasCenter_ = false;
+        int lastCenterX_ = 0;
+        int lastCenterZ_ = 0;
+
+        // Movement history for directional generation priority.
+        float prevCameraX_ = 0.0f;
+        float prevCameraZ_ = 0.0f;
+        float moveDirX_ = 1.0f;
+        float moveDirZ_ = 0.0f;
+        bool hasMoveDir_ = false;
+
+        std::unordered_map<uint64_t, BlockDataPtr> blockCache_;
         mutable std::mutex cacheMutex_;
 
         mutable std::vector<Chunk*> chunkCache_;

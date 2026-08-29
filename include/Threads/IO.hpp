@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <mutex>
 #include <thread>
 #include <string>
 #include <unordered_map>
@@ -34,6 +35,7 @@ namespace lve {
 
         IOBuiltInTemplates builtInTemplates{*this};
         std::unordered_map<std::string, DiskOperations> files_;
+        std::mutex filesMutex_;
         static std::unique_ptr<IO> instance_;
     };
 } // namespace lve

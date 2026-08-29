@@ -86,6 +86,7 @@ namespace lve {
     }
 
     DiskOperations& IO::getFile(const std::string& path, std::ios::openmode mode) {
+        std::lock_guard<std::mutex> lock(filesMutex_);
         auto it = files_.find(path);
 
         if (it != files_.end()) {

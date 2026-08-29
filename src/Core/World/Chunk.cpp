@@ -29,7 +29,7 @@ namespace lve {
         }
     }
 
-    void Chunk::setBlockData(std::vector<uint8_t> data, int chunkSize, int height) {
+    void Chunk::setBlockData(BlockDataPtr data, int chunkSize, int height) {
         blockData_ = std::move(data);
         chunkSize_ = chunkSize;
         height_ = height;
@@ -38,19 +38,25 @@ namespace lve {
     }
 
     uint8_t Chunk::getBlock(int x, int y, int z) const {
-        if (blockData_.empty()) return 0;
-        return blockData_[static_cast<size_t>(y) * chunkSize_ * chunkSize_
-                          + static_cast<size_t>(z) * chunkSize_
-                          + static_cast<size_t>(x)];
+        if (!blockData_ || blockData_->empty()) return 0;
+        return (*blockData_)[static_cast<size_t>(y) * chunkSize_ * chunkSize_
+                             + static_cast<size_t>(z) * chunkSize_
+                             + static_cast<size_t>(x)];
     }
 
     void Chunk::setBlock(int x, int y, int z, uint8_t blockId) {
-        if (blockData_.empty()) return;
+        if (!blockData_ || blockData_->empty()) return;
         if (x < 0 || x >= chunkSize_ || y < 0 || y >= height_ || z < 0 || z >= chunkSize_)
             return;
-        blockData_[static_cast<size_t>(y) * chunkSize_ * chunkSize_
-                   + static_cast<size_t>(z) * chunkSize_
-                   + static_cast<size_t>(x)] = blockId;
+
+        // Copy-on-write: blockData_ is shared with blockCache_ (and possibly a
+        // pending mesh task). Edits are rare, so clone the 25KB buffer, mutate
+        // the clone, then publish the new handle — the old buffer stays alive
+        // for whoever still holds it.
+        std::vector<uint8_t> data = *blockData_;
+        data[static_cast<size_t>(y) * chunkSize_ * chunkSize_
+             + static_cast<size_t>(z) * chunkSize_
+             + static_cast<size_t>(x)] = blockId;
 
         // Update heightmap for this column
         size_t hmIdx = static_cast<size_t>(z) * chunkSize_ + static_cast<size_t>(x);
@@ -64,9 +70,9 @@ namespace lve {
             if (static_cast<uint16_t>(y) == heightMap_[hmIdx]) {
                 uint16_t newTop = 0;
                 for (int ny = y - 1; ny >= 0; --ny) {
-                    if (blockData_[static_cast<size_t>(ny) * chunkSize_ * chunkSize_
-                                  + static_cast<size_t>(z) * chunkSize_
-                                  + static_cast<size_t>(x)] != 0) {
+                    if (data[static_cast<size_t>(ny) * chunkSize_ * chunkSize_
+                             + static_cast<size_t>(z) * chunkSize_
+                             + static_cast<size_t>(x)] != 0) {
                         newTop = static_cast<uint16_t>(ny);
                         break;
                     }
@@ -76,6 +82,8 @@ namespace lve {
                     updateMinMaxHeight();
             }
         }
+
+        blockData_ = std::make_shared<const std::vector<uint8_t>>(std::move(data));
 
         int subIdx = y / static_cast<int>(SUBCHUNK_H);
         if (static_cast<size_t>(subIdx) < subChunks_.size())
@@ -104,16 +112,16 @@ namespace lve {
     }
 
     void Chunk::rebuildHeightmap() {
-        if (chunkSize_ == 0) return;
+        if (chunkSize_ == 0 || !blockData_) return;
         maxHeight_ = 0;
         minHeight_ = static_cast<uint16_t>(height_);
         for (int z = 0; z < chunkSize_; ++z) {
             for (int x = 0; x < chunkSize_; ++x) {
                 uint16_t top = 0;
                 for (int y = height_ - 1; y >= 0; --y) {
-                    if (blockData_[static_cast<size_t>(y) * chunkSize_ * chunkSize_
-                                   + static_cast<size_t>(z) * chunkSize_
-                                   + static_cast<size_t>(x)] != 0) {
+                    if ((*blockData_)[static_cast<size_t>(y) * chunkSize_ * chunkSize_
+                                     + static_cast<size_t>(z) * chunkSize_
+                                     + static_cast<size_t>(x)] != 0) {
                         top = static_cast<uint16_t>(y);
                         break;
                     }

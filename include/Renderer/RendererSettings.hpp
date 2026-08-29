@@ -10,7 +10,7 @@ namespace lve {
         }
 
         // World / terrain
-        int renderDistance = 5;
+        int renderDistance = 10;
 
         int chunkSize = 16;
         int worldHeight = 100;
