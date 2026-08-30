@@ -28,6 +28,8 @@ namespace lve {
 
         size_t getFileSize(const std::string& path);
 
+        void flushTemplates();   // write back staged template data (e.g. region batches)
+
 
         IOBuiltInTemplates& getBuiltinTemplates() { return builtInTemplates; }
     private:

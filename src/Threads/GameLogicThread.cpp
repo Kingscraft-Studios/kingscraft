@@ -7,6 +7,9 @@
 #include "Util/TimeUtil.hpp"
 #include "Util/LogUtils.hpp"
 
+#include <chrono>
+#include <thread>
+
 namespace lve {
     void GameLogicThread::init() {
         prevTime_ = TimeUtil::uptimeSeconds();
@@ -21,11 +24,14 @@ namespace lve {
         registerUICallbacks();
         while (running_) {
             Message msg;
+            bool idle = true;
             while (mailbox_->try_pop(msg)) {
+                idle = false;
                 if (msg.payload) msg.payload();
             }
 
             tick();
+            if (idle) std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
 
         screenManager.reset();

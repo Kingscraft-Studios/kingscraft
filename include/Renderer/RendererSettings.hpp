@@ -30,6 +30,9 @@ namespace lve {
         bool disableTextures = false;
         int maxFps = 0; // 0 = None
 
+        // IO / world storage
+        int regionCacheLimit = 16;  // max region texts kept in memory (LRU)
+
         // Occlusion ray grid (screen-space)
         // Low=32x18, Medium=48x27, High=64x36, Ultra=96x54
         int occlusionGridW = 64;

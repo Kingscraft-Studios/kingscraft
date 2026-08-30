@@ -128,6 +128,11 @@ namespace lve {
         std::unordered_map<uint64_t, BlockDataPtr> blockCache_;
         mutable std::mutex cacheMutex_;
 
+        // Chunks edited since load (setBlock). Only these are serialized and staged
+        // for the region overlay; unedited chunks regenerate from the seed and
+        // are never written to disk.
+        std::unordered_set<uint64_t> unsavedChunks_;
+
         mutable std::vector<Chunk*> chunkCache_;
         mutable bool chunkCacheDirty_ = false;
 

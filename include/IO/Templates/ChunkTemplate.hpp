@@ -4,6 +4,8 @@
 #include "Renderer/RendererSettings.hpp"
 #include "Util/StringBuilder.hpp"
 
+#include <cstdint>
+
 namespace lve {
     class IO;
 
@@ -30,27 +32,8 @@ namespace lve {
             writeBytes(path, std::vector<char>(formatted.begin(), formatted.end()));
         }
 
-    private:
-        static constexpr char BLOCK_TO_CHAR[256] = {
-            '.',  // 0 = AIR
-            'G',  // 1 = GRASS
-            'S',  // 2 = STONE
-            'D',  // 3 = DIRT
-        };
-
-        static uint8_t charToBlock(char c) {
-            switch (c) {
-                case 'G': return 1;
-                case 'S': return 2;
-                case 'D': return 3;
-                default:  return 0;
-            }
-        }
-
-        std::string buildPath(int gridX, int gridZ) {
-            return StringBuilder::build("world/chunks/", gridX, "_", gridZ, ".txt");
-        }
-
+        // Pure encode/decode (no file I/O) — shared with RegionTemplate so
+        // region files reuse the same block-grid text layout.
         std::string serialize(const std::vector<uint8_t>& data) {
             auto& s = RendererSettings::get();
             int N = s.chunkSize;
@@ -107,6 +90,27 @@ namespace lve {
             }
 
             return blockData;
+        }
+
+    private:
+        static constexpr char BLOCK_TO_CHAR[256] = {
+            '.',  // 0 = AIR
+            'G',  // 1 = GRASS
+            'S',  // 2 = STONE
+            'D',  // 3 = DIRT
+        };
+
+        static uint8_t charToBlock(char c) {
+            switch (c) {
+                case 'G': return 1;
+                case 'S': return 2;
+                case 'D': return 3;
+                default:  return 0;
+            }
+        }
+
+std::string buildPath(int gridX, int gridZ) {
+            return StringBuilder::build("world/chunks/", gridX, "_", gridZ, ".txt");
         }
     };
 }

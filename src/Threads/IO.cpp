@@ -15,7 +15,12 @@ namespace lve {
 
     void IO::Shutdown() {
         if (!instance_) return;
+        instance_->flushTemplates();
         instance_.reset();
+    }
+
+    void IO::flushTemplates() {
+        builtInTemplates.getRegionTemplate().flush();
     }
 
     IO& IO::Get() {

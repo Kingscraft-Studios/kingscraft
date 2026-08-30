@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.31)
-project(godscraft)
+project(kingscraft)
 
 set(CMAKE_CXX_STANDARD 20)
 add_compile_options(-Wall -Wextra -Wpedantic -Wno-unused-parameter)
@@ -24,23 +24,23 @@ file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 file(GLOB_RECURSE HEADER_FILES include/*.hpp)
 set(CMAKE_CONFIGURE_DEPENDS ${ENGINE_SRC} ${HEADER_FILES})
 
-add_executable(godscraft
+add_executable(kingscraft
         ${SOURCE_FILES}
         ${HEADER_FILES}
 )
 
-target_link_directories(godscraft PRIVATE)
+target_link_directories(kingscraft PRIVATE)
 
-target_link_libraries(godscraft
+target_link_libraries(kingscraft
         PRIVATE glfw
         PRIVATE vulkan
         PRIVATE pthread
         PRIVATE dl
 )
 
-add_custom_command(TARGET godscraft POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E remove_directory $<TARGET_FILE_DIR:godscraft>/resources
+add_custom_command(TARGET kingscraft POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove_directory $<TARGET_FILE_DIR:kingscraft>/resources
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/resources
-        $<TARGET_FILE_DIR:godscraft>/resources
+        $<TARGET_FILE_DIR:kingscraft>/resources
 )

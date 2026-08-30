@@ -95,18 +95,18 @@ namespace lve {
         if (meshThread_.joinable()) meshThread_.join();
         if (noiseThread_.joinable()) noiseThread_.join();
 
-        // Save all loaded chunks
+        // Save the overlay: only chunks whose blocks were edited this session.
+        // Unedited chunks regenerate from the seed and need no disk copy. IO
+        // flushes each changed region file once.
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
-            for (auto& [key, blockData] : blockCache_) {
+            auto& regions = IO::Get().getBuiltinTemplates().getRegionTemplate();
+            for (uint64_t key : unsavedChunks_) {
+                auto cacheIt = blockCache_.find(key);
+                if (cacheIt == blockCache_.end()) continue;
                 int gx = static_cast<int>(key >> 32);
                 int gz = static_cast<int>(key & 0xFFFFFFFF);
-
-                // The shared handle keeps the 25KB buffer alive for the
-                // deferred save; no copy.
-                MessageBus::Get().send(ThreadName::Engine, [gx, gz, blockData]() {
-                    IO::Get().getBuiltinTemplates().getChunkTemplate().save(gx, gz, *blockData);
-                });
+                regions.queueSave(gx, gz, *cacheIt->second);
             }
         }
 
@@ -161,6 +161,7 @@ namespace lve {
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             blockCache_[makeChunkKey(gx, gz)] = chunk->getBlockDataPtr();
+            unsavedChunks_.insert(makeChunkKey(gx, gz));
         }
 
         if (lx == 0) queueGateRemesh(gx - 1, gz, 4);              // -X neighbor: re-cut its +X face
@@ -227,8 +228,12 @@ namespace lve {
         int h = height_;
 
         // TODO: Using IO Sequentially isn't a great idea
-        auto blockIds = IO::Get().getBuiltinTemplates().getChunkTemplate().load(gridX, gridZ);
+        auto blockIds = IO::Get().getBuiltinTemplates().getRegionTemplate().load(gridX, gridZ);
         if (blockIds.empty()) {
+            // Not on disk (never edited) -> deterministic regeneration from the
+            // hardcoded seed. Generated chunks are NOT written back; only block
+            // edits reach the region overlay, so a chunk's presence on disk is
+            // exactly "this chunk differs from what the seed would produce".
             blockIds = terrainGen_.generateBlocks(gridX, gridZ, N, h);
         }
 
@@ -271,16 +276,16 @@ namespace lve {
     void World::unloadChunk(int gridX, int gridZ) {
         uint64_t key = makeChunkKey(gridX, gridZ);  // compute once
 
-        // Save to disk before unloading
+        // Stage the chunk for saving ONLY if its blocks were edited since load.
+        // Unedited chunks regenerate from the seed and never touch disk, so a
+        // chunk present in a region file always means "differs from seed".
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             auto cacheIt = blockCache_.find(key);
-            if (cacheIt != blockCache_.end()) {
-                // Shared handle keeps the buffer alive for the deferred save.
-                MessageBus::Get().send(ThreadName::Engine, [gridX, gridZ, blockData = cacheIt->second]() {
-                    IO::Get().getBuiltinTemplates().getChunkTemplate().save(gridX, gridZ, *blockData);
-                });
+            if (cacheIt != blockCache_.end() && unsavedChunks_.count(key)) {
+                IO::Get().getBuiltinTemplates().getRegionTemplate().queueSave(gridX, gridZ, *cacheIt->second);
             }
+            unsavedChunks_.erase(key);
         }
 
         auto it = chunks_.find(key);
@@ -334,8 +339,10 @@ namespace lve {
             int gz = task.second;
 
             // TODO: Using IO Sequentially isn't a great idea
-            auto blockIds = IO::Get().getBuiltinTemplates().getChunkTemplate().load(gx, gz);
+            auto blockIds = IO::Get().getBuiltinTemplates().getRegionTemplate().load(gx, gz);
             if (blockIds.empty()) {
+                // Deterministic regeneration from the hardcoded seed. Not
+                // written back to disk — a chunk on disk means it was edited.
                 blockIds = terrainGen_.generateBlocks(gx, gz, chunkSize_, height_);
             }
 

@@ -3,6 +3,9 @@
 #include "Bus/MessageBus.hpp"
 #include "Util/LogUtils.hpp"
 
+#include <chrono>
+#include <thread>
+
 namespace lve {
     void InputThread::Init(WindowCreateInfo info) {
         window.emplace(info.width, info.height, info.name);
@@ -37,7 +40,9 @@ namespace lve {
     void InputThread::run() {
         while (running) {
             Message msg;
+            bool idle = true;
             while (mailbox->try_pop(msg)) {
+                idle = false;
                 if (msg.payload) {
                     try {
                         msg.payload();
@@ -49,6 +54,7 @@ namespace lve {
             window->pollGLFWEvents();
             closeRequested_.store(window->shouldClose(), std::memory_order_release);
             keyHandler->update();
+            if (idle) std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 
