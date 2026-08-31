@@ -13,10 +13,7 @@ namespace lve {
             vkFreeCommandBuffers(device.device(), device.getCommandPool(), 1, &uploadCmd);
             uploadCmd = VK_NULL_HANDLE;
         }
-        if (uploadFence != VK_NULL_HANDLE) {
-            vkDestroyFence(device.device(), uploadFence, nullptr);
-            uploadFence = VK_NULL_HANDLE;
-        }
+        uploadFence.reset();
         vertexBuffer.reset();
         indexBuffer.reset();
     }
@@ -77,7 +74,7 @@ namespace lve {
 
         VkFenceCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        vkCreateFence(device.device(), &info, nullptr, &gpuChunk.uploadFence);
+        gpuChunk.uploadFence = std::make_unique<Fence>(device, info.flags);
 
         VkCommandBuffer cmd = device.beginSingleTimeCommands();
         gpuChunk.uploadCmd = cmd;
@@ -94,7 +91,7 @@ namespace lve {
             vkCmdCopyBuffer(cmd, staging.buffer, gpuChunk.indexBuffer->getHandle(), 1, &copy);
         }
 
-        device.submitAsync(cmd, gpuChunk.uploadFence);
+        device.submitAsync(cmd, gpuChunk.uploadFence->getHandle());
 
         gpuChunk.indexCount = static_cast<uint32_t>(data.indices.size());
 
@@ -115,10 +112,8 @@ namespace lve {
 
         auto& device = RenderThread::getInstance().getDevice();
 
-        if (chunk.data.uploadFence != VK_NULL_HANDLE) {
-            if (vkGetFenceStatus(device.device(), chunk.data.uploadFence) != VK_SUCCESS)
-                return false;
-        }
+        if (chunk.data.uploadFence && chunk.data.uploadFence->status() != VK_SUCCESS)
+            return false;
 
         chunk.data.cleanup(device);
         return true;

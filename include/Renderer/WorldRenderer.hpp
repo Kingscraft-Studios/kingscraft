@@ -3,6 +3,7 @@
 #include "Core/World/Chunk.hpp"
 #include "Vulkan/Device.hpp"
 #include "Vulkan/Pipeline.hpp"
+#include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/TextureCache.hpp"
 
@@ -30,7 +31,7 @@ namespace lve {
         Device* device_ = nullptr;
         TextureCache* textureCache_ = nullptr;
         VkRenderPass renderPass_ = VK_NULL_HANDLE;
-        VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+        std::unique_ptr<PipelineLayout> pipelineLayout_;
         std::unique_ptr<Pipeline> pipeline_;
 
         std::unique_ptr<Pipeline> highlightPipeline_;

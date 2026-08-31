@@ -17,35 +17,16 @@ TextureCache::~TextureCache() {
 
 void TextureCache::cleanup() {
     if (descriptorSet_ != VK_NULL_HANDLE) {
-        if (descriptorPool_ != VK_NULL_HANDLE && descriptorSetLayout_ != VK_NULL_HANDLE) {
-            vkFreeDescriptorSets(device_.device(), descriptorPool_, 1, &descriptorSet_);
+        if (descriptorPool_ != nullptr) {
+            vkFreeDescriptorSets(device_.device(), descriptorPool_->getHandle(), 1, &descriptorSet_);
         }
         descriptorSet_ = VK_NULL_HANDLE;
     }
-    if (descriptorPool_ != VK_NULL_HANDLE) {
-        vkDestroyDescriptorPool(device_.device(), descriptorPool_, nullptr);
-        descriptorPool_ = VK_NULL_HANDLE;
-    }
-    if (descriptorSetLayout_ != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(device_.device(), descriptorSetLayout_, nullptr);
-        descriptorSetLayout_ = VK_NULL_HANDLE;
-    }
-    if (sampler_ != VK_NULL_HANDLE) {
-        vkDestroySampler(device_.device(), sampler_, nullptr);
-        sampler_ = VK_NULL_HANDLE;
-    }
-    if (imageView_ != VK_NULL_HANDLE) {
-        vkDestroyImageView(device_.device(), imageView_, nullptr);
-        imageView_ = VK_NULL_HANDLE;
-    }
-    if (image_ != VK_NULL_HANDLE) {
-        vkDestroyImage(device_.device(), image_, nullptr);
-        image_ = VK_NULL_HANDLE;
-    }
-    if (imageMemory_ != VK_NULL_HANDLE) {
-        vkFreeMemory(device_.device(), imageMemory_, nullptr);
-        imageMemory_ = VK_NULL_HANDLE;
-    }
+    descriptorPool_.reset();
+    descriptorSetLayout_.reset();
+    sampler_.reset();
+    imageView_.reset();
+    image_.reset();
     layerCount_ = 0;
 }
 
@@ -137,17 +118,16 @@ void TextureCache::updateFromRegistry() {
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    device_.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                image_, imageMemory_);
+    image_ = std::make_unique<Image>(device_, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     // Transition all mip levels to transfer dst
-    device_.transitionImageLayout(image_, VK_FORMAT_R8G8B8A8_SRGB,
+    device_.transitionImageLayout(image_->getHandle(), VK_FORMAT_R8G8B8A8_SRGB,
                                   VK_IMAGE_LAYOUT_UNDEFINED,
                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                   layerCount_, static_cast<uint32_t>(mipCount));
 
     // Copy staging to image
-    device_.copyBufferToImage(stagingBuffer, image_,
+    device_.copyBufferToImage(stagingBuffer, image_->getHandle(),
                               static_cast<uint32_t>(texW),
                               static_cast<uint32_t>(texH),
                               layerCount_);
@@ -163,7 +143,7 @@ void TextureCache::updateFromRegistry() {
             barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = image_;
+            barrier.image = image_->getHandle();
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             barrier.subresourceRange.baseMipLevel = static_cast<uint32_t>(mip - 1);
             barrier.subresourceRange.levelCount = 1;
@@ -196,8 +176,8 @@ void TextureCache::updateFromRegistry() {
             blit.dstOffsets[1] = {dstW, dstH, 1};
 
             vkCmdBlitImage(cmd,
-                image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                image_->getHandle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                image_->getHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 1, &blit, VK_FILTER_LINEAR);
 
             barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -217,7 +197,7 @@ void TextureCache::updateFromRegistry() {
         lastBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         lastBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         lastBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        lastBarrier.image = image_;
+        lastBarrier.image = image_->getHandle();
         lastBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         lastBarrier.subresourceRange.baseMipLevel = static_cast<uint32_t>(mipCount - 1);
         lastBarrier.subresourceRange.levelCount = 1;
@@ -237,11 +217,12 @@ void TextureCache::updateFromRegistry() {
     vkFreeMemory(device_.device(), stagingMemory, nullptr);
 
     // Image view (array)
-    imageView_ = device_.createImageView(image_, VK_FORMAT_R8G8B8A8_SRGB,
-                                         VK_IMAGE_ASPECT_COLOR_BIT,
-                                         static_cast<uint32_t>(mipCount), 0,
-                                         VK_IMAGE_VIEW_TYPE_2D_ARRAY,
-                                         layerCount_);
+    imageView_ = std::make_unique<ImageView>(
+        device_, image_->getHandle(), VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        static_cast<uint32_t>(mipCount), 0,
+        VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+        layerCount_);
 
     // Sampler
     VkSamplerCreateInfo samplerInfo{};
@@ -260,8 +241,7 @@ void TextureCache::updateFromRegistry() {
     samplerInfo.maxLod = static_cast<float>(mipCount);
     samplerInfo.mipLodBias = 0.0f;
 
-    if (vkCreateSampler(device_.device(), &samplerInfo, nullptr, &sampler_) != VK_SUCCESS)
-        throw std::runtime_error("failed to create texture cache sampler!");
+    sampler_ = std::make_unique<Sampler>(device_, samplerInfo);
 
     // Descriptor set layout
     VkDescriptorSetLayoutBinding layoutBinding{};
@@ -275,9 +255,7 @@ void TextureCache::updateFromRegistry() {
     layoutInfo.bindingCount = 1;
     layoutInfo.pBindings = &layoutBinding;
 
-    if (vkCreateDescriptorSetLayout(device_.device(), &layoutInfo, nullptr,
-                                    &descriptorSetLayout_) != VK_SUCCESS)
-        throw std::runtime_error("failed to create texture cache descriptor set layout!");
+    descriptorSetLayout_ = std::make_unique<DescriptorSetLayout>(device_, layoutInfo);
 
     // Descriptor pool
     VkDescriptorPoolSize poolSize{};
@@ -291,16 +269,15 @@ void TextureCache::updateFromRegistry() {
     poolInfo.pPoolSizes = &poolSize;
     poolInfo.maxSets = 1;
 
-    if (vkCreateDescriptorPool(device_.device(), &poolInfo, nullptr,
-                               &descriptorPool_) != VK_SUCCESS)
-        throw std::runtime_error("failed to create texture cache descriptor pool!");
+    descriptorPool_ = std::make_unique<DescriptorPool>(device_, poolInfo);
 
     // Allocate set
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = descriptorPool_;
+    allocInfo.descriptorPool = descriptorPool_->getHandle();
     allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &descriptorSetLayout_;
+    VkDescriptorSetLayout layoutHandle = descriptorSetLayout_->getHandle();
+    allocInfo.pSetLayouts = &layoutHandle;
 
     if (vkAllocateDescriptorSets(device_.device(), &allocInfo, &descriptorSet_) != VK_SUCCESS)
         throw std::runtime_error("failed to allocate texture cache descriptor set!");
@@ -308,8 +285,8 @@ void TextureCache::updateFromRegistry() {
     // Write descriptor
     VkDescriptorImageInfo imageInfoDesc{};
     imageInfoDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfoDesc.imageView = imageView_;
-    imageInfoDesc.sampler = sampler_;
+    imageInfoDesc.imageView = imageView_->getHandle();
+    imageInfoDesc.sampler = sampler_->getHandle();
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

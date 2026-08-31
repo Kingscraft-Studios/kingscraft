@@ -51,47 +51,21 @@ namespace lve {
         for (auto& slot : retiredPipelines_) {
             for (auto& rp : slot) {
                 rp.pipeline.reset();
-                if (rp.layout != VK_NULL_HANDLE) {
-                    vkDestroyPipelineLayout(device_.device(), rp.layout, nullptr);
-                }
+                rp.layout.reset();
             }
             slot.clear();
         }
         uiPipeline_.reset();
         compositePipeline_.reset();
+        pipelineLayout_.reset();
+        compositePipelineLayout_.reset();
         offscreenTarget_.reset();
-        if (compositePipelineLayout_ != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(device_.device(), compositePipelineLayout_, nullptr);
-            compositePipelineLayout_ = VK_NULL_HANDLE;
-        }
-        if (pipelineLayout_ != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(device_.device(), pipelineLayout_, nullptr);
-            pipelineLayout_ = VK_NULL_HANDLE;
-        }
-        if (blockTexLayout_ != VK_NULL_HANDLE) {
-            descriptorManager_.destroyLayout(blockTexLayout_);
-            blockTexLayout_ = VK_NULL_HANDLE;
-        }
-        if (blockTexPool_ != VK_NULL_HANDLE) {
-            descriptorManager_.destroyPool(blockTexPool_);
-            blockTexPool_ = VK_NULL_HANDLE;
-        }
-        if (uiDescriptorSetLayout_ != VK_NULL_HANDLE) {
-            descriptorManager_.destroyLayout(uiDescriptorSetLayout_);
-            uiDescriptorSetLayout_ = VK_NULL_HANDLE;
-        }
-        if (compositeDescriptorSetLayout_ != VK_NULL_HANDLE) {
-            descriptorManager_.destroyLayout(compositeDescriptorSetLayout_);
-            compositeDescriptorSetLayout_ = VK_NULL_HANDLE;
-        }
-        if (uiDescriptorPool_ != VK_NULL_HANDLE) {
-            descriptorManager_.destroyPool(uiDescriptorPool_);
-            uiDescriptorPool_ = VK_NULL_HANDLE;
-        }
-        if (compositeDescriptorPool_ != VK_NULL_HANDLE) {
-            descriptorManager_.destroyPool(compositeDescriptorPool_);
-            compositeDescriptorPool_ = VK_NULL_HANDLE;
-        }
+        blockTexLayout_.reset();
+        blockTexPool_.reset();
+        uiDescriptorSetLayout_.reset();
+        compositeDescriptorSetLayout_.reset();
+        uiDescriptorPool_.reset();
+        compositeDescriptorPool_.reset();
         offscreenRenderPass_.reset();
         stylePoolBuffer_.reset();
         elementStylesBuffer_.reset();
@@ -115,9 +89,7 @@ namespace lve {
         currentFrameIndex_ = frameIndex;
         for (auto& rp : retiredPipelines_[frameIndex]) {
             rp.pipeline.reset();
-            if (rp.layout != VK_NULL_HANDLE) {
-                vkDestroyPipelineLayout(device_.device(), rp.layout, nullptr);
-            }
+            rp.layout.reset();
         }
         retiredPipelines_[frameIndex].clear();
 
@@ -167,7 +139,7 @@ namespace lve {
 
         VkDescriptorSet bindSets[2] = { uiDescriptorSets_[frameIndex], blockTexSets_[frameIndex] };
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                pipelineLayout_, 0, 2, bindSets, 0, nullptr);
+                                pipelineLayout_->getHandle(), 0, 2, bindSets, 0, nullptr);
 
         batchQueue.flush(cmd);
 
@@ -192,7 +164,7 @@ namespace lve {
 
         compositePipeline_->bind(cmd);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                compositePipelineLayout_, 0, 1, &compositeDescriptorSets_[frameIndex], 0, nullptr);
+                                compositePipelineLayout_->getHandle(), 0, 1, &compositeDescriptorSets_[frameIndex], 0, nullptr);
         vkCmdDraw(cmd, 3, 1, 0, 0);
     }
 
@@ -201,8 +173,7 @@ namespace lve {
 
         RetiredPipeline rp;
         rp.pipeline = std::move(compositePipeline_);
-        rp.layout = compositePipelineLayout_;
-        compositePipelineLayout_ = VK_NULL_HANDLE;
+        rp.layout = std::move(compositePipelineLayout_);
         retiredPipelines_[retireSlot].push_back(std::move(rp));
 
         createCompositePipeline(renderPass);
@@ -256,7 +227,8 @@ namespace lve {
         uiBindings[3].descriptorCount = 1;
         uiBindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-        uiDescriptorSetLayout_ = descriptorManager_.createLayout(uiBindings);
+        uiDescriptorSetLayout_ = DescriptorSetLayout::adopt(
+            device_, descriptorManager_.createLayout(uiBindings));
 
         std::vector<VkDescriptorSetLayoutBinding> blockBindings(1);
         blockBindings[0].binding = 0;
@@ -264,7 +236,8 @@ namespace lve {
         blockBindings[0].descriptorCount = 1;
         blockBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        blockTexLayout_ = descriptorManager_.createLayout(blockBindings);
+        blockTexLayout_ = DescriptorSetLayout::adopt(
+            device_, descriptorManager_.createLayout(blockBindings));
 
         std::vector<VkDescriptorSetLayoutBinding> compBindings(1);
         compBindings[0].binding = 0;
@@ -272,7 +245,8 @@ namespace lve {
         compBindings[0].descriptorCount = 1;
         compBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        compositeDescriptorSetLayout_ = descriptorManager_.createLayout(compBindings);
+        compositeDescriptorSetLayout_ = DescriptorSetLayout::adopt(
+            device_, descriptorManager_.createLayout(compBindings));
     }
 
     void UiRenderer::createDescriptorPools() {
@@ -286,33 +260,39 @@ namespace lve {
         uiPoolSizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         uiPoolSizes[3].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 
-        uiDescriptorPool_ = descriptorManager_.createPool(uiPoolSizes, MAX_FRAMES_IN_FLIGHT);
+        uiDescriptorPool_ = DescriptorPool::adopt(
+            device_, descriptorManager_.createPool(uiPoolSizes, MAX_FRAMES_IN_FLIGHT));
 
         std::vector<VkDescriptorPoolSize> blockPoolSizes(1);
         blockPoolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         blockPoolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 
-        blockTexPool_ = descriptorManager_.createPool(blockPoolSizes, MAX_FRAMES_IN_FLIGHT);
+        blockTexPool_ = DescriptorPool::adopt(
+            device_, descriptorManager_.createPool(blockPoolSizes, MAX_FRAMES_IN_FLIGHT));
 
         std::vector<VkDescriptorPoolSize> compPoolSizes(1);
         compPoolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         compPoolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 
-        compositeDescriptorPool_ = descriptorManager_.createPool(compPoolSizes, MAX_FRAMES_IN_FLIGHT);
+        compositeDescriptorPool_ = DescriptorPool::adopt(
+            device_, descriptorManager_.createPool(compPoolSizes, MAX_FRAMES_IN_FLIGHT));
     }
 
     void UiRenderer::allocateDescriptorSets() {
         for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            uiDescriptorSets_[i] = descriptorManager_.allocateSet(uiDescriptorPool_, uiDescriptorSetLayout_);
-            blockTexSets_[i] = descriptorManager_.allocateSet(blockTexPool_, blockTexLayout_);
-            compositeDescriptorSets_[i] = descriptorManager_.allocateSet(compositeDescriptorPool_, compositeDescriptorSetLayout_);
+            uiDescriptorSets_[i] = descriptorManager_.allocateSet(
+                uiDescriptorPool_->getHandle(), uiDescriptorSetLayout_->getHandle());
+            blockTexSets_[i] = descriptorManager_.allocateSet(
+                blockTexPool_->getHandle(), blockTexLayout_->getHandle());
+            compositeDescriptorSets_[i] = descriptorManager_.allocateSet(
+                compositeDescriptorPool_->getHandle(), compositeDescriptorSetLayout_->getHandle());
         }
     }
 
     void UiRenderer::createPipeline() {
         VkDescriptorSetLayout setLayouts[2] = {
-            uiDescriptorSetLayout_,
-            blockTexLayout_,
+            uiDescriptorSetLayout_->getHandle(),
+            blockTexLayout_->getHandle(),
         };
 
         VkPipelineLayoutCreateInfo layoutInfo{};
@@ -320,9 +300,7 @@ namespace lve {
         layoutInfo.setLayoutCount = 2;
         layoutInfo.pSetLayouts = setLayouts;
 
-        if (vkCreatePipelineLayout(device_.device(), &layoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create UI pipeline layout!");
-        }
+        pipelineLayout_ = std::make_unique<PipelineLayout>(device_, layoutInfo);
 
         auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/ui.vert.spv");
         auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/ui.frag.spv");
@@ -372,7 +350,7 @@ namespace lve {
         configInfo.depthStencilInfo.depthWriteEnable = VK_FALSE;
 
         configInfo.renderPass = offscreenRenderPass_->getHandle();
-        configInfo.pipelineLayout = pipelineLayout_;
+        configInfo.pipelineLayout = pipelineLayout_->getHandle();
 
         uiPipeline_ = std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
     }
@@ -381,11 +359,10 @@ namespace lve {
         VkPipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         layoutInfo.setLayoutCount = 1;
-        layoutInfo.pSetLayouts = &compositeDescriptorSetLayout_;
+        VkDescriptorSetLayout compLayout = compositeDescriptorSetLayout_->getHandle();
+        layoutInfo.pSetLayouts = &compLayout;
 
-        if (vkCreatePipelineLayout(device_.device(), &layoutInfo, nullptr, &compositePipelineLayout_) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create composite pipeline layout!");
-        }
+        compositePipelineLayout_ = std::make_unique<PipelineLayout>(device_, layoutInfo);
 
         auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/composite.vert.spv");
         auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/composite.frag.spv");
@@ -408,7 +385,7 @@ namespace lve {
         configInfo.depthStencilInfo.depthWriteEnable = VK_FALSE;
 
         configInfo.renderPass = renderPass;
-        configInfo.pipelineLayout = compositePipelineLayout_;
+        configInfo.pipelineLayout = compositePipelineLayout_->getHandle();
 
         compositePipeline_ = std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
     }
@@ -443,15 +420,14 @@ namespace lve {
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        device_.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                    dummyImage_, dummyMemory_);
+        dummyImage_ = std::make_unique<Image>(device_, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        device_.transitionImageLayout(dummyImage_, VK_FORMAT_R8G8B8A8_SRGB,
+        device_.transitionImageLayout(dummyImage_->getHandle(), VK_FORMAT_R8G8B8A8_SRGB,
                                       VK_IMAGE_LAYOUT_UNDEFINED,
                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                       1, 1);
-        device_.copyBufferToImage(stagingBuffer, dummyImage_, 1, 1, 1);
-        device_.transitionImageLayout(dummyImage_, VK_FORMAT_R8G8B8A8_SRGB,
+        device_.copyBufferToImage(stagingBuffer, dummyImage_->getHandle(), 1, 1, 1);
+        device_.transitionImageLayout(dummyImage_->getHandle(), VK_FORMAT_R8G8B8A8_SRGB,
                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                       1, 1);
@@ -459,9 +435,10 @@ namespace lve {
         vkDestroyBuffer(device_.device(), stagingBuffer, nullptr);
         vkFreeMemory(device_.device(), stagingMemory, nullptr);
 
-        dummyImageView_ = device_.createImageView(dummyImage_, VK_FORMAT_R8G8B8A8_SRGB,
-                                                   VK_IMAGE_ASPECT_COLOR_BIT, 1, 0,
-                                                   VK_IMAGE_VIEW_TYPE_2D_ARRAY, 1);
+        dummyImageView_ = std::make_unique<ImageView>(
+            device_, dummyImage_->getHandle(), VK_FORMAT_R8G8B8A8_SRGB,
+            VK_IMAGE_ASPECT_COLOR_BIT, 1, 0,
+            VK_IMAGE_VIEW_TYPE_2D_ARRAY, 1);
 
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -478,31 +455,17 @@ namespace lve {
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 1.0f;
 
-        if (vkCreateSampler(device_.device(), &samplerInfo, nullptr, &dummySampler_) != VK_SUCCESS)
-            throw std::runtime_error("failed to create dummy sampler!");
+        dummySampler_ = std::make_unique<Sampler>(device_, samplerInfo);
 
         // Use dummy as the initial block texture
-        blockTexView_ = dummyImageView_;
-        blockTexSampler_ = dummySampler_;
+        blockTexView_ = dummyImageView_->getHandle();
+        blockTexSampler_ = dummySampler_->getHandle();
     }
 
     void UiRenderer::destroyDummyTexture() {
-        if (dummySampler_ != VK_NULL_HANDLE) {
-            vkDestroySampler(device_.device(), dummySampler_, nullptr);
-            dummySampler_ = VK_NULL_HANDLE;
-        }
-        if (dummyImageView_ != VK_NULL_HANDLE) {
-            vkDestroyImageView(device_.device(), dummyImageView_, nullptr);
-            dummyImageView_ = VK_NULL_HANDLE;
-        }
-        if (dummyImage_ != VK_NULL_HANDLE) {
-            vkDestroyImage(device_.device(), dummyImage_, nullptr);
-            dummyImage_ = VK_NULL_HANDLE;
-        }
-        if (dummyMemory_ != VK_NULL_HANDLE) {
-            vkFreeMemory(device_.device(), dummyMemory_, nullptr);
-            dummyMemory_ = VK_NULL_HANDLE;
-        }
+        dummySampler_.reset();
+        dummyImageView_.reset();
+        dummyImage_.reset();
     }
 
     void UiRenderer::createUniformBuffer() {

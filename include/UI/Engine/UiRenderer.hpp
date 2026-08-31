@@ -4,8 +4,14 @@
 #include "Vulkan/DescriptorManager.hpp"
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/Pipeline.hpp"
+#include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/RenderPass.hpp"
 #include "Vulkan/OffscreenTarget.hpp"
+#include "Vulkan/Image.hpp"
+#include "Vulkan/ImageView.hpp"
+#include "Vulkan/Sampler.hpp"
+#include "Vulkan/DescriptorSetLayout.hpp"
+#include "Vulkan/DescriptorPool.hpp"
 #include "UI/Engine/UiBatchQueue.hpp"
 #include "UiStyle.hpp"
 #include "Core/Constants.hpp"
@@ -68,16 +74,16 @@ namespace lve {
         // Pipelines
         std::unique_ptr<Pipeline> uiPipeline_;
         std::unique_ptr<Pipeline> compositePipeline_;
-        VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-        VkPipelineLayout compositePipelineLayout_ = VK_NULL_HANDLE;
+        std::unique_ptr<PipelineLayout> pipelineLayout_;
+        std::unique_ptr<PipelineLayout> compositePipelineLayout_;
 
         // Descriptor set layouts
-        VkDescriptorSetLayout uiDescriptorSetLayout_ = VK_NULL_HANDLE;
-        VkDescriptorSetLayout compositeDescriptorSetLayout_ = VK_NULL_HANDLE;
+        std::unique_ptr<DescriptorSetLayout> uiDescriptorSetLayout_;
+        std::unique_ptr<DescriptorSetLayout> compositeDescriptorSetLayout_;
 
         // Descriptor pools
-        VkDescriptorPool uiDescriptorPool_ = VK_NULL_HANDLE;
-        VkDescriptorPool compositeDescriptorPool_ = VK_NULL_HANDLE;
+        std::unique_ptr<DescriptorPool> uiDescriptorPool_;
+        std::unique_ptr<DescriptorPool> compositeDescriptorPool_;
 
         // Descriptor sets (per frame-in-flight)
         std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> uiDescriptorSets_{};
@@ -96,7 +102,7 @@ namespace lve {
         // Deferred pipeline retirement
         struct RetiredPipeline {
             std::unique_ptr<Pipeline> pipeline;
-            VkPipelineLayout layout = VK_NULL_HANDLE;
+            std::unique_ptr<PipelineLayout> layout;
         };
         std::array<std::vector<RetiredPipeline>, MAX_FRAMES_IN_FLIGHT> retiredPipelines_;
         uint32_t currentFrameIndex_ = 0;
@@ -110,18 +116,17 @@ namespace lve {
         VkDescriptorBufferInfo elementStylesInfo_{};
 
         // Block texture array (set 1, binding 0)
-        VkDescriptorSetLayout blockTexLayout_ = VK_NULL_HANDLE;
-        VkDescriptorPool blockTexPool_ = VK_NULL_HANDLE;
+        std::unique_ptr<DescriptorSetLayout> blockTexLayout_;
+        std::unique_ptr<DescriptorPool> blockTexPool_;
         std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> blockTexSets_{};
         VkImageView blockTexView_ = VK_NULL_HANDLE;
         VkSampler blockTexSampler_ = VK_NULL_HANDLE;
         bool blockTexDirty_ = false;
 
         // Placeholder white texture used before real block textures are available
-        VkImage dummyImage_ = VK_NULL_HANDLE;
-        VkDeviceMemory dummyMemory_ = VK_NULL_HANDLE;
-        VkImageView dummyImageView_ = VK_NULL_HANDLE;
-        VkSampler dummySampler_ = VK_NULL_HANDLE;
+        std::unique_ptr<Image> dummyImage_;
+        std::unique_ptr<ImageView> dummyImageView_;
+        std::unique_ptr<Sampler> dummySampler_;
     };
 
 } // namespace lve

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Device.hpp"
+#include "ShaderModule.hpp"
+#include <memory>
 #include <vector>
 
 namespace lve {
@@ -60,13 +62,10 @@ namespace lve {
         void createGraphicsPipeline(const std::vector<char>& vertCode, const std::vector<char>& fragCode,
                                     const PipelineConfigInfo &configInfo);
 
-
-        void createShaderModule(const std::vector<char> &code, VkShaderModule *shaderModule);
-
         Device &device;
         VkPipeline graphicsPipeline;
-        VkShaderModule vertShaderModule;
-        VkShaderModule fragShaderModule;
+        std::unique_ptr<ShaderModule> vertShaderModule;
+        std::unique_ptr<ShaderModule> fragShaderModule;
 
     };
 }

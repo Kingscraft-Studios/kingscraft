@@ -12,14 +12,9 @@ namespace lve {
     UiFontAtlas::UiFontAtlas(Device& device) : device_(device) {}
 
     UiFontAtlas::~UiFontAtlas() {
-        if (atlasSampler_ != VK_NULL_HANDLE)
-            vkDestroySampler(device_.device(), atlasSampler_, nullptr);
-        if (atlasView_ != VK_NULL_HANDLE)
-            vkDestroyImageView(device_.device(), atlasView_, nullptr);
-        if (atlasImage_ != VK_NULL_HANDLE)
-            vkDestroyImage(device_.device(), atlasImage_, nullptr);
-        if (atlasMemory_ != VK_NULL_HANDLE)
-            vkFreeMemory(device_.device(), atlasMemory_, nullptr);
+        atlasSampler_.reset();
+        atlasView_.reset();
+        atlasImage_.reset();
     }
 
     bool UiFontAtlas::loadFont(const std::string& ttfPath, const std::string& name) {
@@ -141,35 +136,43 @@ namespace lve {
         std::memcpy(data, pixels.data(), static_cast<size_t>(imageSize));
         vkUnmapMemory(device_.device(), stagingBufferMemory);
 
-        device_.createImage(
-            ATLAS_WIDTH, ATLAS_HEIGHT,
-            VK_FORMAT_R8G8B8A8_UNORM,
-            VK_IMAGE_TILING_OPTIMAL,
-            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            atlasImage_,
-            atlasMemory_);
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = ATLAS_WIDTH;
+        imageInfo.extent.height = ATLAS_HEIGHT;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.flags = 0;
+
+        atlasImage_ = std::make_unique<Image>(device_, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         device_.transitionImageLayout(
-            atlasImage_, VK_FORMAT_R8G8B8A8_UNORM,
+            atlasImage_->getHandle(), VK_FORMAT_R8G8B8A8_UNORM,
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-        device_.copyBufferToImage(stagingBuffer, atlasImage_,
+        device_.copyBufferToImage(stagingBuffer, atlasImage_->getHandle(),
                                    static_cast<uint32_t>(ATLAS_WIDTH),
                                    static_cast<uint32_t>(ATLAS_HEIGHT), 1);
 
         device_.transitionImageLayout(
-            atlasImage_, VK_FORMAT_R8G8B8A8_UNORM,
+            atlasImage_->getHandle(), VK_FORMAT_R8G8B8A8_UNORM,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         vkDestroyBuffer(device_.device(), stagingBuffer, nullptr);
         vkFreeMemory(device_.device(), stagingBufferMemory, nullptr);
 
-        atlasView_ = device_.createImageView(
-            atlasImage_, VK_FORMAT_R8G8B8A8_UNORM,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+        atlasView_ = std::make_unique<ImageView>(
+            device_, atlasImage_->getHandle(), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
 
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -184,9 +187,7 @@ namespace lve {
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-        if (vkCreateSampler(device_.device(), &samplerInfo, nullptr, &atlasSampler_) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create font atlas sampler!");
-        }
+        atlasSampler_ = std::make_unique<Sampler>(device_, samplerInfo);
     }
 
     const UiFontAtlas::Glyph* UiFontAtlas::getGlyph(const std::string& font, char32_t codepoint) const {

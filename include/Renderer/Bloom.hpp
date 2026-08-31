@@ -6,6 +6,13 @@
 #include "Vulkan/Pipeline.hpp"
 #include "Vulkan/DescriptorManager.hpp"
 #include "Vulkan/RenderPass.hpp"
+#include "Vulkan/Image.hpp"
+#include "Vulkan/ImageView.hpp"
+#include "Vulkan/Framebuffer.hpp"
+#include "Vulkan/Sampler.hpp"
+#include "Vulkan/PipelineLayout.hpp"
+#include "Vulkan/DescriptorSetLayout.hpp"
+#include "Vulkan/DescriptorPool.hpp"
 #include "Core/Constants.hpp"
 #include <array>
 #include <memory>
@@ -42,13 +49,12 @@ public:
     static constexpr VkFormat FB_COLOR_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
 
     struct FrameBufferAttachment {
-        VkImage image = VK_NULL_HANDLE;
-        VkDeviceMemory mem = VK_NULL_HANDLE;
-        VkImageView view = VK_NULL_HANDLE;
+        std::unique_ptr<Image> image;
+        std::unique_ptr<ImageView> view;
     };
 
     struct FrameBuffer {
-        VkFramebuffer framebuffer = VK_NULL_HANDLE;
+        std::unique_ptr<Framebuffer> framebuffer;
         FrameBufferAttachment color, depth;
         VkDescriptorImageInfo descriptor{};
     };
@@ -56,7 +62,7 @@ public:
     struct OffscreenPass {
         int32_t width = MAX_FB_DIM, height = MAX_FB_DIM;
         VkRenderPass renderPass = VK_NULL_HANDLE;
-        VkSampler sampler = VK_NULL_HANDLE;
+        std::unique_ptr<Sampler> sampler;
         std::array<FrameBuffer, 2> framebuffers;
     };
 
@@ -82,7 +88,7 @@ public:
                         const BloomElement& element);
 
     VkRenderPass getOffscreenRenderPass() const { return offscreenPass_.renderPass; }
-    VkPipelineLayout getSceneLayout() const { return pipelineLayouts_.scene; }
+    VkPipelineLayout getSceneLayout() const { return pipelineLayouts_.scene ? pipelineLayouts_.scene->getHandle() : VK_NULL_HANDLE; }
     VkPipeline getGlowPipeline() const { return pipelines_.glowPass ? pipelines_.glowPass->getHandle() : VK_NULL_HANDLE; }
 
     static void computeOffscreenDim(VkExtent2D windowExtent, int32_t& outW, int32_t& outH);
@@ -110,8 +116,8 @@ private:
     OffscreenPass offscreenPass_;
 
     struct {
-        VkPipelineLayout blur = VK_NULL_HANDLE;
-        VkPipelineLayout scene = VK_NULL_HANDLE;
+        std::unique_ptr<PipelineLayout> blur;
+        std::unique_ptr<PipelineLayout> scene;
     } pipelineLayouts_;
 
     struct {
@@ -120,10 +126,8 @@ private:
         std::unique_ptr<Pipeline> glowPass;
     } pipelines_;
 
-    struct {
-        VkDescriptorSetLayout blur = VK_NULL_HANDLE;
-        VkDescriptorSetLayout scene = VK_NULL_HANDLE;
-    } descriptorSetLayouts_;
+    std::unique_ptr<DescriptorSetLayout> blurDescriptorSetLayout_;
+    std::unique_ptr<DescriptorSetLayout> sceneDescriptorSetLayout_;
 
     struct PerFrame {
         VkDescriptorSet blurVert = VK_NULL_HANDLE;
@@ -134,7 +138,7 @@ private:
     };
     std::array<PerFrame, MAX_FRAMES_IN_FLIGHT> frames_;
 
-    VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
+    std::unique_ptr<DescriptorPool> descriptorPool_;
 
     std::unique_ptr<RenderPass> offscreenRenderPass_;
 

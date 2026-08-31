@@ -2,6 +2,7 @@
 #include <memory>
 
 #include "Vulkan/Buffer.hpp"
+#include "Vulkan/Fence.hpp"
 
 namespace lve {
     struct GpuChunkData {
@@ -9,7 +10,7 @@ namespace lve {
         std::unique_ptr<Buffer> indexBuffer;
         uint32_t indexCount = 0;
 
-        VkFence uploadFence = VK_NULL_HANDLE;
+        std::unique_ptr<Fence> uploadFence;
         VkCommandBuffer uploadCmd = VK_NULL_HANDLE;
 
         void cleanup(Device& device);

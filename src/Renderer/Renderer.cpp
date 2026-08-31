@@ -10,6 +10,9 @@ namespace lve {
 
 Renderer::Renderer(Device& device, VkExtent2D initialExtent)
     : device_(device), extent_(initialExtent) {
+    commandPool_ = std::make_unique<CommandPool>(
+        device_, device_.findPhysicalQueueFamilies().graphicsFamily,
+        VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     swapchain_ = std::make_unique<SwapChain>(device_, extent_);
     syncObjects_ = std::make_unique<SyncObjects>(device_, static_cast<uint32_t>(swapchain_->imageCount()));
     framebufferManager_ = std::make_unique<FramebufferManager>(device_);
@@ -27,29 +30,10 @@ Renderer::Renderer(Device& device, VkExtent2D initialExtent)
 
 Renderer::~Renderer() {
     destroyWorldResources();
-    if (gpuQueryPool_ != VK_NULL_HANDLE) {
-        vkDestroyQueryPool(device_.device(), gpuQueryPool_, nullptr);
-    }
-    if (pipelineStatsPool_ != VK_NULL_HANDLE) {
-        vkDestroyQueryPool(device_.device(), pipelineStatsPool_, nullptr);
-    }
-    vkFreeCommandBuffers(
-        device_.device(), device_.getCommandPool(),
-        static_cast<uint32_t>(commandBuffers_.size()), commandBuffers_.data());
 }
 
 void Renderer::createCommandBuffers() {
-    commandBuffers_.resize(swapchain_->imageCount());
-
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool = device_.getCommandPool();
-    allocInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers_.size());
-
-    if (vkAllocateCommandBuffers(device_.device(), &allocInfo, commandBuffers_.data()) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate command buffers!");
-    }
+    commandBuffers_ = commandPool_->allocate(static_cast<uint32_t>(swapchain_->imageCount()));
 }
 
 void Renderer::recreateSwapChain(VkExtent2D newExtent) {
@@ -74,7 +58,7 @@ void Renderer::recreateSwapChain(VkExtent2D newExtent) {
 
     if (swapchain_->imageCount() != commandBuffers_.size()) {
         vkFreeCommandBuffers(
-            device_.device(), device_.getCommandPool(),
+            device_.device(), commandPool_->getHandle(),
             static_cast<uint32_t>(commandBuffers_.size()), commandBuffers_.data());
         createCommandBuffers();
     }
@@ -101,7 +85,7 @@ bool Renderer::beginFrame() {
         uint32_t qBase = currentFrame_ * QUERIES_PER_FRAME;
         uint64_t ts[QUERIES_PER_FRAME];
         VkResult r = vkGetQueryPoolResults(
-            device_.device(), gpuQueryPool_,
+            device_.device(), gpuQueryPool_->getHandle(),
             qBase, QUERIES_PER_FRAME, sizeof(ts), ts, sizeof(uint64_t),
             VK_QUERY_RESULT_64_BIT);
         if (r == VK_SUCCESS) {
@@ -118,7 +102,7 @@ bool Renderer::beginFrame() {
     {
         uint32_t qStatsBase = currentFrame_ * PIPELINE_STATS_PER_FRAME;
         VkResult r = vkGetQueryPoolResults(
-            device_.device(), pipelineStatsPool_,
+            device_.device(), pipelineStatsPool_->getHandle(),
             qStatsBase, 1, sizeof(pipelineStats_), pipelineStats_.data(), sizeof(uint64_t),
             VK_QUERY_RESULT_64_BIT);
         if (r == VK_SUCCESS) {
@@ -161,11 +145,11 @@ bool Renderer::beginFrame() {
     }
 
     uint32_t qi = currentFrame_ * QUERIES_PER_FRAME;
-    vkCmdResetQueryPool(cmd, gpuQueryPool_, qi, QUERIES_PER_FRAME);
-    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, gpuQueryPool_, qi + TS_FRAME_START);
+    vkCmdResetQueryPool(cmd, gpuQueryPool_->getHandle(), qi, QUERIES_PER_FRAME);
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, gpuQueryPool_->getHandle(), qi + TS_FRAME_START);
 
     uint32_t qs = currentFrame_ * PIPELINE_STATS_PER_FRAME;
-    vkCmdResetQueryPool(cmd, pipelineStatsPool_, qs, PIPELINE_STATS_PER_FRAME);
+    vkCmdResetQueryPool(cmd, pipelineStatsPool_->getHandle(), qs, PIPELINE_STATS_PER_FRAME);
 
     return true;
 }
@@ -177,10 +161,10 @@ void Renderer::executeRenderPass(
     VkCommandBuffer cmd = commandBuffers_[currentImageIndex_];
     uint32_t qi = currentFrame_ * QUERIES_PER_FRAME;
 
-    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, gpuQueryPool_, qi + TS_WORLD_START);
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, gpuQueryPool_->getHandle(), qi + TS_WORLD_START);
 
     uint32_t qs = currentFrame_ * PIPELINE_STATS_PER_FRAME;
-    vkCmdBeginQuery(cmd, pipelineStatsPool_, qs, 0);
+    vkCmdBeginQuery(cmd, pipelineStatsPool_->getHandle(), qs, 0);
 
     VkRenderPassBeginInfo rpInfo{};
     rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -201,16 +185,16 @@ void Renderer::executeRenderPass(
 
     vkCmdEndRenderPass(cmd);
 
-    vkCmdEndQuery(cmd, pipelineStatsPool_, qs);
+    vkCmdEndQuery(cmd, pipelineStatsPool_->getHandle(), qs);
 
-    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, gpuQueryPool_, qi + TS_WORLD_END);
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, gpuQueryPool_->getHandle(), qi + TS_WORLD_END);
 }
 
 bool Renderer::endFrame() {
     VkCommandBuffer cmd = commandBuffers_[currentImageIndex_];
     uint32_t qi = currentFrame_ * QUERIES_PER_FRAME;
 
-    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, gpuQueryPool_, qi + TS_FRAME_END);
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, gpuQueryPool_->getHandle(), qi + TS_FRAME_END);
 
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
         throw std::runtime_error("failed to record command buffer!");
@@ -284,7 +268,6 @@ void Renderer::createWorldResources() {
     VkExtent2D extent = swapchain_->getSwapChainExtent();
 
     depthImages_.resize(imageCount);
-    depthImageMemories_.resize(imageCount);
     depthImageViews_.resize(imageCount);
     worldFramebuffers_.resize(imageCount);
 
@@ -305,45 +288,16 @@ void Renderer::createWorldResources() {
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.flags = 0;
 
-        if (vkCreateImage(device_.device(), &imageInfo, nullptr, &depthImages_[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create depth image!");
-        }
+        depthImages_[i] = std::make_unique<Image>(
+            device_, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        VkMemoryRequirements memRequirements;
-        vkGetImageMemoryRequirements(device_.device(), depthImages_[i], &memRequirements);
-
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = device_.findMemoryType(
-            memRequirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-
-        if (vkAllocateMemory(device_.device(), &allocInfo, nullptr, &depthImageMemories_[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate depth image memory!");
-        }
-
-        vkBindImageMemory(device_.device(), depthImages_[i], depthImageMemories_[i], 0);
-
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = depthImages_[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = depthFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device_.device(), &viewInfo, nullptr, &depthImageViews_[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create depth image view!");
-        }
+        depthImageViews_[i] = std::make_unique<ImageView>(
+            device_, depthImages_[i]->getHandle(), depthFormat,
+            VK_IMAGE_ASPECT_DEPTH_BIT);
 
         std::array<VkImageView, 2> attachments = {
             swapChainImageViews[i],
-            depthImageViews_[i]
+            depthImageViews_[i]->getHandle()
         };
 
         VkFramebufferCreateInfo fbInfo{};
@@ -355,28 +309,16 @@ void Renderer::createWorldResources() {
         fbInfo.height = extent.height;
         fbInfo.layers = 1;
 
-        if (vkCreateFramebuffer(device_.device(), &fbInfo, nullptr, &worldFramebuffers_[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create world framebuffer!");
-        }
+        worldFramebuffers_[i] = std::make_unique<Framebuffer>(device_, fbInfo);
     }
 }
 
 void Renderer::destroyWorldResources() {
     worldRenderPass_.reset();
 
-    for (auto fb : worldFramebuffers_) {
-        vkDestroyFramebuffer(device_.device(), fb, nullptr);
-    }
     worldFramebuffers_.clear();
-
-    for (size_t i = 0; i < depthImageViews_.size(); i++) {
-        vkDestroyImageView(device_.device(), depthImageViews_[i], nullptr);
-        vkDestroyImage(device_.device(), depthImages_[i], nullptr);
-        vkFreeMemory(device_.device(), depthImageMemories_[i], nullptr);
-    }
     depthImageViews_.clear();
     depthImages_.clear();
-    depthImageMemories_.clear();
 }
 
 void Renderer::createQueryPool() {
@@ -388,12 +330,10 @@ void Renderer::createQueryPool() {
     poolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
     poolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
     poolInfo.queryCount = MAX_FRAMES_IN_FLIGHT * QUERIES_PER_FRAME;
-    if (vkCreateQueryPool(device_.device(), &poolInfo, nullptr, &gpuQueryPool_) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create GPU timestamp query pool!");
-    }
+    gpuQueryPool_ = std::make_unique<QueryPool>(device_, poolInfo);
 
     VkCommandBuffer cmd = device_.beginSingleTimeCommands();
-    vkCmdResetQueryPool(cmd, gpuQueryPool_, 0, MAX_FRAMES_IN_FLIGHT * QUERIES_PER_FRAME);
+    vkCmdResetQueryPool(cmd, gpuQueryPool_->getHandle(), 0, MAX_FRAMES_IN_FLIGHT * QUERIES_PER_FRAME);
     device_.endSingleTimeCommands(cmd);
 }
 
@@ -410,12 +350,10 @@ void Renderer::createPipelineStatsPool() {
         VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT |
         VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT;
 
-    if (vkCreateQueryPool(device_.device(), &poolInfo, nullptr, &pipelineStatsPool_) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create pipeline statistics query pool!");
-    }
+    pipelineStatsPool_ = std::make_unique<QueryPool>(device_, poolInfo);
 
     VkCommandBuffer cmd = device_.beginSingleTimeCommands();
-    vkCmdResetQueryPool(cmd, pipelineStatsPool_, 0, MAX_FRAMES_IN_FLIGHT * PIPELINE_STATS_PER_FRAME);
+    vkCmdResetQueryPool(cmd, pipelineStatsPool_->getHandle(), 0, MAX_FRAMES_IN_FLIGHT * PIPELINE_STATS_PER_FRAME);
     device_.endSingleTimeCommands(cmd);
 }
 

@@ -5,6 +5,11 @@
 #include "Vulkan/SyncObjects.hpp"
 #include "Vulkan/FramebufferManager.hpp"
 #include "Vulkan/RenderPass.hpp"
+#include "Vulkan/Image.hpp"
+#include "Vulkan/ImageView.hpp"
+#include "Vulkan/Framebuffer.hpp"
+#include "Vulkan/QueryPool.hpp"
+#include "Vulkan/CommandPool.hpp"
 #include <memory>
 #include <vector>
 #include <functional>
@@ -85,7 +90,7 @@ public:
     uint32_t getFrameIndex() const { return currentFrame_; }
 
     VkRenderPass getWorldRenderPass() const { return worldRenderPass_->getHandle(); }
-    VkFramebuffer getWorldFramebuffer(uint32_t imageIndex) const { return worldFramebuffers_[imageIndex]; }
+    VkFramebuffer getWorldFramebuffer(uint32_t imageIndex) const { return worldFramebuffers_[imageIndex]->getHandle(); }
     VkFormat getDepthFormat() const { return depthFormat_; }
 
     double getGpuFrameTimeMs() const { return gpuFrameTimeMs_; }
@@ -98,15 +103,15 @@ public:
     double getOverdraw() const { return overdraw_; }
     double getCIdleMs() const { return cIdleMs_; }
 
-    VkQueryPool getGpuQueryPool() const { return gpuQueryPool_; }
-    VkQueryPool getPipelineStatsPool() const { return pipelineStatsPool_; }
+    VkQueryPool getGpuQueryPool() const { return gpuQueryPool_ ? gpuQueryPool_->getHandle() : VK_NULL_HANDLE; }
+    VkQueryPool getPipelineStatsPool() const { return pipelineStatsPool_ ? pipelineStatsPool_->getHandle() : VK_NULL_HANDLE; }
 
     RenderTarget buildRenderTarget(const FrameScene& scene) const {
         if (scene.terrain.renderTerrain)
         {
             return {
                 .renderPass = worldRenderPass_->getHandle(),
-                .framebuffer = worldFramebuffers_[currentImageIndex_],
+                .framebuffer = worldFramebuffers_[currentImageIndex_]->getHandle(),
                 .clearValues = {
                     VkClearValue{
                         .color = {{0.4f, 0.6f, 0.9f, 1.0f}}
@@ -147,20 +152,21 @@ private:
 
     VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
     std::unique_ptr<RenderPass> worldRenderPass_;
-    std::vector<VkImage> depthImages_;
-    std::vector<VkDeviceMemory> depthImageMemories_;
-    std::vector<VkImageView> depthImageViews_;
-    std::vector<VkFramebuffer> worldFramebuffers_;
+    std::vector<std::unique_ptr<Image>> depthImages_;
+    std::vector<std::unique_ptr<ImageView>> depthImageViews_;
+    std::vector<std::unique_ptr<Framebuffer>> worldFramebuffers_;
 
     std::vector<VkCommandBuffer> commandBuffers_;
     std::vector<VkFence> imagesInFlight_;
     uint32_t currentFrame_ = 0;
     uint32_t currentImageIndex_ = 0;
 
-    VkQueryPool gpuQueryPool_ = VK_NULL_HANDLE;
+    std::unique_ptr<QueryPool> gpuQueryPool_;
     double timestampPeriod_ = 1.0;
 
-    VkQueryPool pipelineStatsPool_ = VK_NULL_HANDLE;
+    std::unique_ptr<QueryPool> pipelineStatsPool_;
+
+    std::unique_ptr<CommandPool> commandPool_;
 
     double gpuFrameTimeMs_ = 0.0;
     double worldGpuMs_ = 0.0;

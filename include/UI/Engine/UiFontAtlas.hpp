@@ -1,7 +1,11 @@
 #pragma once
 
 #include "Vulkan/Device.hpp"
+#include "Vulkan/Image.hpp"
+#include "Vulkan/ImageView.hpp"
+#include "Vulkan/Sampler.hpp"
 #include <glm/glm.hpp>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -34,9 +38,9 @@ namespace lve {
 
         const Glyph* getGlyph(const std::string& font, char32_t codepoint) const;
 
-        VkImageView getImageView() const { return atlasView_; }
-        VkSampler getSampler() const { return atlasSampler_; }
-        bool isReady() const { return atlasView_ != VK_NULL_HANDLE; }
+        VkImageView getImageView() const { return atlasView_ ? atlasView_->getHandle() : VK_NULL_HANDLE; }
+        VkSampler getSampler() const { return atlasSampler_ ? atlasSampler_->getHandle() : VK_NULL_HANDLE; }
+        bool isReady() const { return atlasImage_ != nullptr; }
 
     private:
         struct FontFace {
@@ -50,10 +54,9 @@ namespace lve {
         Device& device_;
         std::unordered_map<std::string, FontFace> fonts_;
 
-        VkImage atlasImage_ = VK_NULL_HANDLE;
-        VkDeviceMemory atlasMemory_ = VK_NULL_HANDLE;
-        VkImageView atlasView_ = VK_NULL_HANDLE;
-        VkSampler atlasSampler_ = VK_NULL_HANDLE;
+        std::unique_ptr<Image> atlasImage_;
+        std::unique_ptr<ImageView> atlasView_;
+        std::unique_ptr<Sampler> atlasSampler_;
     };
 
 } // namespace lve

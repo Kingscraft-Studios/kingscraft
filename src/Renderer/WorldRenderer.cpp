@@ -38,10 +38,7 @@ namespace lve {
         highlightPipeline_.reset();
         highlightVertexBuffer_.reset();
         pipeline_.reset();
-        if (pipelineLayout_ != VK_NULL_HANDLE && device_) {
-            vkDestroyPipelineLayout(device_->device(), pipelineLayout_, nullptr);
-            pipelineLayout_ = VK_NULL_HANDLE;
-        }
+        pipelineLayout_.reset();
     }
 
     void WorldRenderer::createPipelineLayout() {
@@ -59,9 +56,7 @@ namespace lve {
         layoutInfo.setLayoutCount = (texLayout != VK_NULL_HANDLE) ? 1 : 0;
         layoutInfo.pSetLayouts = (texLayout != VK_NULL_HANDLE) ? &texLayout : nullptr;
 
-        if (vkCreatePipelineLayout(device_->device(), &layoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create pipeline layout!");
-        }
+        pipelineLayout_ = std::make_unique<PipelineLayout>(*device_, layoutInfo);
     }
 
     void WorldRenderer::createPipeline(bool disableTextures) {
@@ -86,7 +81,7 @@ namespace lve {
         configInfo.attributeDescriptions = {attributeDescs.begin(), attributeDescs.end()};
 
         configInfo.renderPass = renderPass_;
-        configInfo.pipelineLayout = pipelineLayout_;
+        configInfo.pipelineLayout = pipelineLayout_->getHandle();
 
         pipeline_ = std::make_unique<Pipeline>(*device_, vertShaderCode, fragShaderCode, configInfo);
     }
@@ -102,7 +97,7 @@ namespace lve {
         configInfo.depthStencilInfo.depthTestEnable = VK_TRUE;
         configInfo.depthStencilInfo.depthWriteEnable = VK_FALSE;
         configInfo.renderPass = renderPass_;
-        configInfo.pipelineLayout = pipelineLayout_;
+        configInfo.pipelineLayout = pipelineLayout_->getHandle();
 
         VkVertexInputBindingDescription bindingDesc{};
         bindingDesc.binding = 0;
@@ -141,7 +136,7 @@ namespace lve {
             VkDescriptorSet texSet = textureCache_->getDescriptorSet();
             if (texSet != VK_NULL_HANDLE) {
                 vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        pipelineLayout_, 0, 1, &texSet, 0, nullptr);
+                                        pipelineLayout_->getHandle(), 0, 1, &texSet, 0, nullptr);
             }
         }
 
@@ -149,7 +144,7 @@ namespace lve {
         pc.viewProj = viewProj;
         for (const TerrainDraw& draw : scene.terrain.draws) {
             pc.chunkOrigin = glm::vec4(draw.worldOrigin, 0.0f);
-            vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(TerrainPushConstants), &pc);
+            vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(TerrainPushConstants), &pc);
             drawChunk(cmd, draw.chunkKey);
         }
 
@@ -215,7 +210,7 @@ namespace lve {
 
         HighlightPushConstants pc{};
         pc.viewProj = viewProj;
-        vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(HighlightPushConstants), &pc);
+        vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(HighlightPushConstants), &pc);
 
         VkBuffer vb = highlightVertexBuffer_->getHandle();
         VkDeviceSize offset = 0;

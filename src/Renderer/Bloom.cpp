@@ -24,24 +24,20 @@ Bloom::~Bloom() {
     pipelines_.blurHorz.reset();
     pipelines_.glowPass.reset();
 
-    for (auto& layout : {pipelineLayouts_.blur, pipelineLayouts_.scene}) {
-        if (layout != VK_NULL_HANDLE)
-            vkDestroyPipelineLayout(device_.device(), layout, nullptr);
-    }
-    for (auto& layout : {descriptorSetLayouts_.blur, descriptorSetLayouts_.scene}) {
-        if (layout != VK_NULL_HANDLE)
-            vkDestroyDescriptorSetLayout(device_.device(), layout, nullptr);
-    }
-    if (descriptorPool_ != VK_NULL_HANDLE)
-        vkDestroyDescriptorPool(device_.device(), descriptorPool_, nullptr);
+    pipelineLayouts_.blur.reset();
+    pipelineLayouts_.scene.reset();
+
+    blurDescriptorSetLayout_.reset();
+    sceneDescriptorSetLayout_.reset();
+
+    descriptorPool_.reset();
 
     for (auto& frame : frames_) {
         frame.blurUBO.reset();
         frame.glowUBO.reset();
     }
 
-    if (offscreenPass_.sampler != VK_NULL_HANDLE)
-        vkDestroySampler(device_.device(), offscreenPass_.sampler, nullptr);
+    offscreenPass_.sampler.reset();
     destroyOffscreenFramebuffers();
     offscreenRenderPass_.reset();
 }
@@ -58,16 +54,11 @@ void Bloom::computeOffscreenDim(VkExtent2D windowExtent, int32_t& outW, int32_t&
 }
 
 void Bloom::destroyFramebuffer(FrameBuffer& fb) {
-    if (fb.framebuffer != VK_NULL_HANDLE) {
-        vkDestroyFramebuffer(device_.device(), fb.framebuffer, nullptr);
-        fb.framebuffer = VK_NULL_HANDLE;
-    }
-    if (fb.color.view) { vkDestroyImageView(device_.device(), fb.color.view, nullptr); fb.color.view = VK_NULL_HANDLE; }
-    if (fb.color.image) { vkDestroyImage(device_.device(), fb.color.image, nullptr); fb.color.image = VK_NULL_HANDLE; }
-    if (fb.color.mem) { vkFreeMemory(device_.device(), fb.color.mem, nullptr); fb.color.mem = VK_NULL_HANDLE; }
-    if (fb.depth.view) { vkDestroyImageView(device_.device(), fb.depth.view, nullptr); fb.depth.view = VK_NULL_HANDLE; }
-    if (fb.depth.image) { vkDestroyImage(device_.device(), fb.depth.image, nullptr); fb.depth.image = VK_NULL_HANDLE; }
-    if (fb.depth.mem) { vkFreeMemory(device_.device(), fb.depth.mem, nullptr); fb.depth.mem = VK_NULL_HANDLE; }
+    fb.framebuffer.reset();
+    fb.color.view.reset();
+    fb.color.image.reset();
+    fb.depth.view.reset();
+    fb.depth.image.reset();
 }
 
 void Bloom::destroyOffscreenFramebuffers() {
@@ -112,37 +103,22 @@ void Bloom::createOffscreenFramebuffer(FrameBuffer* fb, VkFormat colorFormat, Vk
     image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    device_.createImageWithInfo(image, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, fb->color.image, fb->color.mem);
+    fb->color.image = std::make_unique<Image>(device_, image, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    VkImageViewCreateInfo view{};
-    view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    view.format = colorFormat;
-    view.image = fb->color.image;
-    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    view.subresourceRange.baseMipLevel = 0;
-    view.subresourceRange.levelCount = 1;
-    view.subresourceRange.baseArrayLayer = 0;
-    view.subresourceRange.layerCount = 1;
-
-    if (vkCreateImageView(device_.device(), &view, nullptr, &fb->color.view) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create offscreen color image view!");
-    }
+    fb->color.view = std::make_unique<ImageView>(
+        device_, fb->color.image->getHandle(), colorFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 
     image.format = depthFormat;
     image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-    device_.createImageWithInfo(image, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, fb->depth.image, fb->depth.mem);
+    fb->depth.image = std::make_unique<Image>(device_, image, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    view.format = depthFormat;
-    view.image = fb->depth.image;
-    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    fb->depth.view = std::make_unique<ImageView>(
+        device_, fb->depth.image->getHandle(), depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-    if (vkCreateImageView(device_.device(), &view, nullptr, &fb->depth.view) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create offscreen depth image view!");
-    }
-
-    std::array<VkImageView, 2> attachments = {fb->color.view, fb->depth.view};
+    std::array<VkImageView, 2> attachments = {
+        fb->color.view->getHandle(), fb->depth.view->getHandle()
+    };
 
     VkFramebufferCreateInfo fbInfo{};
     fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -153,13 +129,11 @@ void Bloom::createOffscreenFramebuffer(FrameBuffer* fb, VkFormat colorFormat, Vk
     fbInfo.height = static_cast<uint32_t>(h);
     fbInfo.layers = 1;
 
-    if (vkCreateFramebuffer(device_.device(), &fbInfo, nullptr, &fb->framebuffer) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create offscreen framebuffer!");
-    }
+    fb->framebuffer = std::make_unique<Framebuffer>(device_, fbInfo);
 
     fb->descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    fb->descriptor.imageView = fb->color.view;
-    fb->descriptor.sampler = offscreenPass_.sampler;
+    fb->descriptor.imageView = fb->color.view->getHandle();
+    fb->descriptor.sampler = offscreenPass_.sampler->getHandle();
 }
 
 void Bloom::createOffscreen() {
@@ -264,9 +238,7 @@ void Bloom::createOffscreen() {
     sampler.maxLod = 1.0f;
     sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 
-    if (vkCreateSampler(device_.device(), &sampler, nullptr, &offscreenPass_.sampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create offscreen sampler!");
-    }
+    offscreenPass_.sampler = std::make_unique<Sampler>(device_, sampler);
 
     createOffscreenFramebuffer(&offscreenPass_.framebuffers[0], FB_COLOR_FORMAT, fbDepthFormat);
     createOffscreenFramebuffer(&offscreenPass_.framebuffers[1], FB_COLOR_FORMAT, fbDepthFormat);
@@ -292,7 +264,8 @@ void Bloom::createDescriptors() {
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * 4}
     };
 
-    descriptorPool_ = descriptorManager_.createPool(poolSizes, MAX_FRAMES_IN_FLIGHT * 4);
+    descriptorPool_ = DescriptorPool::adopt(
+        device_, descriptorManager_.createPool(poolSizes, MAX_FRAMES_IN_FLIGHT * 4));
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
 
@@ -300,19 +273,21 @@ void Bloom::createDescriptors() {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
     };
-    descriptorSetLayouts_.blur = descriptorManager_.createLayout(bindings);
+    blurDescriptorSetLayout_ = DescriptorSetLayout::adopt(
+        device_, descriptorManager_.createLayout(bindings));
 
     bindings = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
     };
-    descriptorSetLayouts_.scene = descriptorManager_.createLayout(bindings);
+    sceneDescriptorSetLayout_ = DescriptorSetLayout::adopt(
+        device_, descriptorManager_.createLayout(bindings));
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        frames_[i].blurVert = descriptorManager_.allocateSet(descriptorPool_, descriptorSetLayouts_.blur);
-        frames_[i].blurHorz = descriptorManager_.allocateSet(descriptorPool_, descriptorSetLayouts_.blur);
-        frames_[i].scene = descriptorManager_.allocateSet(descriptorPool_, descriptorSetLayouts_.scene);
+        frames_[i].blurVert = descriptorManager_.allocateSet(descriptorPool_->getHandle(), blurDescriptorSetLayout_->getHandle());
+        frames_[i].blurHorz = descriptorManager_.allocateSet(descriptorPool_->getHandle(), blurDescriptorSetLayout_->getHandle());
+        frames_[i].scene = descriptorManager_.allocateSet(descriptorPool_->getHandle(), sceneDescriptorSetLayout_->getHandle());
 
         VkDescriptorBufferInfo blurBufferInfo{};
         blurBufferInfo.buffer = frames_[i].blurUBO->getHandle();
@@ -413,7 +388,7 @@ std::unique_ptr<Pipeline> Bloom::createBlurPipeline(VkRenderPass renderPass, uin
     configInfo.specData = {blurdirection};
 
     configInfo.renderPass = renderPass;
-    configInfo.pipelineLayout = pipelineLayouts_.blur;
+    configInfo.pipelineLayout = pipelineLayouts_.blur->getHandle();
 
     return std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
 }
@@ -422,20 +397,18 @@ void Bloom::createPipelines() {
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &descriptorSetLayouts_.blur;
+    VkDescriptorSetLayout blurLayout = blurDescriptorSetLayout_->getHandle();
+    layoutInfo.pSetLayouts = &blurLayout;
     layoutInfo.pushConstantRangeCount = 0;
     layoutInfo.pPushConstantRanges = nullptr;
 
-    if (vkCreatePipelineLayout(device_.device(), &layoutInfo, nullptr, &pipelineLayouts_.blur) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create blur pipeline layout!");
-    }
+    pipelineLayouts_.blur = std::make_unique<PipelineLayout>(device_, layoutInfo);
 
     layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &descriptorSetLayouts_.scene;
+    VkDescriptorSetLayout sceneLayout = sceneDescriptorSetLayout_->getHandle();
+    layoutInfo.pSetLayouts = &sceneLayout;
 
-    if (vkCreatePipelineLayout(device_.device(), &layoutInfo, nullptr, &pipelineLayouts_.scene) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create scene pipeline layout!");
-    }
+    pipelineLayouts_.scene = std::make_unique<PipelineLayout>(device_, layoutInfo);
 
     // Create blur pipelines
     pipelines_.blurVert = createBlurPipeline(offscreenPass_.renderPass, 0);
@@ -472,7 +445,7 @@ void Bloom::createPipelines() {
     configInfo.depthStencilInfo.depthWriteEnable = VK_FALSE;
 
     configInfo.renderPass = offscreenPass_.renderPass;
-    configInfo.pipelineLayout = pipelineLayouts_.scene;
+    configInfo.pipelineLayout = pipelineLayouts_.scene->getHandle();
 
     pipelines_.glowPass = std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
 }
@@ -503,7 +476,7 @@ void Bloom::beginGlowPass(VkCommandBuffer cmd, uint32_t frameIndex) {
     VkRenderPassBeginInfo rpBegin{};
     rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rpBegin.renderPass = offscreenPass_.renderPass;
-    rpBegin.framebuffer = offscreenPass_.framebuffers[0].framebuffer;
+    rpBegin.framebuffer = offscreenPass_.framebuffers[0].framebuffer->getHandle();
     rpBegin.renderArea.extent.width = offscreenPass_.width;
     rpBegin.renderArea.extent.height = offscreenPass_.height;
     rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -524,7 +497,7 @@ void Bloom::beginGlowPass(VkCommandBuffer cmd, uint32_t frameIndex) {
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelineLayouts_.scene, 0, 1,
+                            pipelineLayouts_.scene->getHandle(), 0, 1,
                             &frames_[frameIndex].scene, 0, nullptr);
     pipelines_.glowPass->bind(cmd);
 }
@@ -539,7 +512,7 @@ void Bloom::endGlowPass(VkCommandBuffer cmd, uint32_t frameIndex) {
     VkRenderPassBeginInfo rpBegin{};
     rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rpBegin.renderPass = offscreenPass_.renderPass;
-    rpBegin.framebuffer = offscreenPass_.framebuffers[1].framebuffer;
+    rpBegin.framebuffer = offscreenPass_.framebuffers[1].framebuffer->getHandle();
     rpBegin.renderArea.extent.width = offscreenPass_.width;
     rpBegin.renderArea.extent.height = offscreenPass_.height;
     rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -560,7 +533,7 @@ void Bloom::endGlowPass(VkCommandBuffer cmd, uint32_t frameIndex) {
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelineLayouts_.blur, 0, 1,
+                            pipelineLayouts_.blur->getHandle(), 0, 1,
                             &frames_[frameIndex].blurVert, 0, nullptr);
     pipelines_.blurVert->bind(cmd);
     vkCmdDraw(cmd, 3, 1, 0, 0);
@@ -576,7 +549,7 @@ void Bloom::compositeBloom(VkCommandBuffer cmd, uint32_t frameIndex, VkRenderPas
     }
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelineLayouts_.blur, 0, 1,
+                            pipelineLayouts_.blur->getHandle(), 0, 1,
                             &frames_[frameIndex].blurHorz, 0, nullptr);
     pipelines_.blurHorz->bind(cmd);
     vkCmdDraw(cmd, 3, 1, 0, 0);
