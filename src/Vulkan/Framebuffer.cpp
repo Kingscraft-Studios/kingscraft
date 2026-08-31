@@ -1,7 +1,7 @@
 #include "Vulkan/Framebuffer.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     Framebuffer::Framebuffer(Device& device, const VkFramebufferCreateInfo& info)
         : device_(device) {
@@ -36,4 +36,4 @@ namespace lve {
         framebuffer_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

@@ -1,7 +1,7 @@
 #pragma once
 #include <functional>
 
-namespace lve {
+namespace kc {
 
 enum class ThreadName {
     Engine,

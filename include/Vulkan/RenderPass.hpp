@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class RenderPass {
     public:
@@ -40,4 +40,4 @@ namespace lve {
         VkRenderPass renderPass_;
     };
 
-} // namespace lve
+} // namespace kc

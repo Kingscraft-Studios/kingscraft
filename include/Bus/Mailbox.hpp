@@ -5,7 +5,7 @@
 #include <chrono>
 #include "Bus/Message.hpp"
 
-namespace lve {
+namespace kc {
 
 class Mailbox {
 public:

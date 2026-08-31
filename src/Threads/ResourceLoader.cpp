@@ -8,7 +8,7 @@
 
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
 
 void ResourceLoader::run() {
     mailbox_ = std::make_shared<Mailbox>();
@@ -37,4 +37,4 @@ void ResourceLoader::stop() {
     mailbox_->stop();
 }
 
-} // namespace lve
+} // namespace kc

@@ -11,7 +11,7 @@
 #include "Renderer/RendererSettings.hpp"
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
 
     SwapChain::SwapChain(Device &deviceRef, VkExtent2D extent)
             : device{deviceRef}, windowExtent{extent} {
@@ -176,4 +176,4 @@ namespace lve {
         }
     }
 
-}  // namespace lve
+}  // namespace kc

@@ -6,7 +6,7 @@
 #include "Util/LogUtils.hpp"
 #include "Util/StringBuilder.hpp"
 
-namespace lve {
+namespace kc {
 
     float Label::measureWidth(UiEngine& engine) const {
         float scale = fontSize / UiFontAtlas::ATLAS_FONT_SIZE;

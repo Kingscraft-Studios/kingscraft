@@ -3,7 +3,7 @@
 #include "Device.hpp"
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class FramebufferManager {
     public:
@@ -24,4 +24,4 @@ namespace lve {
         std::vector<VkFramebuffer> framebuffers_;
     };
 
-} // namespace lve
+} // namespace kc

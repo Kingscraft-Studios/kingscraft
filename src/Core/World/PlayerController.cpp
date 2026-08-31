@@ -4,10 +4,10 @@
 #include "Core/World/Physics/CollisionSystem.hpp"
 #include "Core/World/World.hpp"
 #include "Threads/InputThread.hpp"
-#include "Vulkan/Window.hpp"
+#include "Vulkan/GLFWWindow.hpp"
 #include <cmath>
 
-namespace lve {
+namespace kc {
 
     namespace {
         constexpr float VOID_KILL_Y = -32.0f;
@@ -122,4 +122,4 @@ namespace lve {
         return camera_.getProjectionMatrix() * camera_.getViewMatrix();
     }
 
-} // namespace lve
+} // namespace kc

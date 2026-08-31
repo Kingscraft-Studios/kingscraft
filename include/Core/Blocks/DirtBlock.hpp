@@ -1,7 +1,7 @@
 #pragma once
 #include "Core/Blocks/Block.hpp"
 
-namespace lve {
+namespace kc {
     class DirtBlock : public Block {
     public:
         using Block::Block;

@@ -4,11 +4,11 @@
 
 #include <algorithm>
 
-namespace lve {
+namespace kc {
 
     float Gravity::apply(float velocityY, float dt) {
         float v = velocityY + Attributes::GRAVITY * dt;
         return std::max(v, -Attributes::TERMINAL_FALL_SPEED);
     }
 
-} // namespace lve
+} // namespace kc

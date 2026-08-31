@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 
-namespace lve {
+namespace kc {
     class IO;
 
     class IOTemplateBase {

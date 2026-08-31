@@ -3,7 +3,7 @@
 
 #include "vulkan/vulkan_core.h"
 
-namespace lve {
+namespace kc {
     struct WindowCreateInfo {
         int width;
         int height;

@@ -3,7 +3,7 @@
 #include "Bus/MessageBus.hpp"
 #include "Util/TimeUtil.hpp"
 
-namespace lve {
+namespace kc {
 
     void Diagnostics::start() {
         lastUpdateSec_ = TimeUtil::uptimeSeconds();

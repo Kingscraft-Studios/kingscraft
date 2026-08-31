@@ -2,7 +2,7 @@
 #include <sstream>
 #include <string>
 
-namespace lve {
+namespace kc {
 
 class StringBuilder {
 public:

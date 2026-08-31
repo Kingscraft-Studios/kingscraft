@@ -5,7 +5,7 @@
 #include <stb_image.h>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     Texture::Texture(Device &device, const std::vector<char>& fileData) : device(device) {
         createTextureImage(fileData);
@@ -110,4 +110,4 @@ namespace lve {
         }
     }
 
-}  // namespace lve
+}  // namespace kc

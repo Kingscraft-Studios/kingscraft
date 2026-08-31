@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace lve {
+namespace kc {
 
     UiBatchQueue::UiBatchQueue(Device& device) : device_(device) {
         growBuffers(vertexCapacity_, indexCapacity_);
@@ -63,4 +63,4 @@ namespace lve {
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     }
 
-} // namespace lve
+} // namespace kc

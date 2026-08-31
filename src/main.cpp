@@ -2,10 +2,10 @@
 #include "Threads/Engine.hpp"
 
 int main() {
-    lve::MessageBus::Init();
-    lve::Engine::Init();
-    lve::Engine::get().run();
-    lve::Engine::Shutdown();
-    lve::MessageBus::Shutdown();
+    kc::MessageBus::Init();
+    kc::Engine::Init();
+    kc::Engine::get().run();
+    kc::Engine::Shutdown();
+    kc::MessageBus::Shutdown();
     return 0;
 }

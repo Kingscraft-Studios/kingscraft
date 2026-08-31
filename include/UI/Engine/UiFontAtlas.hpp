@@ -11,7 +11,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace lve {
+namespace kc {
 
     class UiFontAtlas {
     public:
@@ -59,4 +59,4 @@ namespace lve {
         std::unique_ptr<Sampler> atlasSampler_;
     };
 
-} // namespace lve
+} // namespace kc

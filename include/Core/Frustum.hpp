@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <array>
 
-namespace lve {
+namespace kc {
 
 struct Plane {
     glm::vec3 normal;

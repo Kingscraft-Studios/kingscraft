@@ -5,7 +5,7 @@
 
 #include "Core/RegistryKey.hpp"
 
-namespace lve {
+namespace kc {
 
 template<typename T>
 class Registry {
@@ -60,4 +60,4 @@ RegistryKey<T>::operator T&() const {
     return *Registry<T>::getRegistry().get(id_);
 }
 
-} // namespace lve
+} // namespace kc

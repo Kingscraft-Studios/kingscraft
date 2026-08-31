@@ -3,7 +3,7 @@
 
 #include "Chunk.hpp"
 
-namespace lve {
+namespace kc {
     struct ChunkUploadData {
         uint64_t chunkKey;
 

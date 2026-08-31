@@ -3,7 +3,7 @@
 #include "Device.hpp"
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class Buffer {
     public:
@@ -36,4 +36,4 @@ namespace lve {
         void* mapped_ = nullptr;
     };
 
-} // namespace lve
+} // namespace kc

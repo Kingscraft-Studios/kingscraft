@@ -4,7 +4,7 @@
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/Fence.hpp"
 
-namespace lve {
+namespace kc {
     struct GpuChunkData {
         std::unique_ptr<Buffer> vertexBuffer;
         std::unique_ptr<Buffer> indexBuffer;

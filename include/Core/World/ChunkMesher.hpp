@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class ChunkMesher {
     public:
@@ -35,4 +35,4 @@ namespace lve {
             const std::vector<uint8_t>* edgeNegZ = nullptr);
     };
 
-} // namespace lve
+} // namespace kc

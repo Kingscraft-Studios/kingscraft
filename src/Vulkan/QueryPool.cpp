@@ -1,7 +1,7 @@
 #include "Vulkan/QueryPool.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     QueryPool::QueryPool(Device& device, const VkQueryPoolCreateInfo& info)
         : device_(device) {
@@ -36,4 +36,4 @@ namespace lve {
         pool_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

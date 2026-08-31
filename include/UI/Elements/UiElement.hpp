@@ -6,7 +6,7 @@
 
 #include "../Engine/UiLabel.hpp"
 
-namespace lve {
+namespace kc {
 
     class UiEngine;
 
@@ -97,4 +97,4 @@ namespace lve {
         Label label_;
     };
 
-} // namespace lve
+} // namespace kc

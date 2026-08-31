@@ -1,7 +1,7 @@
 #include "UI/Elements/UiElement.hpp"
 #include "UI/Engine/UiEngine.hpp"
 
-namespace lve {
+namespace kc {
 
     bool UiElement::containsPoint(glm::vec2 point) const {
         if (!visible_) return false;
@@ -25,4 +25,4 @@ namespace lve {
         label_.fontSize = saved;
     }
 
-} // namespace lve
+} // namespace kc

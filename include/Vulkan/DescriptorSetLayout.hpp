@@ -3,7 +3,7 @@
 #include "Device.hpp"
 #include <memory>
 
-namespace lve {
+namespace kc {
 
     class DescriptorSetLayout {
     public:
@@ -28,4 +28,4 @@ namespace lve {
         VkDescriptorSetLayout layout_ = VK_NULL_HANDLE;
     };
 
-} // namespace lve
+} // namespace kc

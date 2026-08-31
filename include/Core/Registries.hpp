@@ -4,7 +4,7 @@
 #include <mutex>
 #include <condition_variable>
 
-namespace lve {
+namespace kc {
     class Registries {
     public:
         static void build();

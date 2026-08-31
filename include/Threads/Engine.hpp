@@ -9,9 +9,9 @@
 #include "Renderer/FrameExchange.hpp"
 #include "Threads/Renderer.hpp"
 #include "Threads/ResourceLoader.hpp"
-#include "Threads/GameLogicThread.hpp"
+#include "Threads/Kingscraft.hpp"
 
-namespace lve {
+namespace kc {
 
     class Engine {
     public:
@@ -47,4 +47,4 @@ private:
     static std::unique_ptr<Engine> instance_;
 };
 
-} // namespace lve
+} // namespace kc

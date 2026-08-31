@@ -1,7 +1,7 @@
 #include "Vulkan/CommandPool.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     CommandPool::CommandPool(Device& device, uint32_t queueFamilyIndex,
                              VkCommandPoolCreateFlags flags)
@@ -54,4 +54,4 @@ namespace lve {
         pool_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

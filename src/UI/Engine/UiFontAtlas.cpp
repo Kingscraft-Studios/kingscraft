@@ -7,7 +7,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     UiFontAtlas::UiFontAtlas(Device& device) : device_(device) {}
 
@@ -203,4 +203,4 @@ namespace lve {
         return &glyphIt->second;
     }
 
-} // namespace lve
+} // namespace kc

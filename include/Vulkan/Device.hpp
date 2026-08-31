@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     struct SwapChainSupportDetails {
         VkSurfaceCapabilitiesKHR capabilities;
@@ -194,4 +194,4 @@ namespace lve {
         VkPipelineCache pipelineCache_ = VK_NULL_HANDLE;
     };
 
-}  // namespace lve
+}  // namespace kc

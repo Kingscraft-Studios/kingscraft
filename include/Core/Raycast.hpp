@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <cstdint>
 
-namespace lve {
+namespace kc {
 
     class World;
 

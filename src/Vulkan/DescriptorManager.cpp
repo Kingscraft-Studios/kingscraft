@@ -3,7 +3,7 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     DescriptorManager::DescriptorManager(Device& device)
         : device_(device) {}
@@ -99,4 +99,4 @@ namespace lve {
             sets.data());
     }
 
-} // namespace lve
+} // namespace kc

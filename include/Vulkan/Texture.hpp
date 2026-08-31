@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class Texture {
     public:
@@ -31,4 +31,4 @@ namespace lve {
         VkSampler textureSampler;
     };
 
-}  // namespace lve
+}  // namespace kc

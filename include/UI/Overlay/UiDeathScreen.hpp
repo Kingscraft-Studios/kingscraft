@@ -5,7 +5,7 @@
 #include "UI/Elements/UiButton.hpp"
 #include "UI/Elements/UiGroup.hpp"
 
-namespace lve {
+namespace kc {
 
     class UiWrapper;
 
@@ -41,4 +41,4 @@ namespace lve {
         uint32_t btnFontHoverStyle_ = 0;
     };
 
-} // namespace lve
+} // namespace kc

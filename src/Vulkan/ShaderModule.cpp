@@ -1,7 +1,7 @@
 #include "Vulkan/ShaderModule.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     ShaderModule::ShaderModule(Device& device, const std::vector<char>& code)
         : device_(device) {
@@ -41,4 +41,4 @@ namespace lve {
         module_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

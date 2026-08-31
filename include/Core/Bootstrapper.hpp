@@ -7,7 +7,7 @@
 
 #include "Validators/PipelineCacheValidator.hpp"
 
-namespace lve {
+namespace kc {
 
 class Bootstrapper {
 public:
@@ -36,4 +36,4 @@ private:
     static std::unique_ptr<Bootstrapper> instance_;
 };
 
-} // namespace lve
+} // namespace kc

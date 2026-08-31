@@ -8,7 +8,7 @@
 
 #include "Renderer/FrameScene.hpp"
 
-namespace lve {
+namespace kc {
 
     using ChunkLookupFn = const Chunk* (*)(int gridX, int gridZ, void* context);
 
@@ -43,4 +43,4 @@ namespace lve {
         bool invVPCacheValid_ = false;
     };
 
-} // namespace lve
+} // namespace kc

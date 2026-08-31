@@ -13,7 +13,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace lve {
+namespace kc {
 
     class Device;
     class DescriptorManager;
@@ -90,4 +90,4 @@ namespace lve {
         const UiWrapper& ui_;
     };
 
-} // namespace lve
+} // namespace kc

@@ -6,7 +6,7 @@
 #include "Util/StringBuilder.hpp"
 #include "Util/TimeUtil.hpp"
 
-namespace lve {
+namespace kc {
 
     std::unique_ptr<Logger> Logger::instance_ = nullptr;
 
@@ -53,4 +53,4 @@ namespace lve {
             data
         );
     }
-} // namespace lve
+} // namespace kc

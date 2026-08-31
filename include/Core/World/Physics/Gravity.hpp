@@ -1,10 +1,10 @@
 #pragma once
 
-namespace lve {
+namespace kc {
 
     class Gravity {
     public:
         static float apply(float velocityY, float dt);
     };
 
-} // namespace lve
+} // namespace kc

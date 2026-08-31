@@ -2,7 +2,7 @@
 
 #include "Device.hpp"
 
-namespace lve {
+namespace kc {
 
     class Semaphore {
     public:
@@ -27,4 +27,4 @@ namespace lve {
         VkSemaphore semaphore_ = VK_NULL_HANDLE;
     };
 
-} // namespace lve
+} // namespace kc

@@ -6,9 +6,9 @@
 #include "Bus/Mailbox.hpp"
 #include "Core/KeyBindHandler.hpp"
 #include "Core/WindowStruct.hpp"
-#include "Vulkan/Window.hpp"
+#include "Vulkan/GLFWWindow.hpp"
 
-namespace lve {
+namespace kc {
     class InputThread {
     public:
         static InputThread& getInstance() {
@@ -52,11 +52,11 @@ namespace lve {
             window->setIcon(pixels, width, height);
         }
 
-        using MouseMovementCallback = Window::MouseMovementCallback;
-        using MouseButtonCallback = Window::MouseButtonCallback;
-        using ScrollCallback = Window::ScrollCallback;
-        using KeyCallback = Window::KeyCallback;
-        using CharCallback = Window::CharCallback;
+        using MouseMovementCallback = GLFWWindow::MouseMovementCallback;
+        using MouseButtonCallback = GLFWWindow::MouseButtonCallback;
+        using ScrollCallback = GLFWWindow::ScrollCallback;
+        using KeyCallback = GLFWWindow::KeyCallback;
+        using CharCallback = GLFWWindow::CharCallback;
 
         void setMouseMoveCallback(MouseMovementCallback cb) {
             window->setMouseMoveCallback(std::move(cb));
@@ -97,7 +97,7 @@ namespace lve {
         void Shutdown();
 
     private:
-        std::optional<Window> window;
+        std::optional<GLFWWindow> window;
         std::shared_ptr<Mailbox> mailbox;
         std::atomic<bool> running;
         std::atomic<bool> initialized{false};

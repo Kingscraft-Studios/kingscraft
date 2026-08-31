@@ -1,7 +1,7 @@
 #include "UI/Elements/UiButton.hpp"
 #include "UI/Engine/UiEngine.hpp"
 
-namespace lve {
+namespace kc {
 
     void UiButton::render(UiEngine& engine) {
         if (!visible_) return;
@@ -36,4 +36,4 @@ namespace lve {
         if (onClick_) onClick_();
     }
 
-} // namespace lve
+} // namespace kc

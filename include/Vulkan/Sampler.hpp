@@ -2,7 +2,7 @@
 
 #include "Device.hpp"
 
-namespace lve {
+namespace kc {
 
     class Sampler {
     public:
@@ -23,4 +23,4 @@ namespace lve {
         VkSampler sampler_ = VK_NULL_HANDLE;
     };
 
-} // namespace lve
+} // namespace kc

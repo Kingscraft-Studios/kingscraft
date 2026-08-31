@@ -2,7 +2,7 @@
 
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
 
 static std::unique_ptr<MessageBus> instance = nullptr;
 
@@ -62,4 +62,4 @@ void MessageBus::waitForQuit() {
     quitCV_.wait(lock, [&]() { return quitting_; });
 }
 
-} // namespace lve
+} // namespace kc

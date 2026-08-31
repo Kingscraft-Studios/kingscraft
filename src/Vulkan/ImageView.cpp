@@ -1,7 +1,7 @@
 #include "Vulkan/ImageView.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     ImageView::ImageView(Device& device, const VkImageViewCreateInfo& info)
         : device_(device) {
@@ -55,4 +55,4 @@ namespace lve {
         view_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

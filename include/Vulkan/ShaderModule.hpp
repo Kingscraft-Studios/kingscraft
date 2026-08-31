@@ -3,7 +3,7 @@
 #include "Device.hpp"
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class ShaderModule {
     public:
@@ -24,4 +24,4 @@ namespace lve {
         VkShaderModule module_ = VK_NULL_HANDLE;
     };
 
-} // namespace lve
+} // namespace kc

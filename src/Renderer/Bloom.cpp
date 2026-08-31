@@ -4,7 +4,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
 
 Bloom::Bloom(Device& device, VkExtent2D windowExtent, VkRenderPass sceneRenderPass,
@@ -570,4 +570,4 @@ void Bloom::updateUniforms(uint32_t frameIndex, const GlowUniformData& glowData,
     frames_[frameIndex].blurUBO->write(&blurData, 0, sizeof(BlurUniformData));
 }
 
-} // namespace lve
+} // namespace kc

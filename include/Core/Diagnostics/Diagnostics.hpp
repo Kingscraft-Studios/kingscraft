@@ -6,7 +6,7 @@
 #include "Bus/Message.hpp"
 #include "Core/Diagnostics/Metrics/Metrics.hpp"
 
-namespace lve {
+namespace kc {
 
     class Diagnostics {
     public:

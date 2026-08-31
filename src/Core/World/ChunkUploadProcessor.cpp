@@ -6,7 +6,7 @@
 #include "Threads/Renderer.hpp"
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
 
     void GpuChunkData::cleanup(Device& device) {
         if (uploadCmd != VK_NULL_HANDLE) {

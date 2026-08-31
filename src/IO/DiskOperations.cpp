@@ -2,7 +2,7 @@
 
 #include <filesystem>
 
-namespace lve {
+namespace kc {
     DiskOperations::DiskOperations(const std::string& path, const std::ios::openmode mode) : path_(path), mode_(mode), file(openFile(path, mode_)) {
         if (!file.is_open()) {
             throw std::runtime_error("Failed to open File: " + path);

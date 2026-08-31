@@ -7,7 +7,7 @@
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/TextureCache.hpp"
 
-namespace lve {
+namespace kc {
     class WorldRenderer {
     public:
         WorldRenderer() = default;

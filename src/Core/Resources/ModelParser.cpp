@@ -8,7 +8,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace lve {
+namespace kc {
 
 void ModelParser::loadAsync(const std::string& path,
                             std::function<void(BlockModel)> callback) {
@@ -77,4 +77,4 @@ void ModelParser::loadAsync(const std::string& path,
     );
 }
 
-} // namespace lve
+} // namespace kc

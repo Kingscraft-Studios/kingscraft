@@ -5,7 +5,7 @@
 #include "Core/Blocks/Block.hpp"
 #include <string>
 
-namespace lve {
+namespace kc {
 
     void UiHotbar::init(UiWrapper& ui, float screenW, float screenH) {
         screenW_ = screenW;
@@ -117,4 +117,4 @@ namespace lve {
         selection_.updateLayout(screenW_, screenH_);
     }
 
-} // namespace lve
+} // namespace kc

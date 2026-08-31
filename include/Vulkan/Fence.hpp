@@ -2,7 +2,7 @@
 
 #include "Device.hpp"
 
-namespace lve {
+namespace kc {
 
     class Fence {
     public:
@@ -32,4 +32,4 @@ namespace lve {
         VkFence fence_ = VK_NULL_HANDLE;
     };
 
-} // namespace lve
+} // namespace kc

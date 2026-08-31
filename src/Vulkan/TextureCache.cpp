@@ -7,7 +7,7 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
 TextureCache::TextureCache(Device& device) : device_(device) {}
 
@@ -300,4 +300,4 @@ void TextureCache::updateFromRegistry() {
     vkUpdateDescriptorSets(device_.device(), 1, &descriptorWrite, 0, nullptr);
 }
 
-} // namespace lve
+} // namespace kc

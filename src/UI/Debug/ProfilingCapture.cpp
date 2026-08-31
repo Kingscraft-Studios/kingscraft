@@ -1,5 +1,5 @@
 #include "UI/Debug/ProfilingCapture.hpp"
-#include "Vulkan/Window.hpp"
+#include "Vulkan/GLFWWindow.hpp"
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <cstdio>
@@ -9,7 +9,7 @@
 #include "Bus/MessageBus.hpp"
 #include "Threads/InputThread.hpp"
 
-namespace lve {
+namespace kc {
 
     void ProfilingCapture::start() {
         cpuFrameMs_.clear();
@@ -200,4 +200,4 @@ namespace lve {
         });
     }
 
-} // namespace lve
+} // namespace kc

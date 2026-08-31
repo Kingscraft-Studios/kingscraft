@@ -7,7 +7,7 @@
 #include <array>
 #include <glm/glm.hpp>
 
-namespace lve {
+namespace kc {
 
     static constexpr uint32_t SUBCHUNK_H = 4;
 
@@ -121,4 +121,4 @@ namespace lve {
         static uint64_t hashBytes(const uint8_t* data, size_t size);
     };
 
-} // namespace lve
+} // namespace kc

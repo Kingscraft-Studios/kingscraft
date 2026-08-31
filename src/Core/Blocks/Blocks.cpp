@@ -7,7 +7,7 @@
 #include "Threads/Logger.hpp"
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
 
     void Blocks::logModelInfo(const BlockModel& model) {
         int quadsTotal = 0;
@@ -50,4 +50,4 @@ namespace lve {
             registry);
     }
 
-} // namespace lve
+} // namespace kc

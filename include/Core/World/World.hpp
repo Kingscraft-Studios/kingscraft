@@ -17,7 +17,7 @@
 
 #include "PlayerController.hpp"
 
-namespace lve {
+namespace kc {
 
     class Block;
 
@@ -139,4 +139,4 @@ namespace lve {
         PlayerController playerController_;
     };
 
-} // namespace lve
+} // namespace kc

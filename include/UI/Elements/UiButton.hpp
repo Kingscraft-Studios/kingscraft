@@ -4,7 +4,7 @@
 #include <string>
 #include <functional>
 
-namespace lve {
+namespace kc {
 
     class UiButton : public UiElement {
     public:
@@ -58,4 +58,4 @@ namespace lve {
         std::function<void()> onClick_;
     };
 
-} // namespace lve
+} // namespace kc

@@ -1,4 +1,4 @@
-#include "Vulkan/App.hpp"
+#include "Vulkan/RenderEngine.hpp"
 #include "Core/MainMenu.hpp"
 #include "Core/World/WorldScreen.hpp"
 #include "Renderer/Bloom.hpp"
@@ -14,9 +14,9 @@
 #include "Util/LogUtils.hpp"
 #include "Util/ScopedTimer.hpp"
 
-namespace lve {
+namespace kc {
 
-    App::App() {
+    RenderEngine::RenderEngine() {
 
         resourceManager->loadRawImageData("resources/textures/logo/Kingscraft-Logo.png",
             [](unsigned char* pixels, int width, int height) {
@@ -29,7 +29,7 @@ namespace lve {
 
         // TODO: Move this Into GameLogic
         MessageBus::Get().send(ThreadName::GameLogic, [this]() {
-            GameLogicThread::getInstance().setScreen<MainMenu>(*uiSystem);
+            Kingscraft::getInstance().setScreen<MainMenu>(*uiSystem);
         });
 
         VkExtent2D extent = InputThread::getInstance().getExtent().toVKExtent();
@@ -38,16 +38,16 @@ namespace lve {
         postProcessor_->addEffect(std::move(bloom));
     }
 
-    App::~App() {
+    RenderEngine::~RenderEngine() {
         chunkProcessor.cleanup(device);
         vkDeviceWaitIdle(device.device());
     }
 
-    bool App::windowShouldClose() const {
+    bool RenderEngine::windowShouldClose() const {
         return InputThread::getInstance().shouldClose();
     }
 
-    void App::tick() {
+    void RenderEngine::tick() {
         if (!worldRendererInitialized) {
             Registries::waitForBuild();
             textureCache_->updateFromRegistry();
@@ -92,21 +92,21 @@ namespace lve {
         }
     }
 
-    void App::cleanup() {
+    void RenderEngine::cleanup() {
         vkDeviceWaitIdle(device.device());
     }
 
-    void App::pauseRenderer() {
+    void RenderEngine::pauseRenderer() {
         renderState = RenderState::Paused;
 
         vkDeviceWaitIdle(device.device());
     }
 
-    void App::resumeRenderer() {
+    void RenderEngine::resumeRenderer() {
         renderState = RenderState::Running;
     }
 
-    void App::recreateSwapChain() {
+    void RenderEngine::recreateSwapChain() {
         auto extent = InputThread::getInstance().getExtent().toVKExtent();
         while (extent.width == 0 || extent.height == 0) {
             MessageBus::Get().send(ThreadName::Input, []() {
@@ -126,7 +126,7 @@ namespace lve {
     }
 
 
-    void App::drawFrame(const FrameScene& scene) {
+    void RenderEngine::drawFrame(const FrameScene& scene) {
         if (renderState != RenderState::Running) {
             return;
         }
@@ -228,4 +228,4 @@ namespace lve {
         gpuMetrics.cIdle = renderer->getCIdleMs() + sleepIdleMs_;
     }
 
-}  // namespace lve
+}  // namespace kc

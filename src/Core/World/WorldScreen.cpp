@@ -12,12 +12,12 @@
 #include "Core/Raycast.hpp"
 #include "Core/Blocks/Blocks.hpp"
 #include "Core/World/Physics/CollisionSystem.hpp"
-#include "Threads/GameLogicThread.hpp"
+#include "Threads/Kingscraft.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/Renderer.hpp"
 #include "Threads/Engine.hpp"
 
-namespace lve {
+namespace kc {
 
     namespace {
         const Chunk* worldChunkLookup(int gx, int gz, void* ctx) {
@@ -34,7 +34,7 @@ namespace lve {
     }
 
     void WorldScreen::init() {
-        auto& world = GameLogicThread::getInstance().getWorld();
+        auto& world = Kingscraft::getInstance().getWorld();
         RenderThread::getInstance().getUI().setBlockTexture(RenderThread::getInstance().getTexCache().getImageView(), RenderThread::getInstance().getTexCache().getSampler());
 
         world.getPlayerController().setCaptured(true);
@@ -88,7 +88,7 @@ namespace lve {
     }
 
     void WorldScreen::tick(double dt) {
-        auto& world = GameLogicThread::getInstance().getWorld();
+        auto& world = Kingscraft::getInstance().getWorld();
         bool debug = RenderThread::getInstance().getUI().isDebugModeOn();
 
         if (debug != wasDebugOn_ && !world.getPlayerController().isDead()) {
@@ -141,20 +141,20 @@ namespace lve {
     }
 
     void WorldScreen::render(FrameScene& scene) {
-        auto& world = GameLogicThread::getInstance().getWorld();
+        auto& world = Kingscraft::getInstance().getWorld();
         auto& settings = RendererSettings::get();
         world.getPlayerController().updateProjection(extent_, settings.fov,
                                            settings.nearPlane, settings.farPlane);
 
         glm::mat4 viewProj = world.getPlayerController().getViewProj();
         scene.camera.viewProj = viewProj;
-        float worldHeight = static_cast<float>(GameLogicThread::getInstance().getWorld().getHeight());
+        float worldHeight = static_cast<float>(Kingscraft::getInstance().getWorld().getHeight());
 
         scene.highlight.enabled = false;
         if (world.getPlayerController().isCursorCaptured()) {
             const Camera& cam = world.getPlayerController().getCamera();
             RaycastHit hit = raycastBlock(cam.getPosition(), cam.getForward(), 8.0f,
-                                          GameLogicThread::getInstance().getWorld());
+                                          Kingscraft::getInstance().getWorld());
             if (hit.hit) {
                 scene.highlight.enabled = true;
                 scene.highlight.position = glm::vec3(static_cast<float>(hit.x),
@@ -166,10 +166,10 @@ namespace lve {
         double frustumMs = 0.0, drawMs = 0.0;
         uint32_t visibleChunks = 0, visibleSubChunks = 0;
         uint32_t occlusionTested = 0, occlusionRemoved = 0;
-        terrainRenderer_.render(scene, GameLogicThread::getInstance().getWorld().getLoadedChunks(),
+        terrainRenderer_.render(scene, Kingscraft::getInstance().getWorld().getLoadedChunks(),
                                 viewProj, world.getPlayerController().getCamera().getPosition(),
                                 settings.enableFrustumCulling, worldHeight,
-                                worldChunkLookup, &GameLogicThread::getInstance().getWorld(),
+                                worldChunkLookup, &Kingscraft::getInstance().getWorld(),
                                 &frustumMs, &drawMs, &visibleChunks,
                                 &visibleSubChunks, &occlusionTested,
                                 &occlusionRemoved);
@@ -205,7 +205,7 @@ namespace lve {
 
     void WorldScreen::onMouseButton(int button, int action, int mods) {
         (void)mods;
-        auto& world = GameLogicThread::getInstance().getWorld();
+        auto& world = Kingscraft::getInstance().getWorld();
         if (action != GLFW_PRESS) return;
         if (!world.getPlayerController().isCursorCaptured()) return;
 
@@ -213,12 +213,12 @@ namespace lve {
         glm::vec3 origin = cam.getPosition();
         glm::vec3 dir = cam.getForward();
 
-        auto hit = raycastBlock(origin, dir, 8.0f, GameLogicThread::getInstance().getWorld());
+        auto hit = raycastBlock(origin, dir, 8.0f, Kingscraft::getInstance().getWorld());
         if (!hit.hit) return;
 
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            GameLogicThread::getInstance().getWorld().setBlock(hit.x, hit.y, hit.z, Blocks::AIR);
-            GameLogicThread::getInstance().getWorld().remeshDirtyChunks();
+            Kingscraft::getInstance().getWorld().setBlock(hit.x, hit.y, hit.z, Blocks::AIR);
+            Kingscraft::getInstance().getWorld().remeshDirtyChunks();
             return;
         }
 
@@ -234,7 +234,7 @@ namespace lve {
         int placeY = hit.y + faceNormals[hit.face][1];
         int placeZ = hit.z + faceNormals[hit.face][2];
 
-        if (placeY < 0 || placeY >= GameLogicThread::getInstance().getWorld().getHeight()) return;
+        if (placeY < 0 || placeY >= Kingscraft::getInstance().getWorld().getHeight()) return;
 
         auto* key = hotbar_.getSlotBlock(hotbar_.getSelectedSlot());
         if (!key) return;
@@ -247,8 +247,8 @@ namespace lve {
             return;
         }
 
-        GameLogicThread::getInstance().getWorld().setBlock(placeX, placeY, placeZ, block);
-        GameLogicThread::getInstance().getWorld().remeshDirtyChunks();
+        Kingscraft::getInstance().getWorld().setBlock(placeX, placeY, placeZ, block);
+        Kingscraft::getInstance().getWorld().remeshDirtyChunks();
     }
 
-} // namespace lve
+} // namespace kc

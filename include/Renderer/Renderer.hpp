@@ -17,7 +17,7 @@
 
 #include "FrameScene.hpp"
 
-namespace lve {
+namespace kc {
 
 struct RenderPassBegin {
     VkRenderPass renderPass = VK_NULL_HANDLE;
@@ -180,4 +180,4 @@ private:
     double cIdleMs_ = 0.0;
 };
 
-} // namespace lve
+} // namespace kc

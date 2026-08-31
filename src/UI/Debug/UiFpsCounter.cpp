@@ -2,7 +2,7 @@
 #include "UI/UiWrapper.hpp"
 #include "UI/Engine/UiStyle.hpp"
 
-namespace lve {
+namespace kc {
 
     void UiFpsCounter::init(UiWrapper& ui) {
         styleIndex_ = ui.registerStyle(UiStyle{
@@ -120,4 +120,4 @@ namespace lve {
         group_.removeFromWrapper(ui);
     }
 
-} // namespace lve
+} // namespace kc

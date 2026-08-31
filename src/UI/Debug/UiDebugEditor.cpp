@@ -12,7 +12,7 @@
 
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
 
     UiDebugEditor::UiDebugEditor(UiEngine& engine)
         : engine_(engine) {}

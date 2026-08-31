@@ -4,7 +4,7 @@
 #include "UI/UiWrapper.hpp"
 #include "UI/Engine/UiStyle.hpp"
 
-namespace lve {
+namespace kc {
 
     void UiDeathScreen::init(UiWrapper& ui, float screenW, float screenH) {
         screenW_ = screenW;
@@ -96,4 +96,4 @@ namespace lve {
         screenH_ = screenH;
     }
 
-} // namespace lve
+} // namespace kc

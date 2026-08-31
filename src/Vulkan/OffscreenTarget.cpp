@@ -1,7 +1,7 @@
 #include "Vulkan/OffscreenTarget.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     OffscreenTarget::OffscreenTarget(Device& device, VkExtent2D extent, VkFormat format, VkRenderPass renderPass)
         : device_(device), extent_(extent), format_(format) {
@@ -108,4 +108,4 @@ namespace lve {
             0, 0, nullptr, 0, nullptr, 1, &barrier);
     }
 
-} // namespace lve
+} // namespace kc

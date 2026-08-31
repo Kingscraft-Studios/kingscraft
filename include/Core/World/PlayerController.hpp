@@ -6,10 +6,10 @@
 
 #include "Core/Attributes.hpp"
 
-namespace lve {
+namespace kc {
 
     class KeyBindHandler;
-    class Window;
+    class GLFWWindow;
     class World;
 
     class PlayerController {
@@ -51,4 +51,4 @@ namespace lve {
         bool dead_ = false;
     };
 
-} // namespace lve
+} // namespace kc

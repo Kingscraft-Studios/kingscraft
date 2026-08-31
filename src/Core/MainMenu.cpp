@@ -4,7 +4,7 @@
 #include "Core/Constants.hpp"
 #include "Renderer/Renderer.hpp"
 
-namespace lve {
+namespace kc {
 
     // Shared style indices for all MainMenu instances
     static uint32_t g_styleBg = 0;
@@ -156,4 +156,4 @@ namespace lve {
         selectionBarQuit_.setName("SelBarQuit");
         uiSystem_.addElement(&selectionBarQuit_);
     }
-} // namespace lve
+} // namespace kc

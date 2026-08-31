@@ -2,7 +2,7 @@
 
 #include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
 
-namespace lve {
+namespace kc {
 
     class Metrics {
     public:

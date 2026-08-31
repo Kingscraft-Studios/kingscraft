@@ -4,7 +4,7 @@
 
 #include "Renderer/FrameScene.hpp"
 
-namespace lve {
+namespace kc {
 
     class Screen {
     public:
@@ -18,4 +18,4 @@ namespace lve {
         virtual void onMouseButton(int button, int action, int mods) {}
     };
 
-} // namespace lve
+} // namespace kc

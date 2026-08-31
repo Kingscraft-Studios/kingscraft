@@ -1,6 +1,6 @@
 #include "Vulkan/Image.hpp"
 
-namespace lve {
+namespace kc {
 
     Image::Image(Device& device, const VkImageCreateInfo& info, VkMemoryPropertyFlags properties)
         : device_(device) {
@@ -43,4 +43,4 @@ namespace lve {
         memory_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

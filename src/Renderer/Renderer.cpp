@@ -6,7 +6,7 @@
 #include <limits>
 #include <array>
 
-namespace lve {
+namespace kc {
 
 Renderer::Renderer(Device& device, VkExtent2D initialExtent)
     : device_(device), extent_(initialExtent) {
@@ -357,4 +357,4 @@ void Renderer::createPipelineStatsPool() {
     device_.endSingleTimeCommands(cmd);
 }
 
-} // namespace lve
+} // namespace kc

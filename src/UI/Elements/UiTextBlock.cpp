@@ -1,7 +1,7 @@
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Engine/UiEngine.hpp"
 
-namespace lve {
+namespace kc {
 
     void UiTextBlock::render(UiEngine& engine) {
         if (!visible_ || label_.text.empty()) return;
@@ -13,4 +13,4 @@ namespace lve {
         return label_.measureWidth(engine);
     }
 
-} // namespace lve
+} // namespace kc

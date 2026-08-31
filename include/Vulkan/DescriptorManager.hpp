@@ -3,7 +3,7 @@
 #include "Device.hpp"
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class DescriptorManager {
     public:
@@ -34,4 +34,4 @@ namespace lve {
         Device& device_;
     };
 
-} // namespace lve
+} // namespace kc

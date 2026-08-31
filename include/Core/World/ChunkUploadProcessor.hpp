@@ -3,7 +3,7 @@
 #include "GpuChunkData.hpp"
 #include "Renderer/FrameScene.hpp"
 
-namespace lve {
+namespace kc {
     class ChunkUploadProcessor {
     public:
         ~ChunkUploadProcessor() {

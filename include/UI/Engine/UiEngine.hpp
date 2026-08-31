@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace lve {
+namespace kc {
 
     class UiElement;
 
@@ -92,4 +92,4 @@ namespace lve {
         std::unique_ptr<UiDebugEditor> debugEditor_;
     };
 
-} // namespace lve
+} // namespace kc

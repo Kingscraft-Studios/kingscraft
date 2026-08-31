@@ -1,7 +1,7 @@
 #include "Renderer/PostProcessing.hpp"
 #include <cstring>
 
-namespace lve {
+namespace kc {
 
 void PostProcessing::addEffect(std::unique_ptr<PostProcessEffect> effect) {
     effects_.push_back(std::move(effect));
@@ -26,4 +26,4 @@ void PostProcessing::postScene(const FrameContext& ctx) {
         e->postScene(ctx.cmd, ctx.frameIndex, ctx);
 }
 
-} // namespace lve
+} // namespace kc

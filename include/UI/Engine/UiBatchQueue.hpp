@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace lve {
+namespace kc {
 
     struct UiVertex {
         glm::vec2 pos;
@@ -41,4 +41,4 @@ namespace lve {
         size_t indexCapacity_ = 3072;
     };
 
-} // namespace lve
+} // namespace kc

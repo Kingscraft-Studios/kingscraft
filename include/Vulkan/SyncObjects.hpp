@@ -7,11 +7,11 @@
 
 #include "Core/Constants.hpp"
 
-namespace lve {
+namespace kc {
 
     class SyncObjects {
     public:
-        static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = lve::MAX_FRAMES_IN_FLIGHT;
+        static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = kc::MAX_FRAMES_IN_FLIGHT;
 
         SyncObjects(Device& device, uint32_t swapchainImageCount);
         ~SyncObjects();
@@ -32,4 +32,4 @@ namespace lve {
         std::vector<std::unique_ptr<Fence>> inFlightFences_;
     };
 
-} // namespace lve
+} // namespace kc

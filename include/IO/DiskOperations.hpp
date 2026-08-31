@@ -5,7 +5,7 @@
 #include <mutex>
 #include <vector>
 
-namespace lve {
+namespace kc {
     class DiskOperations {
     public:
 

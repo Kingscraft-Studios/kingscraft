@@ -1,7 +1,7 @@
 #include "Vulkan/PipelineLayout.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     PipelineLayout::PipelineLayout(Device& device, const VkPipelineLayoutCreateInfo& info)
         : device_(device) {
@@ -36,4 +36,4 @@ namespace lve {
         layout_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

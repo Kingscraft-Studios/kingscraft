@@ -2,7 +2,7 @@
     "textures": {
         "top":    "resources/textures/blocks/grass.png",
         "side":   "resources/textures/blocks/grass_side.png",
-        "bottom": "resources/textures/blocks/grass.png"
+        "bottom": "resources/textures/blocks/dirt.png"
     },
     "elements": [
         {

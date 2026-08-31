@@ -11,7 +11,7 @@
 #include "Util/StringBuilder.hpp"
 #include "Util/TimeUtil.hpp"
 
-namespace lve {
+namespace kc {
 
     enum LogLevel {
         DEBUG,
@@ -79,4 +79,4 @@ namespace lve {
         static std::unique_ptr<Logger> instance_;
     };
 
-} // namespace lve
+} // namespace kc

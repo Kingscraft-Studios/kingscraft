@@ -1,7 +1,7 @@
 #pragma once
 #include "Block.hpp"
 
-namespace lve {
+namespace kc {
     class AirBlock : public Block {
     public:
         AABB setCollisionBox() const override {

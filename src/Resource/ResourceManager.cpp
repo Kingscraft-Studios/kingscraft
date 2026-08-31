@@ -3,7 +3,7 @@
 #include "Bus/MessageBus.hpp"
 #include "stb_image.h"
 
-namespace lve {
+namespace kc {
 
 ResourceManager::ResourceManager(Device& device)
     : device_(device) {
@@ -53,4 +53,4 @@ void ResourceManager::garbageCollect() {
     // Future: release textures with no external references
 }
 
-} // namespace lve
+} // namespace kc

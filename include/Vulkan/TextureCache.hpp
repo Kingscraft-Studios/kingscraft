@@ -10,7 +10,7 @@
 #include <memory>
 #include <cstdint>
 
-namespace lve {
+namespace kc {
 
 class TextureCache {
 public:
@@ -42,4 +42,4 @@ private:
     uint32_t layerCount_ = 0;
 };
 
-} // namespace lve
+} // namespace kc

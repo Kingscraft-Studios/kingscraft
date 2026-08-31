@@ -5,7 +5,7 @@
 #include <fstream>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     std::unique_ptr<IO> IO::instance_ = nullptr;
 
@@ -109,4 +109,4 @@ namespace lve {
 
         return entry->second;
     }
-} // namespace lve
+} // namespace kc

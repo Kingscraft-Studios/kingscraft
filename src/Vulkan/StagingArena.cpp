@@ -4,7 +4,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     static constexpr int RECYCLE_DELAY = 2;
 
@@ -66,4 +66,4 @@ namespace lve {
         frameIndex_++;
     }
 
-} // namespace lve
+} // namespace kc

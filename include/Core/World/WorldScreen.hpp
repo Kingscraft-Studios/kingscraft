@@ -10,7 +10,7 @@
 #include <memory>
 #include <glm/glm.hpp>
 
-namespace lve {
+namespace kc {
 
     class WorldScreen : public Screen {
     public:
@@ -36,4 +36,4 @@ namespace lve {
         uint32_t crosshairStyle_ = 0;
     };
 
-} // namespace lve
+} // namespace kc

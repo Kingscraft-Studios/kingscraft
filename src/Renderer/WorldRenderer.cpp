@@ -9,7 +9,7 @@
 #include "Threads/Renderer.hpp"
 #include "../../include/Core/Bootstrapper.hpp"
 
-namespace lve {
+namespace kc {
     struct TerrainPushConstants {
         glm::mat4 viewProj;     // 64 bytes
         glm::vec4 chunkOrigin;  // 16 bytes

@@ -1,6 +1,6 @@
 #include "Core/Diagnostics/Metrics/Metrics.hpp"
 
-namespace lve {
+namespace kc {
 
     void Metrics::clear() {
         current_ = FrameMetrics{};

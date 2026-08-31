@@ -2,7 +2,7 @@
 #include "Bus/MessageBus.hpp"
 #include "Threads/Logger.hpp"
 
-namespace lve {
+namespace kc {
     class LogUtils {
     public:
         static void info(ThreadName sender, std::string data) {

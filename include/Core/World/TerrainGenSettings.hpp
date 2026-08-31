@@ -3,7 +3,7 @@
 #include "Core/Blocks/Blocks.hpp"
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class TerrainGenSettings {
     public:
@@ -37,4 +37,4 @@ namespace lve {
         TerrainGenSettings() = default;
     };
 
-} // namespace lve
+} // namespace kc

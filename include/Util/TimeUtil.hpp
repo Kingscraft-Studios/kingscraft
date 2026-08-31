@@ -1,7 +1,7 @@
 #pragma once
 #include <chrono>
 
-namespace lve {
+namespace kc {
 
 enum class TimeFormat{
     Logger,

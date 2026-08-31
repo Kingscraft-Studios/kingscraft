@@ -2,7 +2,7 @@
 
 #include "Util/TimeUtil.hpp"
 
-namespace lve {
+namespace kc {
 
     // Times a scope and adds elapsed ms into the given accumulator on exit.
     class ScopedTimer {

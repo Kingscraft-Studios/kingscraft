@@ -11,12 +11,12 @@
 #include "Renderer/RendererSettings.hpp"
 #include "Util/TimeUtil.hpp"
 
-namespace lve {
+namespace kc {
 
-class GameLogicThread {
+class Kingscraft {
 public:
-    static GameLogicThread& getInstance() {
-        static GameLogicThread instance;
+    static Kingscraft& getInstance() {
+        static Kingscraft instance;
         return instance;
     }
 

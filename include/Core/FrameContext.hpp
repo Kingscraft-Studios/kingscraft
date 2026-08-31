@@ -2,7 +2,7 @@
 
 #include <vulkan/vulkan.h>
 
-namespace lve {
+namespace kc {
 
 class PostProcessing;
 
@@ -23,4 +23,4 @@ struct FrameContext {
     double cpuSubmitMs = 0.0;
 };
 
-} // namespace lve
+} // namespace kc

@@ -1,7 +1,7 @@
 #include "Vulkan/Semaphore.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     Semaphore::Semaphore(Device& device)
         : device_(device) {
@@ -44,4 +44,4 @@ namespace lve {
         semaphore_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

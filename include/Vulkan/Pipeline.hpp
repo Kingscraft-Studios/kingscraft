@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     struct PipelineConfigInfo {
         PipelineConfigInfo() = default;

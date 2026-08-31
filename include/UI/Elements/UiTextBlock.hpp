@@ -2,7 +2,7 @@
 
 #include "UI/Elements/UiElement.hpp"
 
-namespace lve {
+namespace kc {
 
     class UiTextBlock : public UiElement {
     public:
@@ -17,4 +17,4 @@ namespace lve {
         float getTextWidth(UiEngine& engine) const;
     };
 
-} // namespace lve
+} // namespace kc

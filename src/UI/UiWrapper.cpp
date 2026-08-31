@@ -3,7 +3,7 @@
 #include "Vulkan/Device.hpp"
 #include "Vulkan/DescriptorManager.hpp"
 
-namespace lve {
+namespace kc {
 
     UiWrapper::UiWrapper() {
     }
@@ -226,4 +226,4 @@ namespace lve {
         if (engine_) engine_->logSelectedElementPosition();
     }
 
-} // namespace lve
+} // namespace kc

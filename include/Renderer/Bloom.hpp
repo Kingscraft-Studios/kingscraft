@@ -18,7 +18,7 @@
 #include <memory>
 #include <glm/glm.hpp>
 
-namespace lve {
+namespace kc {
 
 struct BloomElement {
     bool bloomEnabled = true;
@@ -145,4 +145,4 @@ private:
     VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
 };
 
-} // namespace lve
+} // namespace kc

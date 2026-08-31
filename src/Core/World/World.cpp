@@ -36,10 +36,10 @@ namespace {
     // the gen thread. Interior faces whose direction happens to match a gate
     // (e.g. an +X face against an interior air pocket) are untouched — they
     // border the chunk's own blocks, not the neighbor.
-    void spliceGateFaces(lve::SubChunk& dst, const lve::SubChunk& slab, uint8_t mask, int N) {
+    void spliceGateFaces(kc::SubChunk& dst, const kc::SubChunk& slab, uint8_t mask, int N) {
         const int edge = N;   // face plane at N or 0
 
-        auto isGateFace = [mask, edge](const lve::ChunkVertex& v) -> bool {
+        auto isGateFace = [mask, edge](const kc::ChunkVertex& v) -> bool {
             if (!(mask & (static_cast<uint8_t>(1) << v.face))) return false;
             switch (v.face) {
                 case 4: return static_cast<int>(v.px) == edge;   // PosX
@@ -50,7 +50,7 @@ namespace {
         };
 
         std::vector<uint32_t> remap(dst.vertices.size());
-        std::vector<lve::ChunkVertex> keep;
+        std::vector<kc::ChunkVertex> keep;
         keep.reserve(dst.vertices.size());
 
         uint32_t next = 0;
@@ -78,7 +78,7 @@ namespace {
 
 } // namespace
 
-namespace lve {
+namespace kc {
 
     World::World(ITerrainGenerator& terrainGen, int chunkSize, int height)
         : terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height) {
@@ -910,4 +910,4 @@ namespace lve {
         return chunkCache_;
     }
 
-} // namespace lve
+} // namespace kc

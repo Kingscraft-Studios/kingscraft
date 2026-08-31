@@ -8,7 +8,7 @@
 #include <functional>
 #include <vector>
 
-namespace lve {
+namespace kc {
 
 class ResourceManager {
 public:
@@ -29,4 +29,4 @@ private:
     std::unordered_map<std::string, std::unique_ptr<Texture>> textures_;
 };
 
-} // namespace lve
+} // namespace kc

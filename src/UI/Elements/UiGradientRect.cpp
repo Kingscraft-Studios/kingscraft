@@ -1,7 +1,7 @@
 #include "UI/Elements/UiGradientRect.hpp"
 #include "UI/Engine/UiEngine.hpp"
 
-namespace lve {
+namespace kc {
 
     void UiGradientRect::render(UiEngine& engine) {
         if (!visible_) return;
@@ -26,4 +26,4 @@ namespace lve {
         engine.addQuad(verts, indices);
     }
 
-} // namespace lve
+} // namespace kc

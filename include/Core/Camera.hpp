@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace lve {
+namespace kc {
 
     class Camera {
     public:
@@ -66,4 +66,4 @@ namespace lve {
         float aspectRatio_ = 16.0f / 9.0f;
     };
 
-} // namespace lve
+} // namespace kc

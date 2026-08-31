@@ -10,7 +10,7 @@
 #include "IO/IOBuiltInTemplates.hpp"
 
 
-namespace lve {
+namespace kc {
     class IO {
     public:
 
@@ -40,4 +40,4 @@ namespace lve {
         std::mutex filesMutex_;
         static std::unique_ptr<IO> instance_;
     };
-} // namespace lve
+} // namespace kc

@@ -4,7 +4,7 @@
 #include <string>
 #include "Core/Resources/BlockModel.hpp"
 
-namespace lve {
+namespace kc {
 
 class ModelParser {
 public:
@@ -12,4 +12,4 @@ public:
                           std::function<void(BlockModel)> callback);
 };
 
-} // namespace lve
+} // namespace kc

@@ -3,7 +3,7 @@
 #include "Device.hpp"
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class CommandPool {
     public:
@@ -26,4 +26,4 @@ namespace lve {
         VkCommandPool pool_ = VK_NULL_HANDLE;
     };
 
-} // namespace lve
+} // namespace kc

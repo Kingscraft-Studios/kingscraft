@@ -1,6 +1,6 @@
 #pragma once
 
-namespace lve {
+namespace kc {
     class Attributes {
     public:
         inline static float PLAYER_WIDTH  = 0.6f;

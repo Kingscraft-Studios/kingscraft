@@ -3,7 +3,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace lve {
+namespace kc {
 
     class UiElement;
     class UiWrapper;
@@ -28,4 +28,4 @@ namespace lve {
         std::vector<UiElement*> children_;
     };
 
-} // namespace lve
+} // namespace kc

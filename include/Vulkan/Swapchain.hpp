@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     class SwapChain {
     public:
@@ -75,4 +75,4 @@ namespace lve {
         std::shared_ptr<SwapChain> oldSwapchain;
     };
 
-}  // namespace lve
+}  // namespace kc

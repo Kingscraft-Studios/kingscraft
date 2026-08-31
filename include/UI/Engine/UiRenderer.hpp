@@ -19,7 +19,7 @@
 #include <memory>
 #include <glm/glm.hpp>
 
-namespace lve {
+namespace kc {
 
     class UiRenderer {
     public:
@@ -129,4 +129,4 @@ namespace lve {
         std::unique_ptr<Sampler> dummySampler_;
     };
 
-} // namespace lve
+} // namespace kc

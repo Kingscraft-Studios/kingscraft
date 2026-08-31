@@ -11,7 +11,7 @@
 #include <limits>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     static constexpr float FRUSTUM_MARGIN = 1.0f;
     static constexpr float OCCLUSION_EPSILON = 1.5f;
@@ -264,4 +264,4 @@ namespace lve {
         scene.ui.enabled = true;
     }
 
-} // namespace lve
+} // namespace kc

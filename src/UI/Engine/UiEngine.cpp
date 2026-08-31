@@ -2,7 +2,7 @@
 #include "Threads/Logger.hpp"
 #include "Util/StringBuilder.hpp"
 
-namespace lve {
+namespace kc {
 
     UiEngine::UiEngine(Device& device, DescriptorManager& descriptorManager, VkExtent2D extent)
         : device_(device),
@@ -179,4 +179,4 @@ namespace lve {
         if (debugEditor_) debugEditor_->onElementRemoved(element);
     }
 
-} // namespace lve
+} // namespace kc

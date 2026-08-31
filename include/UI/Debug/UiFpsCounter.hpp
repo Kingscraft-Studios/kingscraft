@@ -5,7 +5,7 @@
 #include "Util/TimeUtil.hpp"
 #include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
 
-namespace lve {
+namespace kc {
 
     class UiWrapper;
 
@@ -51,4 +51,4 @@ namespace lve {
         uint32_t latestOcclusionRemoved_ = 0;
     };
 
-} // namespace lve
+} // namespace kc

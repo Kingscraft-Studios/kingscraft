@@ -6,7 +6,7 @@
 #include "Core/Resources/ModelParser.hpp"
 #include "Block.hpp"
 
-namespace lve {
+namespace kc {
 
 class Blocks {
 public:
@@ -45,4 +45,4 @@ private:
     }
 };
 
-} // namespace lve
+} // namespace kc

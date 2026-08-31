@@ -2,7 +2,7 @@
 
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
     bool PipelineCacheValidator::validate(const PipelineCacheHeader& header) {
 
         // validate the Magic

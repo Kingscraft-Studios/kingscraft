@@ -1,7 +1,7 @@
 #include "Vulkan/Sampler.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     Sampler::Sampler(Device& device, const VkSamplerCreateInfo& info)
         : device_(device) {
@@ -36,4 +36,4 @@ namespace lve {
         sampler_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

@@ -4,7 +4,7 @@
 #include <string>
 #include <cstdint>
 
-namespace lve {
+namespace kc {
 
     class UiEngine;
 

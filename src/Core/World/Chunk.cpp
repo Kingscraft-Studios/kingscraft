@@ -7,7 +7,7 @@
 #include "Core/World/ChunkUploadData.hpp"
 #include "Threads/Renderer.hpp"
 
-namespace lve {
+namespace kc {
 
     Chunk::Chunk(glm::ivec2 gridPos, int verticesPerAxis, float spacing, int height)
         : gridPos_(gridPos)
@@ -157,15 +157,15 @@ namespace lve {
 
     void Chunk::upload() {
         // Pass 1: count total geometry across all sub-chunks with geometry
-        size_t totalVerts = 0;
+        size_t totakcrts = 0;
         size_t totalIndices = 0;
         for (auto& sub : subChunks_) {
             if (sub.indexCount == 0) continue;
-            totalVerts += sub.vertices.size();
+            totakcrts += sub.vertices.size();
             totalIndices += sub.indices.size();
         }
 
-        if (totalVerts == 0 || totalIndices == 0) {
+        if (totakcrts == 0 || totalIndices == 0) {
             for (auto& sub : subChunks_)
                 sub.meshNeeded = false;
 
@@ -187,7 +187,7 @@ namespace lve {
         // Merge all sub-chunks with geometry into combined CPU buffers
         std::vector<ChunkVertex> combinedVerts;
         std::vector<uint16_t> combinedIndices;
-        combinedVerts.reserve(totalVerts);
+        combinedVerts.reserve(totakcrts);
         combinedIndices.reserve(totalIndices);
 
         uint32_t baseVertex = 0;
@@ -231,4 +231,4 @@ namespace lve {
         }
     }
 
-} // namespace lve
+} // namespace kc

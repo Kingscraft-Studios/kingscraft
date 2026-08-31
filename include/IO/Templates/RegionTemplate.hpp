@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace lve {
+namespace kc {
     // Stores 32x32 chunks in one file. Chunk identity lives on a "#C <gx> <gz>"
     // tag line; the block-grid text that follows it is exactly what
     // ChunkTemplate::serialize produces.

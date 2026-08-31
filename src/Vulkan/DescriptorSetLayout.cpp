@@ -1,7 +1,7 @@
 #include "Vulkan/DescriptorSetLayout.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     DescriptorSetLayout::DescriptorSetLayout(Device& device, const VkDescriptorSetLayoutCreateInfo& info)
         : device_(device) {
@@ -45,4 +45,4 @@ namespace lve {
         layout_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

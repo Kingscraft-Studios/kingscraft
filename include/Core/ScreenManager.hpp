@@ -3,7 +3,7 @@
 #include "Core/Screen.hpp"
 #include <memory>
 
-namespace lve {
+namespace kc {
 
     class ScreenManager {
     public:
@@ -27,4 +27,4 @@ namespace lve {
         std::unique_ptr<Screen> currentScreen_;
     };
 
-} // namespace lve
+} // namespace kc

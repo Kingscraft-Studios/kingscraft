@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace lve {
+namespace kc {
 
     class World;
     class Block;
@@ -20,4 +20,4 @@ namespace lve {
         static void moveEntity(const World& world, AABB& box, glm::vec3& velocity, float dt);
     };
 
-} // namespace lve
+} // namespace kc

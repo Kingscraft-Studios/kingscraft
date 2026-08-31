@@ -1,7 +1,7 @@
 #include "Vulkan/DescriptorPool.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     DescriptorPool::DescriptorPool(Device& device, const VkDescriptorPoolCreateInfo& info)
         : device_(device) {
@@ -45,4 +45,4 @@ namespace lve {
         pool_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

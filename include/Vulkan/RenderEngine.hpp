@@ -18,19 +18,19 @@
 #include "Threads/InputThread.hpp"
 #include "Util/TimeUtil.hpp"
 
-namespace lve {
+namespace kc {
 
-    class GameLogicThread;
+    class Kingscraft;
 
-    class App {
+    class RenderEngine {
     public:
         static constexpr int WIDTH = DEFAULT_WINDOW_WIDTH;
         static constexpr int HEIGHT = DEFAULT_WINDOW_HEIGHT;
 
-        App();
-        ~App();
-        App(const App &) = delete;
-        App &operator=(const App &) = delete;
+        RenderEngine();
+        ~RenderEngine();
+        RenderEngine(const RenderEngine &) = delete;
+        RenderEngine &operator=(const RenderEngine &) = delete;
 
 
 
@@ -86,4 +86,4 @@ namespace lve {
         bool worldRendererInitialized = false;
     };
 
-}  // namespace lve
+}  // namespace kc

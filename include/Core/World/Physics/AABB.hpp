@@ -2,7 +2,7 @@
 
 #include <glm/glm.hpp>
 
-namespace lve {
+namespace kc {
 
     struct AABB {
         glm::vec3 min{0.0f};
@@ -33,4 +33,4 @@ namespace lve {
         }
     };
 
-} // namespace lve
+} // namespace kc

@@ -1,7 +1,7 @@
 #include "Threads/Renderer.hpp"
 #include "Bus/MessageBus.hpp"
 
-namespace lve {
+namespace kc {
 
     void RenderThread::run() {
         mailbox_ = std::make_shared<Mailbox>();
@@ -24,4 +24,4 @@ namespace lve {
         mailbox_->stop();
         app.reset();
     }
-} // namespace lve
+} // namespace kc

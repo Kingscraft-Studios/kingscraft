@@ -1,7 +1,7 @@
 #include "Core/Frustum.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace lve {
+namespace kc {
 
 Frustum::Frustum(const glm::mat4& viewProj) {
     extract(viewProj);

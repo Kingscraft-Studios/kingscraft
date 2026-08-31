@@ -6,7 +6,7 @@
 #include "FastNoiseLite.h"
 #include <glm/glm.hpp>
 
-namespace lve {
+namespace kc {
 
     class TerrainGenerator {
     public:
@@ -82,4 +82,4 @@ namespace lve {
         TerrainGenerator noise_;
     };
 
-} // namespace lve
+} // namespace kc

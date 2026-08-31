@@ -1,6 +1,6 @@
 #pragma once
 
-namespace lve {
+namespace kc {
 
     class RendererSettings {
     public:
@@ -42,4 +42,4 @@ namespace lve {
         RendererSettings() = default;
     };
 
-} // namespace lve
+} // namespace kc

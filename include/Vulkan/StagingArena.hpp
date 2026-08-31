@@ -3,7 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <cstdint>
 
-namespace lve {
+namespace kc {
 
     class Device;
 
@@ -35,4 +35,4 @@ namespace lve {
         uint64_t frameIndex_ = 0;
     };
 
-} // namespace lve
+} // namespace kc

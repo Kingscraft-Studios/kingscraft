@@ -7,7 +7,7 @@
 
 #include "UI/Elements/UiRect.hpp"
 
-namespace lve {
+namespace kc {
 
     class UiEngine;
     class UiElement;

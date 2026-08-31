@@ -8,7 +8,7 @@
 #include "Core/Validators/PipelineCacheValidator.hpp"
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
 
     std::unique_ptr<Bootstrapper> Bootstrapper::instance_ = nullptr;
 
@@ -96,4 +96,4 @@ namespace lve {
 
         return cache;
     }
-} // namespace lve
+} // namespace kc

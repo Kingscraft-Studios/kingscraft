@@ -2,7 +2,7 @@
 #include "Templates/ChunkTemplate.hpp"
 #include "Templates/RegionTemplate.hpp"
 
-namespace lve {
+namespace kc {
     class IO;
 
     // Main Processor Which Holds all Templates

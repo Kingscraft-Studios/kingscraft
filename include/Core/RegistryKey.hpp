@@ -1,6 +1,6 @@
 #pragma once
 
-namespace lve {
+namespace kc {
 
 template<typename T> class Registry;
 
@@ -23,4 +23,4 @@ public:
     bool operator<(const RegistryKey& o) const { return id_ < o.id_; }
 };
 
-} // namespace lve
+} // namespace kc

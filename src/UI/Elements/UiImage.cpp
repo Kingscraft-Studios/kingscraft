@@ -1,7 +1,7 @@
 #include "UI/Elements/UiImage.hpp"
 #include "UI/Engine/UiEngine.hpp"
 
-namespace lve {
+namespace kc {
 
     void UiImage::render(UiEngine& engine) {
         if (!visible_) return;
@@ -22,4 +22,4 @@ namespace lve {
         engine.addQuad(verts, indices);
     }
 
-} // namespace lve
+} // namespace kc

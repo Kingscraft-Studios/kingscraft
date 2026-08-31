@@ -4,7 +4,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-namespace lve {
+namespace kc {
 
 struct TextureData {
     std::vector<unsigned char> rawData;
@@ -47,4 +47,4 @@ public:
     }
 };
 
-} // namespace lve
+} // namespace kc

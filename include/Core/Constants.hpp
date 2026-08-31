@@ -2,7 +2,7 @@
 
 #include <glm/glm.hpp>
 
-namespace lve {
+namespace kc {
 
     // Some Misc Constants
     constexpr int MAX_FRAMES_IN_FLIGHT = 2;
@@ -27,4 +27,4 @@ namespace lve {
     constexpr glm::vec4 BLOOD_DARK{0.35f, 0.02f, 0.02f, 1.0f};
     constexpr glm::vec4 BLOOD_DARK_TRANSP{0.35f, 0.02f, 0.02f, 0.85f};
 
-} // namespace lve
+} // namespace kc

@@ -2,7 +2,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     Buffer::Buffer(
         Device& device,
@@ -76,4 +76,4 @@ namespace lve {
         flush(offset, size);
     }
 
-} // namespace lve
+} // namespace kc

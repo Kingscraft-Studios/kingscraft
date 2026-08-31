@@ -1,4 +1,4 @@
-#include "Threads/GameLogicThread.hpp"
+#include "Threads/Kingscraft.hpp"
 
 #include "Bus/MessageBus.hpp"
 #include "Core/Keys.hpp"
@@ -10,8 +10,8 @@
 #include <chrono>
 #include <thread>
 
-namespace lve {
-    void GameLogicThread::init() {
+namespace kc {
+    void Kingscraft::init() {
         prevTime_ = TimeUtil::uptimeSeconds();
         mailbox_ = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::GameLogic, mailbox_);
@@ -19,7 +19,7 @@ namespace lve {
         registerAllKeys();
     }
 
-    void GameLogicThread::run() {
+    void Kingscraft::run() {
 
         registerUICallbacks();
         while (running_) {
@@ -42,7 +42,7 @@ namespace lve {
         world.reset();
     }
 
-    void GameLogicThread::tick() {
+    void Kingscraft::tick() {
         double currentTime = TimeUtil::uptimeSeconds();
         dt_ = currentTime - prevTime_;
         prevTime_ = currentTime;
@@ -77,7 +77,7 @@ namespace lve {
         exchange.publish();
     }
 
-    void GameLogicThread::stop() {
+    void Kingscraft::stop() {
         running_.store(false, std::memory_order_release);
         if (mailbox_) {
             mailbox_->stop();
@@ -85,7 +85,7 @@ namespace lve {
         MessageBus::Get().unsubscribe(ThreadName::GameLogic);
     }
 
-    void GameLogicThread::registerAllKeys() {
+    void Kingscraft::registerAllKeys() {
 
         MessageBus::Get().send(ThreadName::Input, []() {
             InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F11}, []() {
@@ -171,7 +171,7 @@ namespace lve {
         });
     }
 
-    void GameLogicThread::registerUICallbacks() {
+    void Kingscraft::registerUICallbacks() {
         RenderThread::getInstance().getUI().registerButtonHandler(BTN_QUIT_GAME, []() {
                 MessageBus::Get().send(ThreadName::Input, []() {
                     InputThread::getInstance().setWindowClose();
@@ -186,7 +186,7 @@ namespace lve {
 
         RenderThread::getInstance().getUI().registerButtonHandler(BTN_RESPAWN, []() {
             MessageBus::Get().send(ThreadName::GameLogic, []() {
-                GameLogicThread::getInstance().getWorld().getPlayerController().respawn();
+                Kingscraft::getInstance().getWorld().getPlayerController().respawn();
             });
         });
     }

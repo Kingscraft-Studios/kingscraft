@@ -2,7 +2,7 @@
 #include "UI/Elements/UiElement.hpp"
 #include "UI/UiWrapper.hpp"
 
-namespace lve {
+namespace kc {
 
     void UiGroup::add(UiElement* child) {
         if (!child) return;
@@ -40,4 +40,4 @@ namespace lve {
         children_.clear();
     }
 
-} // namespace lve
+} // namespace kc

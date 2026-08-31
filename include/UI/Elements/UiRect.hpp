@@ -2,7 +2,7 @@
 
 #include "UI/Elements/UiElement.hpp"
 
-namespace lve {
+namespace kc {
 
     class UiRect : public UiElement {
     public:
@@ -15,4 +15,4 @@ namespace lve {
         void render(UiEngine& engine) override;
     };
 
-} // namespace lve
+} // namespace kc

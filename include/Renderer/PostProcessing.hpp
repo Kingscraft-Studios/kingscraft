@@ -5,7 +5,7 @@
 #include <vector>
 #include <functional>
 
-namespace lve {
+namespace kc {
 
 class PostProcessEffect {
 public:
@@ -35,4 +35,4 @@ private:
     std::vector<std::unique_ptr<PostProcessEffect>> effects_;
 };
 
-} // namespace lve
+} // namespace kc

@@ -12,7 +12,7 @@
 #include "Threads/InputThread.hpp"
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
 
     std::unique_ptr<Engine> Engine::instance_ = nullptr;
 
@@ -21,7 +21,7 @@ namespace lve {
             mailbox_->stop();
             resourceLoader_.stop();
             if (resLoaderThread_.joinable()) resLoaderThread_.join();
-            GameLogicThread::getInstance().stop();
+            Kingscraft::getInstance().stop();
             if (gameLogicThread_.joinable()) gameLogicThread_.join();
             RenderThread::getInstance().shutdown();
             if (rendererThread_.joinable()) rendererThread_.join();
@@ -51,7 +51,7 @@ namespace lve {
         Logger::Init();
 
         InputThread::getInstance().Init({DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, "Kingscraft"});
-        GameLogicThread::getInstance().init();
+        Kingscraft::getInstance().init();
 
         mailbox_ = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::Engine, mailbox_);
@@ -66,7 +66,7 @@ namespace lve {
         inputThread = std::thread([]() {InputThread::getInstance().run(); });
         RenderThread::getInstance().setQuitCallback([this]() { stop(); });
         rendererThread_ = std::thread([]() { RenderThread::getInstance().run(); });
-        gameLogicThread_ = std::thread([]() { GameLogicThread::getInstance().run(); });
+        gameLogicThread_ = std::thread([]() { Kingscraft::getInstance().run(); });
 
         diagnostics.start();
 
@@ -82,7 +82,7 @@ namespace lve {
 
 
         LogUtils::info(ThreadName::Engine, "Shutting down");
-        GameLogicThread::getInstance().stop();
+        Kingscraft::getInstance().stop();
         if (gameLogicThread_.joinable()) gameLogicThread_.join();
         RenderThread::getInstance().shutdown();
         if (rendererThread_.joinable()) rendererThread_.join();
@@ -110,4 +110,4 @@ namespace lve {
         mailbox_->stop();
     }
 
-} // namespace lve
+} // namespace kc

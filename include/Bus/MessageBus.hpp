@@ -11,7 +11,7 @@
 #include "Bus/Message.hpp"
 #include "Bus/Mailbox.hpp"
 
-namespace lve {
+namespace kc {
 
 class MessageBus {
 public:

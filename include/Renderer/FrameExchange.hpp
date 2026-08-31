@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <limits>
 
-namespace lve {
+namespace kc {
 
 class FrameExchange {
 public:
@@ -55,4 +55,4 @@ private:
     mutable std::atomic<uint32_t> inUseIndex_{std::numeric_limits<uint32_t>::max()};
 };
 
-} // namespace lve
+} // namespace kc

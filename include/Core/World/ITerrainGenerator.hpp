@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace lve {
+namespace kc {
 
 class ITerrainGenerator {
 public:
@@ -12,4 +12,4 @@ public:
         int gridX, int gridZ, int chunkSize, int height) = 0;
 };
 
-} // namespace lve
+} // namespace kc

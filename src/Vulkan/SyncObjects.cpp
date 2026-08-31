@@ -1,7 +1,7 @@
 #include "Vulkan/SyncObjects.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     SyncObjects::SyncObjects(Device& device, uint32_t swapchainImageCount)
         : device_(device) {
@@ -26,4 +26,4 @@ namespace lve {
         inFlightFences_.clear();
     }
 
-} // namespace lve
+} // namespace kc

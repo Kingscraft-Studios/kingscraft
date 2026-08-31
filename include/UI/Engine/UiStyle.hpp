@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <cstdint>
 
-namespace lve {
+namespace kc {
 
 enum class RenderMode : int {
     Solid          = -1,
@@ -50,4 +50,4 @@ struct UiStyle {
     }
 };
 
-} // namespace lve
+} // namespace kc

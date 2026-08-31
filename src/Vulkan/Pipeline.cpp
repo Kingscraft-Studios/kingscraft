@@ -4,9 +4,9 @@
 #include <iostream>
 #include <memory>
 
-namespace lve {
-    Pipeline::Pipeline(lve::Device &device, const std::vector<char>& vertCode, const std::vector<char>& fragCode,
-                             const lve::PipelineConfigInfo& configInfo) : device(device) {
+namespace kc {
+    Pipeline::Pipeline(kc::Device &device, const std::vector<char>& vertCode, const std::vector<char>& fragCode,
+                             const kc::PipelineConfigInfo& configInfo) : device(device) {
         createGraphicsPipeline(vertCode, fragCode, configInfo);
     }
 
@@ -48,7 +48,7 @@ namespace lve {
     shaderStages[1].pSpecializationInfo = configInfo.specMapEntries.empty() ? nullptr : &fragSpecInfo;
 
     // --- UPDATED SECTION ---
-    // Use the descriptions from configInfo instead of the hardcoded LveModel::Vertex
+    // Use the descriptions from configInfo instead of the hardcoded kcModel::Vertex
     const auto &bindingDescriptions = configInfo.bindingDescriptions;
     const auto &attributeDescriptions = configInfo.attributeDescriptions;
 

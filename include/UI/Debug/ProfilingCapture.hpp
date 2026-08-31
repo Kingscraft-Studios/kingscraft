@@ -5,7 +5,7 @@
 
 #include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
 
-namespace lve {
+namespace kc {
 
     class ProfilingCapture {
     public:
@@ -35,4 +35,4 @@ namespace lve {
         std::vector<uint32_t> occlusionRemoved_;
     };
 
-} // namespace lve
+} // namespace kc

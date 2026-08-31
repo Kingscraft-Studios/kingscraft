@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace lve {
+namespace kc {
     class IO;
 
     class ChunkTemplate final : public IOTemplateBase {

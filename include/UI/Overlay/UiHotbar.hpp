@@ -7,9 +7,9 @@
 #include "Core/RegistryKey.hpp"
 #include <atomic>
 
-namespace lve { class Block; }
+namespace kc { class Block; }
 
-namespace lve {
+namespace kc {
 
     class UiWrapper;
 
@@ -58,4 +58,4 @@ namespace lve {
         uint32_t iconStyles_[SLOT_COUNT] = {};
     };
 
-} // namespace lve
+} // namespace kc

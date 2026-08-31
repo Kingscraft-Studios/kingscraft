@@ -2,9 +2,9 @@
 #include <functional>
 #include <memory>
 #include "Bus/Mailbox.hpp"
-#include "Vulkan/App.hpp"
+#include "Vulkan/RenderEngine.hpp"
 
-namespace lve {
+namespace kc {
 
     class RenderThread {
     public:
@@ -30,7 +30,7 @@ namespace lve {
     private:
         std::function<void()> quitCallback_;
         std::shared_ptr<Mailbox> mailbox_;
-        std::unique_ptr<App> app = std::make_unique<App>();
+        std::unique_ptr<RenderEngine> app = std::make_unique<RenderEngine>();
     };
 
-} // namespace lve
+} // namespace kc

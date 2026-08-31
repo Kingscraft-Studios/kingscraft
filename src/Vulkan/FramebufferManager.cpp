@@ -1,7 +1,7 @@
 #include "Vulkan/FramebufferManager.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     FramebufferManager::FramebufferManager(Device& device)
         : device_(device) {}
@@ -45,4 +45,4 @@ namespace lve {
         framebuffers_.clear();
     }
 
-} // namespace lve
+} // namespace kc

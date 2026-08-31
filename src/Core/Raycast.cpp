@@ -4,7 +4,7 @@
 #include <cmath>
 #include <limits>
 
-namespace lve {
+namespace kc {
 
     RaycastHit raycastBlock(const glm::vec3& origin, const glm::vec3& dir,
                             float maxDist, const World& world)

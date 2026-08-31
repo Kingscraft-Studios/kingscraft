@@ -1,7 +1,7 @@
 #include "Vulkan/Fence.hpp"
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     Fence::Fence(Device& device, VkFenceCreateFlags flags)
         : device_(device) {
@@ -45,4 +45,4 @@ namespace lve {
         fence_ = VK_NULL_HANDLE;
     }
 
-} // namespace lve
+} // namespace kc

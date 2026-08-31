@@ -2,7 +2,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-namespace lve {
+namespace kc {
 
     struct CameraData {
         glm::mat4 viewProj{1.0f};
@@ -53,4 +53,4 @@ struct FrameScene {
     FrameStats stats;
 };
 
-} // namespace lve
+} // namespace kc

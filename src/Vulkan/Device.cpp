@@ -14,7 +14,7 @@
 #include "Threads/Logger.hpp"
 #include "Util/LogUtils.hpp"
 
-namespace lve {
+namespace kc {
 
     // local callback functions
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -859,4 +859,4 @@ namespace lve {
         }
     }
 
-}  // namespace lve
+}  // namespace kc

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace lve {
+namespace kc {
 
     struct PipelineStats {
         uint64_t iaVertices = 0;

@@ -2,7 +2,7 @@
 
 #include "Device.hpp"
 
-namespace lve {
+namespace kc {
 
     class Image {
     public:
@@ -25,4 +25,4 @@ namespace lve {
         VkDeviceMemory memory_ = VK_NULL_HANDLE;
     };
 
-} // namespace lve
+} // namespace kc

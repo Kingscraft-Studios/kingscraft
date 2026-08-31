@@ -8,7 +8,7 @@
 #include <limits>
 #include <vector>
 
-namespace lve {
+namespace kc {
 
     bool CollisionSystem::isSolidBlock(const World& world, int x, int y, int z) {
         return getWorldBlockAABB(world, x, y, z).has_value();
@@ -72,7 +72,7 @@ namespace lve {
         const glm::vec3 delta = velocity * dt;
         const glm::vec3 size = box.getSize();
 
-        auto resolveAxis = [&](int axis, float deltaAxis) {
+        auto resokcAxis = [&](int axis, float deltaAxis) {
             if (deltaAxis == 0.0f) return;
 
             const AABB before = box;
@@ -204,10 +204,10 @@ namespace lve {
             return !aabbCollides(world, box);
         };
 
-        resolveAxis(0, delta.x);
-        resolveAxis(2, delta.z);
-        resolveAxis(1, delta.y);
+        resokcAxis(0, delta.x);
+        resokcAxis(2, delta.z);
+        resokcAxis(1, delta.y);
         depenetrate();
     }
 
-} // namespace lve
+} // namespace kc

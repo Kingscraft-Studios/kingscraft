@@ -4,7 +4,7 @@
 #include "Core/World/Physics/AABB.hpp"
 #include "Core/Registry.hpp"
 
-namespace lve {
+namespace kc {
 
 class Block {
 protected:
@@ -43,4 +43,4 @@ public:
     virtual float getHardness() const { return 1.0f; }
 };
 
-} // namespace lve
+} // namespace kc

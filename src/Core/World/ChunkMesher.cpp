@@ -5,7 +5,7 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
-namespace lve {
+namespace kc {
 
 namespace {
     // Face direction metadata
@@ -430,4 +430,4 @@ void ChunkMesher::emitGateFaces(
     subChunk.indexCount = static_cast<uint32_t>(indices.size());
 }
 
-} // namespace lve
+} // namespace kc

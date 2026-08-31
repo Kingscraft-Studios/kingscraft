@@ -8,7 +8,7 @@
 #include <vector>
 #include <algorithm>
 
-namespace lve {
+namespace kc {
 
     enum class BindLayer {
         Global,
@@ -149,4 +149,4 @@ namespace lve {
         std::function<void(std::function<void()>)> dispatcher;
     };
 
-} // namespace lve
+} // namespace kc

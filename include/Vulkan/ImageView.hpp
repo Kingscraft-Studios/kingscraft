@@ -2,7 +2,7 @@
 
 #include "Device.hpp"
 
-namespace lve {
+namespace kc {
 
     class ImageView {
     public:
@@ -28,4 +28,4 @@ namespace lve {
         VkImageView view_ = VK_NULL_HANDLE;
     };
 
-} // namespace lve
+} // namespace kc

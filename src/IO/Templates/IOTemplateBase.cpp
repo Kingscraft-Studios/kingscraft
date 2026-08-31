@@ -2,7 +2,7 @@
 
 #include "Threads/IO.hpp"
 
-namespace lve {
+namespace kc {
     IOTemplateBase::IOTemplateBase(IO& io) : io_(io) {}
 
     std::vector<char> IOTemplateBase::readBytes(const std::string& path) {

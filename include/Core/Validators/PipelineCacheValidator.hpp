@@ -4,7 +4,7 @@
 
 #include "vulkan/vulkan_core.h"
 
-namespace lve {
+namespace kc {
 
     constexpr uint32_t PIPELINE_CACHE_MAGIC = 0x4B504348; // "KPCH (Kingscraft Pipeline Cache Header)"
     constexpr uint32_t PIPELINE_CACHE_VERSION = 1;

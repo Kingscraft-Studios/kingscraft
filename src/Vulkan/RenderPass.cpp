@@ -2,7 +2,7 @@
 #include <array>
 #include <stdexcept>
 
-namespace lve {
+namespace kc {
 
     RenderPass::RenderPass(Device& device,
                            const std::vector<AttachmentDescription>& attachments,
@@ -164,4 +164,4 @@ namespace lve {
         );
     }
 
-} // namespace lve
+} // namespace kc

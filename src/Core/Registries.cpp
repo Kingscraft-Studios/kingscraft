@@ -4,7 +4,7 @@
 #include "Bus/MessageBus.hpp"
 #include "Bus/Mailbox.hpp"
 
-namespace lve {
+namespace kc {
     std::atomic<bool> Registries::built_{false};
     std::mutex Registries::mutex_;
     std::condition_variable Registries::cv_;

@@ -6,7 +6,7 @@
 #include <chrono>
 #include <thread>
 
-namespace lve {
+namespace kc {
     void InputThread::Init(WindowCreateInfo info) {
         window.emplace(info.width, info.height, info.name);
 

@@ -9,7 +9,7 @@
 #include "UI/Elements/UiGradientRect.hpp"
 #include "UI/Elements/UiRect.hpp"
 
-namespace lve {
+namespace kc {
 
     class MainMenu : public Screen {
     public:
@@ -36,4 +36,4 @@ namespace lve {
         UiButton quitButton_;
     };
 
-} // namespace lve
+} // namespace kc

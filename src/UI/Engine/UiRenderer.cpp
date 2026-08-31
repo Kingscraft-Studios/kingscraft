@@ -20,7 +20,7 @@
 #include "Bus/MessageBus.hpp"
 #include "Threads/Renderer.hpp"
 
-namespace lve {
+namespace kc {
 
     UiRenderer::UiRenderer(Device& device, DescriptorManager& descriptorManager, VkExtent2D extent)
         : device_(device), descriptorManager_(descriptorManager), extent_(extent) {}
@@ -596,4 +596,4 @@ namespace lve {
         descriptorManager_.updateDescriptorSets(std::vector<VkWriteDescriptorSet>{write});
     }
 
-} // namespace lve
+} // namespace kc

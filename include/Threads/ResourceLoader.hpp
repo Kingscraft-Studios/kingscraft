@@ -5,7 +5,7 @@
 
 #include "Bus/Mailbox.hpp"
 
-namespace lve {
+namespace kc {
 
 class ResourceLoader {
 public:
@@ -17,4 +17,4 @@ private:
     std::atomic<bool> running_{true};
 };
 
-} // namespace lve
+} // namespace kc
