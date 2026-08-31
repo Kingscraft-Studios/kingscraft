@@ -155,12 +155,18 @@ namespace kc {
         const GpuChunkData* data = RenderThread::getInstance().getUploader().getChunkData(chunkKey);
 
         if (!data || !data->vertexBuffer || !data->indexBuffer) return;
+        // The buffers are allocated before the async upload fence signals, so the
+        // handles can exist while the GPU is still copying into them. Wait until
+        // the upload fence is signaled before issuing drawIndexed to avoid drawing
+        // un-arrived data. Once signaled the fence stays signaled for this chunk's
+        // lifetime (created unsignaled, never reset), so this is safe to check each frame.
+        if (data->uploadFence && data->uploadFence->status() != VK_SUCCESS)
+            return;
 
         VkBuffer vb;
         VkBuffer ib;
         uint32_t count;
 
-        // TODO: Verify that The Chunks are Uploaded Correctly
         vb = data->vertexBuffer->getHandle();
         ib = data->indexBuffer->getHandle();
         count = data->indexCount;

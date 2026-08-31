@@ -159,6 +159,8 @@ namespace kc {
 
         void writePipelineCache();
 
+        void createPipelineCache();
+
         static const char* driverIdToString(VkDriverId id) {
             switch (id) {
                 case VK_DRIVER_ID_AMD_PROPRIETARY:          return "AMD Proprietary";

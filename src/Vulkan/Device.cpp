@@ -93,9 +93,11 @@ namespace kc {
         pickPhysicalDevice();
         createLogicalDevice();
         createCommandPool();
-
         stagingArena_ = std::make_unique<StagingArena>(*this);
+        createPipelineCache();
+    }
 
+    void Device::createPipelineCache() {
         VkPipelineCacheCreateInfo cacheInfo{};
         cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
         auto& preloadData = Bootstrapper::Get().getPipelineCacheData();
