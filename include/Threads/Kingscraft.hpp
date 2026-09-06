@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 
+#include "BaseThread.hpp"
 #include "Bus/Mailbox.hpp"
 #include "Core/ScreenManager.hpp"
 #include "Core/World/TerrainGenerator.hpp"
@@ -13,16 +14,13 @@
 
 namespace kc {
 
-class Kingscraft {
+class Kingscraft : public BaseThread{
 public:
-    static Kingscraft& getInstance() {
-        static Kingscraft instance;
-        return instance;
-    }
 
-    void init();
-    void run();
-    void stop();
+    void start() override;
+    void run() override;
+    void stop() override;
+    void signalQuit() override;
 
     // Public Getters
     ScreenManager& getScreenManager() { return *screenManager; }
@@ -39,7 +37,6 @@ private:
     void registerAllKeys();
     void registerUICallbacks();
 
-    std::atomic<bool> running_{true};
     std::shared_ptr<Mailbox> mailbox_;
 
     double prevTime_ = 0.0;
@@ -51,6 +48,7 @@ private:
     static constexpr double TICK_INTERVAL = 1.0 / TICK_RATE;
 
     std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
+    // TODO: Add a Enum Class to Differ Different TerrainGenerators!
     DefaultTerrainGenerator terrainGen;
     std::unique_ptr<World> world;
 };

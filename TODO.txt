@@ -31,7 +31,6 @@ Files modified:
 - resources/shaders/ui.vert           — SSBO lookup, pass style as varyings
 - resources/shaders/ui.frag           — use varyings, mode dispatch (no FS SSBO reads)
 - src/Core/MainMenu.cpp               — redesigned with styles, gradient bg, gold scheme
-- TODO.txt                            — this section
 
 Future:
 - Animation system: interpolate between style entries over time

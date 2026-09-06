@@ -9,6 +9,7 @@
 #include <unordered_set>
 
 #include "Bus/MessageBus.hpp"
+#include "Core/Runtime.hpp"
 #include "GLFW/glfw3.h"
 #include "Threads/InputThread.hpp"
 #include "Threads/Logger.hpp"
@@ -498,7 +499,7 @@ namespace kc {
 
     }
 
-    void Device::createSurface() { InputThread::getInstance().createSurface(instance, surface_); }
+    void Device::createSurface() { Runtime::get().inputThread->createSurface(instance, surface_); }
 
     bool Device::isDeviceSuitable(VkPhysicalDevice device) {
         QueueFamilyIndices indices = findQueueFamilies(device);

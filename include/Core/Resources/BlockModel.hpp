@@ -6,7 +6,15 @@
 
 namespace kc {
 
-struct TextureData {
+    struct DecodedTextureData {
+        std::vector<unsigned char> pixels;
+        int width = 0;
+        int height = 0;
+
+        bool isValid() const { return !pixels.empty(); }
+    };
+
+struct RawTextureData {
     std::vector<unsigned char> rawData;
     int width = 0;
     int height = 0;
@@ -31,16 +39,23 @@ struct Element {
 
 class BlockModel {
     std::vector<Element> elements_;
-    std::vector<TextureData> textures_;
+    std::vector<RawTextureData> textures_;
 public:
     BlockModel() = default;
-    BlockModel(std::vector<Element> elements, std::vector<TextureData> textures)
+    BlockModel(std::vector<Element> elements, std::vector<RawTextureData> textures)
         : elements_(std::move(elements)), textures_(std::move(textures)) {}
 
     const auto& getElements() const { return elements_; }
     const auto& getTextures() const { return textures_; }
 
-    int addTexture(TextureData tex) {
+    const Quad* findQuad(FaceDir dir) const {
+        for (const auto& el : elements_)
+            for (const auto& q : el.quads)
+                if (q.face == dir) return &q;
+        return nullptr;
+    }
+
+    int addTexture(RawTextureData tex) {
         int idx = static_cast<int>(textures_.size());
         textures_.push_back(std::move(tex));
         return idx;

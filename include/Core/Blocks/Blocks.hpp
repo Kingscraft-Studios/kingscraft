@@ -3,8 +3,8 @@
 #include "Core/Registry.hpp"
 #include "Core/RegistryKey.hpp"
 #include "Core/Resources/BlockModel.hpp"
-#include "Core/Resources/ModelParser.hpp"
 #include "Block.hpp"
+#include "Bus/MessageBus.hpp"
 
 namespace kc {
 
@@ -28,20 +28,13 @@ private:
         Registry<Block>& registry) {
         pending++;
 
-        ModelParser::loadAsync(std::string(path),
-            [&key, &pending, &registry](BlockModel model)
-            {
-                logModelInfo(model);
-
-                auto block = std::make_unique<T>(std::move(model));
-
-                registry.add(
-                    key,
-                    std::move(block)
-                );
-
-                pending--;
-            });
+        MessageBus::Get().request<BlockModel>(ThreadName::Engine, [path = std::string(path)]() {
+            return IO::Get().getBuiltinTemplates().getModelTemplate().load(path);
+        }, ThreadName::Registry, [&key, &pending, &registry](BlockModel model) {
+            logModelInfo(model);
+            registry.add(key, std::make_unique<T>(std::move(model)));
+            pending--;
+        });
     }
 };
 

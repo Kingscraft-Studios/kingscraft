@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <cstdint>
-#include <thread>
+#include <future>
 #include <mutex>
 #include <condition_variable>
 #include <deque>
@@ -92,11 +92,11 @@ namespace kc {
         std::array<std::vector<std::unique_ptr<Chunk>>, CLEANUP_DELAY + 1> pendingCleanup_;
         uint64_t frameCount_ = 0;
 
-        std::thread noiseThread_;
+        std::shared_future<void> noiseDone_;
         std::atomic<bool> noiseRunning_{true};
         std::condition_variable noiseCV_;
 
-        std::thread meshThread_;
+        std::shared_future<void> meshDone_;
         std::atomic<bool> meshRunning_{true};
         std::condition_variable meshCV_;
 

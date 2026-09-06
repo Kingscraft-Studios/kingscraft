@@ -6,42 +6,29 @@ namespace kc {
     class LogUtils {
     public:
         static void info(ThreadName sender, std::string data) {
-            if (sender != ThreadName::Engine) {
-                MessageBus::Get().send(ThreadName::Engine, [data, sender]() {
-                    Logger::Get().log(LogLevel::INFO, sender, data);
-                });
-            } else {
-                Logger::Get().log(LogLevel::INFO, sender, data);
-            }
+            log(sender, data, LogLevel::INFO);
         }
 
         static void warn(ThreadName sender, std::string data) {
-            if (sender != ThreadName::Engine) {
-                MessageBus::Get().send(ThreadName::Engine, [data, sender]() {
-                    Logger::Get().log(LogLevel::WARN, sender, data);
-                });
-            } else {
-                Logger::Get().log(LogLevel::WARN, sender, data);
-            }
+            log(sender, data, LogLevel::WARN);
         }
 
         static void error(ThreadName sender, std::string data) {
-            if (sender != ThreadName::Engine) {
-                MessageBus::Get().send(ThreadName::Engine, [data, sender]() {
-                    Logger::Get().log(LogLevel::ERROR, sender, data);
-                });
-            } else {
-                Logger::Get().log(LogLevel::ERROR, sender, data);
-            }
+            log(sender, data, LogLevel::ERROR);
         }
 
         static void debug(ThreadName sender, std::string data) {
+            log(sender, data, LogLevel::DEBUG);
+        }
+
+    private:
+         static void log(ThreadName sender, std::string data, LogLevel level) {
             if (sender != ThreadName::Engine) {
-                MessageBus::Get().send(ThreadName::Engine, [data, sender]() {
-                    Logger::Get().log(LogLevel::DEBUG, sender, data);
+                MessageBus::Get().send(ThreadName::Engine, [data, sender, level]() {
+                    Logger::Get().log(level, sender, data);
                 });
             } else {
-                Logger::Get().log(LogLevel::DEBUG, sender, data);
+                Logger::Get().log(level, sender, data);
             }
         }
     };

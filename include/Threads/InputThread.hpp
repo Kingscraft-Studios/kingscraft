@@ -3,20 +3,21 @@
 #include <memory>
 #include <optional>
 
+#include "BaseThread.hpp"
 #include "Bus/Mailbox.hpp"
+#include "Core/Constants.hpp"
 #include "Core/KeyBindHandler.hpp"
 #include "Core/WindowStruct.hpp"
 #include "Vulkan/GLFWWindow.hpp"
 
 namespace kc {
-    class InputThread {
+    class InputThread : public BaseThread{
     public:
-        static InputThread& getInstance() {
-            static InputThread instance;
-            return instance;
-        }
 
-        void Init(WindowCreateInfo info);
+        void start() override;
+        void run() override;
+        void signalQuit() override;
+        void stop() override;
 
         bool shouldClose() const {
             return closeRequested_.load(std::memory_order_acquire);
@@ -93,21 +94,20 @@ namespace kc {
             return *keyHandler;
         }
 
-        void run();
-        void Shutdown();
-
     private:
-        std::optional<GLFWWindow> window;
+        WindowCreateInfo info{DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, "Kingscraft"};
+        std::unique_ptr<GLFWWindow> window = std::make_unique<GLFWWindow>(info.width, info.height, info.name);
+        std::unique_ptr<KeyBindHandler> keyHandler = std::make_unique<KeyBindHandler>();
+
         std::shared_ptr<Mailbox> mailbox;
         std::atomic<bool> running;
         std::atomic<bool> initialized{false};
-        std::unique_ptr<KeyBindHandler> keyHandler = std::make_unique<KeyBindHandler>();
-
         std::atomic<bool> closeRequested_{false};
-        std::atomic<uint32_t> cachedWidth_{0};
-        std::atomic<uint32_t> cachedHeight_{0};
         std::atomic<bool> windowResized_{false};
-        std::atomic<double> lastMouseX_{0.0};
-        std::atomic<double> lastMouseY_{0.0};
+
+        std::atomic<uint32_t> cachedWidth_{window->getExtent().width};
+        std::atomic<uint32_t> cachedHeight_{window->getExtent().height};
+        std::atomic<double> lastMouseX_{window->getLastX()};
+        std::atomic<double> lastMouseY_{window->getLastY()};
     };
 }

@@ -6,8 +6,9 @@
 #include "Core/World/GpuChunkData.hpp"
 #include "Renderer/FrameScene.hpp"
 #include "Renderer/RendererSettings.hpp"
-#include "Threads/Renderer.hpp"
+#include "Threads/RenderThread.hpp"
 #include "../../include/Core/Bootstrapper.hpp"
+#include "Core/Runtime.hpp"
 
 namespace kc {
     struct TerrainPushConstants {
@@ -152,7 +153,7 @@ namespace kc {
     }
 
     void WorldRenderer::drawChunk(VkCommandBuffer cmd, uint64_t chunkKey) {
-        const GpuChunkData* data = RenderThread::getInstance().getUploader().getChunkData(chunkKey);
+        const GpuChunkData* data = Runtime::get().renderThread->getUploader().getChunkData(chunkKey);
 
         if (!data || !data->vertexBuffer || !data->indexBuffer) return;
         // The buffers are allocated before the async upload fence signals, so the

@@ -11,28 +11,14 @@
 #include "Renderer/FrameScene.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/Engine.hpp"
-#include "Util/LogUtils.hpp"
 #include "Util/ScopedTimer.hpp"
 
 namespace kc {
 
     RenderEngine::RenderEngine() {
-
-        resourceManager->loadRawImageData("resources/textures/logo/Kingscraft-Logo.png",
-            [](unsigned char* pixels, int width, int height) {
-                MessageBus::Get().send(ThreadName::Input, [pixels, width, height]() {
-                    InputThread::getInstance().setIcon(pixels, width, height);
-                });
-        });
-
         uiSystem->init(device, *descriptorManager_, renderer->getExtent());
 
-        // TODO: Move this Into GameLogic
-        MessageBus::Get().send(ThreadName::GameLogic, [this]() {
-            Kingscraft::getInstance().setScreen<MainMenu>(*uiSystem);
-        });
-
-        VkExtent2D extent = InputThread::getInstance().getExtent().toVKExtent();
+        VkExtent2D extent = Runtime::get().inputThread->getExtent().toVKExtent();
         postProcessor_ = std::make_unique<PostProcessing>();
         auto bloom = std::make_unique<Bloom>(device, extent, renderer->getWorldRenderPass(), *descriptorManager_);
         postProcessor_->addEffect(std::move(bloom));
@@ -44,7 +30,7 @@ namespace kc {
     }
 
     bool RenderEngine::windowShouldClose() const {
-        return InputThread::getInstance().shouldClose();
+        return Runtime::get().inputThread->shouldClose();
     }
 
     void RenderEngine::tick() {
@@ -54,14 +40,14 @@ namespace kc {
             worldRenderer.init(device, *textureCache_, renderer->getWorldRenderPass());
             worldRendererInitialized = true;
         }
-        auto currentExtent = InputThread::getInstance().getExtent();
+        auto currentExtent = Runtime::get().inputThread->getExtent();
 
-        if ((requestSwapchainRecreate || InputThread::getInstance().wasWindowResized()) && currentExtent.width > 0 && currentExtent.height > 0) {
+        if ((requestSwapchainRecreate || Runtime::get().inputThread->wasWindowResized()) && currentExtent.width > 0 && currentExtent.height > 0) {
 
             requestSwapchainRecreate = false;
             pauseRenderer();
             MessageBus::Get().send(ThreadName::Input, []() {
-                InputThread::getInstance().resetWindowResizedFlag();
+                Runtime::get().inputThread->resetWindowResizedFlag();
             });
 
             recreateSwapChain();
@@ -107,12 +93,12 @@ namespace kc {
     }
 
     void RenderEngine::recreateSwapChain() {
-        auto extent = InputThread::getInstance().getExtent().toVKExtent();
+        auto extent = Runtime::get().inputThread->getExtent().toVKExtent();
         while (extent.width == 0 || extent.height == 0) {
             MessageBus::Get().send(ThreadName::Input, []() {
-                InputThread::getInstance().waitEvents();
+                Runtime::get().inputThread->waitEvents();
             });
-            extent = InputThread::getInstance().getExtent().toVKExtent();
+            extent = Runtime::get().inputThread->getExtent().toVKExtent();
         }
 
         vkDeviceWaitIdle(device.device());
@@ -133,7 +119,7 @@ namespace kc {
 
         if (!renderer->beginFrame()) {
             recreateSwapChain();
-            auto newExtent = InputThread::getInstance().getExtent();
+            auto newExtent = Runtime::get().inputThread->getExtent();
             uiSystem->resize(newExtent.width, newExtent.height);
             return;
         }
@@ -202,10 +188,10 @@ namespace kc {
         double submitStart = TimeUtil::uptimeSeconds();
         if (!renderer->endFrame()) {
             MessageBus::Get().send(ThreadName::Input, []() {
-                InputThread::getInstance().resetWindowResizedFlag();
+                Runtime::get().inputThread->resetWindowResizedFlag();
             });
             recreateSwapChain();
-            auto newExtent = InputThread::getInstance().getExtent();
+            auto newExtent = Runtime::get().inputThread->getExtent();
             uiSystem->resize(newExtent.width, newExtent.height);
         }
         cpuSubmitMs_ = (TimeUtil::uptimeSeconds() - submitStart) * 1000.0;

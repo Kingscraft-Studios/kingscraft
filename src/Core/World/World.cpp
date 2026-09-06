@@ -2,16 +2,16 @@
 #include "Core/World/ChunkKey.hpp"
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 
 #include "Bus/MessageBus.hpp"
+#include "Core/Runtime.hpp"
 #include "Core/Blocks/Block.hpp"
 #include "Core/World/Physics/Gravity.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/IO.hpp"
-#include "Threads/Renderer.hpp"
-#include "Util/LogUtils.hpp"
+#include "Threads/RenderThread.hpp"
+#include "Core/WorkerPool.hpp"
 
 namespace {
 
@@ -82,9 +82,9 @@ namespace kc {
 
     World::World(ITerrainGenerator& terrainGen, int chunkSize, int height)
         : terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height) {
-        noiseThread_ = std::thread([this]() { noiseThreadFunc(); });
-        meshThread_ = std::thread([this]() { meshThreadFunc(); });
-        playerController_.init(InputThread::getInstance().getKeyBindHandler());
+        noiseDone_ = WorkerPool::get().startWorker([this]() { noiseThreadFunc(); });
+        meshDone_ = WorkerPool::get().startWorker([this]() { meshThreadFunc(); });
+        playerController_.init(Runtime::get().inputThread->getKeyBindHandler());
     }
 
     World::~World() {
@@ -92,8 +92,8 @@ namespace kc {
         meshRunning_ = false;
         noiseCV_.notify_all();
         meshCV_.notify_all();
-        if (meshThread_.joinable()) meshThread_.join();
-        if (noiseThread_.joinable()) noiseThread_.join();
+        if (meshDone_.valid()) meshDone_.wait();
+        if (noiseDone_.valid()) noiseDone_.wait();
 
         // Save the overlay: only chunks whose blocks were edited this session.
         // Unedited chunks regenerate from the seed and need no disk copy. IO
@@ -297,7 +297,7 @@ namespace kc {
 
         // NEW: Signal render thread to defer GPU cleanup
         MessageBus::Get().send(ThreadName::Renderer, [key]() {
-            RenderThread::getInstance().getUploader().unload(key);
+            Runtime::get().renderThread->getUploader().unload(key);
         });
 
         {

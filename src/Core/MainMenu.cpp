@@ -2,7 +2,6 @@
 
 #include "Core/World/WorldScreen.hpp"
 #include "Core/Constants.hpp"
-#include "Renderer/Renderer.hpp"
 
 namespace kc {
 
@@ -42,10 +41,6 @@ namespace kc {
             .color1 = GOLD
         });
         g_stylesInit = true;
-    }
-
-    MainMenu::MainMenu(UiWrapper& uiSystem)
-        : uiSystem_(uiSystem) {
     }
 
     void MainMenu::init() {

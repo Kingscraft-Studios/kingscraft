@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "Bus/MessageBus.hpp"
+#include "Core/Runtime.hpp"
 #include "Threads/InputThread.hpp"
 
 namespace kc {
@@ -196,7 +197,7 @@ namespace kc {
         if (pos >= (int)sizeof(buf)) pos = sizeof(buf) - 1;
 
         MessageBus::Get().send(ThreadName::Input, [buf]() {
-             InputThread::getInstance().setClipBoard(buf);
+             Runtime::get().inputThread->setClipBoard(buf);
         });
     }
 

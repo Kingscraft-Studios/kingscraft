@@ -2,7 +2,7 @@
 
 #include "Core/Screen.hpp"
 #include "Renderer/FrameScene.hpp"
-#include "Threads/Renderer.hpp"
+#include "Threads/RenderThread.hpp"
 #include "UI/UiWrapper.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiButton.hpp"
@@ -13,7 +13,6 @@ namespace kc {
 
     class MainMenu : public Screen {
     public:
-        MainMenu(UiWrapper& uiSystem);
 
         void init() override;
         void tick(double) override {}
@@ -25,8 +24,8 @@ namespace kc {
         void createTitle();
         void createButtons();
 
-        UiWrapper& uiSystem_;
-        VkExtent2D extent_ = RenderThread::getInstance().getRenderer().getExtent();
+        UiWrapper& uiSystem_ = Runtime::get().renderThread->getUI();
+        VkExtent2D extent_ = Runtime::get().renderThread->getRenderer().getExtent();
         UiGradientRect background_;
         UiRect selectionBarEnter_;
         UiRect selectionBarQuit_;

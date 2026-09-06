@@ -6,10 +6,11 @@ namespace kc {
 enum class ThreadName {
     Engine,
     Renderer,
-    Resource,
-    Registration,
+    Registry,
     Input,
-    GameLogic
+    GameLogic,
+    WorkerPool,
+    MessageBus
 };
 
 struct Message {

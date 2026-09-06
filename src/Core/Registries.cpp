@@ -11,7 +11,7 @@ namespace kc {
 
     void Registries::build() {
         auto mailbox = std::make_shared<Mailbox>();
-        MessageBus::Get().subscribe(ThreadName::Registration, mailbox);
+        MessageBus::Get().subscribe(ThreadName::Registry, mailbox);
 
         int pending = 0;
         Blocks::registerBlocks(pending);
@@ -23,7 +23,7 @@ namespace kc {
             }
         }
 
-        MessageBus::Get().unsubscribe(ThreadName::Registration);
+        MessageBus::Get().unsubscribe(ThreadName::Registry);
 
         {
             std::lock_guard<std::mutex> lock(mutex_);

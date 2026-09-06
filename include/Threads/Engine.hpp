@@ -1,14 +1,15 @@
 #pragma once
 
-#include <memory>
-#include <thread>
 #include <atomic>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <thread>
 
 #include "Bus/Mailbox.hpp"
 #include "Core/Diagnostics/Diagnostics.hpp"
 #include "Renderer/FrameExchange.hpp"
-#include "Threads/Renderer.hpp"
-#include "Threads/ResourceLoader.hpp"
+#include "Threads/RenderThread.hpp"
 #include "Threads/Kingscraft.hpp"
 
 namespace kc {
@@ -16,35 +17,40 @@ namespace kc {
     class Engine {
     public:
         Engine() = default;
-        ~Engine();
 
-        static void Init();
-        static void Shutdown();
-        static Engine& Get();
-        static Engine& get() { return Get(); }
+        void Init();
+        void Shutdown();
+        static Engine& Get() {
+            static Engine instance;
+            return instance;
+        }
 
-    void run();
-    void stop();
+        void run();
 
-    Mailbox& getMailbox() { return *mailbox_; }
-    FrameExchange& getFrameExchange() { return exchange; }
-    Diagnostics& getDiagnostics() { return diagnostics; }
+        // Called by RenderThread
+        void signalStop() {
+            running_ = false;
+            mailbox_->stop();
+            runCV_.notify_all();
+        }
 
-private:
-    std::atomic<bool> running_{true};
-    std::shared_ptr<Mailbox> mailbox_;
-    std::thread regThread_;
-    std::thread rendererThread_;
-    std::thread resLoaderThread_;
-    std::thread inputThread;
-    ResourceLoader resourceLoader_;
-    std::thread gameLogicThread_;
-    std::atomic<bool> shutdownComplete_{false};
+        FrameExchange& getFrameExchange() { return exchange; }
+        Diagnostics& getDiagnostics() { return diagnostics; }
 
-    FrameExchange exchange;
-    Diagnostics diagnostics;
+        void gameLogicStopped();
 
-    static std::unique_ptr<Engine> instance_;
-};
+    private:
+        std::atomic<bool> running_{true};
+        std::atomic<bool> runningMailbox{true};
+        std::shared_ptr<Mailbox> mailbox_;
+
+        FrameExchange exchange;
+        Diagnostics diagnostics;
+
+        std::thread mailboxThread;
+
+        std::condition_variable runCV_;
+        std::mutex runMtx_;
+    };
 
 } // namespace kc

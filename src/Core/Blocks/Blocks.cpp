@@ -22,7 +22,7 @@ namespace kc {
             + std::to_string(quadsTotal) + " quads, "
             + std::to_string(texCount) + " textures ("
             + std::to_string(rawBytes) + " raw bytes)";
-        LogUtils::info(ThreadName::Registration, msg);
+        LogUtils::info(ThreadName::Registry, msg);
     }
 
     void Blocks::registerBlocks(int& pending) {
@@ -31,23 +31,9 @@ namespace kc {
         auto air = std::make_unique<AirBlock>();
         registry.add(AIR, std::move(air));
 
-        loadBlock<GrassBlock>(
-            GRASS_BLOCK,
-            "resources/models/block/grass_block.json",
-            pending,
-            registry);
-
-        loadBlock<StoneBlock>(
-            STONE,
-            "resources/models/block/stone_block.json",
-            pending,
-            registry);
-
-        loadBlock<DirtBlock>(
-            DIRT,
-            "resources/models/block/dirt_block.json",
-            pending,
-            registry);
+        loadBlock<GrassBlock>(GRASS_BLOCK, "resources/models/block/grass_block.json", pending, registry);
+        loadBlock<StoneBlock>(STONE, "resources/models/block/stone_block.json", pending, registry);
+        loadBlock<DirtBlock>(DIRT, "resources/models/block/dirt_block.json", pending, registry);
     }
 
 } // namespace kc

@@ -65,10 +65,12 @@ namespace kc {
             switch (thread) {
                 case ThreadName::Engine:       return "Engine";
                 case ThreadName::Renderer:     return "Renderer";
-                case ThreadName::Resource:     return "Resource";
-                case ThreadName::Registration: return "Registration";
+                case ThreadName::Registry: return "Registry";
                 case ThreadName::Input: return "Input";
                 case ThreadName::GameLogic: return "GameLogic";
+                case ThreadName::WorkerPool: return "WorkerPool";
+                case ThreadName::MessageBus: return "MessageBus";
+                break;
             }
 
             return "Unknown";

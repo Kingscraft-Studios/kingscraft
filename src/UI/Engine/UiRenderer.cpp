@@ -18,7 +18,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Bus/MessageBus.hpp"
-#include "Threads/Renderer.hpp"
+#include "Threads/RenderThread.hpp"
 
 namespace kc {
 

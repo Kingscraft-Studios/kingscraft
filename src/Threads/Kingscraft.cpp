@@ -10,37 +10,55 @@
 #include <chrono>
 #include <thread>
 
+#include "Core/MainMenu.hpp"
+#include "Core/Runtime.hpp"
+
 namespace kc {
-    void Kingscraft::init() {
+    void Kingscraft::start() {
+        MessageBus::Get().request<DecodedTextureData>(ThreadName::Engine,[] {
+            return IO::Get().getBuiltinTemplates().getTextureTemplate().loadDecoded("resources/textures/logo/Kingscraft-Logo.png");
+        }, ThreadName::Input, [](DecodedTextureData tex) {
+            if (tex.isValid())
+                Runtime::get().inputThread->setIcon(tex.pixels.data(), tex.width, tex.height);
+        });
+
         prevTime_ = TimeUtil::uptimeSeconds();
         mailbox_ = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::GameLogic, mailbox_);
         world = std::make_unique<World>(terrainGen, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
         registerAllKeys();
+        registerUICallbacks();
+        screenManager->setScreen<MainMenu>();
     }
 
     void Kingscraft::run() {
 
-        registerUICallbacks();
-        while (running_) {
+        while (!Runtime::get().inputThread->shouldClose()) {
             Message msg;
-            bool idle = true;
             while (mailbox_->try_pop(msg)) {
-                idle = false;
                 if (msg.payload) msg.payload();
             }
 
             tick();
-            if (idle) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
 
-        screenManager.reset();
-
-        // Destroy the world on the game thread, AFTER the run loop stops.
-        // stop() only signals; the engine thread joins us, so world teardown
-        // completes before any other thread could still dereference it.
-        world.reset();
+        stop();
     }
+
+    void Kingscraft::signalQuit() {
+        if (mailbox_) {
+            mailbox_->stop();
+        }
+    }
+
+    void Kingscraft::stop() {
+        screenManager.reset();
+        world.reset();
+        MessageBus::Get().unsubscribe(ThreadName::GameLogic);
+        Engine::Get().gameLogicStopped();
+    }
+
 
     void Kingscraft::tick() {
         double currentTime = TimeUtil::uptimeSeconds();
@@ -77,64 +95,56 @@ namespace kc {
         exchange.publish();
     }
 
-    void Kingscraft::stop() {
-        running_.store(false, std::memory_order_release);
-        if (mailbox_) {
-            mailbox_->stop();
-        }
-        MessageBus::Get().unsubscribe(ThreadName::GameLogic);
-    }
-
     void Kingscraft::registerAllKeys() {
 
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F11}, []() {
+            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F11}, []() {
                 MessageBus::Get().send(ThreadName::Input, []() {
-                    InputThread::getInstance().toggleFullscreen();
+                    Runtime::get().inputThread->toggleFullscreen();
                 });
                 MessageBus::Get().send(ThreadName::Renderer, []() {
-                    RenderThread::getInstance().recreateSwapchain(true);
+                    Runtime::get().renderThread->recreateSwapchain(true);
                 });
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::ESCAPE}, []() {
+            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::ESCAPE}, []() {
                 MessageBus::Get().send(ThreadName::Input, []() {
-                    InputThread::getInstance().setWindowClose();
+                    Runtime::get().inputThread->setWindowClose();
                 });
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F3, Keys::F6}, []() {
-                RenderThread::getInstance().getUI().setDebugMode(!RenderThread::getInstance().getUI().isDebugModeOn());
+            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F3, Keys::F6}, []() {
+                Runtime::get().renderThread->getUI().setDebugMode(!Runtime::get().renderThread->getUI().isDebugModeOn());
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F7}, []() {
-                if (RenderThread::getInstance().getUI().isDebugModeOn())
-                    RenderThread::getInstance().getUI().logSelectedElementPosition();
+            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F7}, []() {
+                if (Runtime::get().renderThread->getUI().isDebugModeOn())
+                    Runtime::get().renderThread->getUI().logSelectedElementPosition();
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Global, {Keys::F8}, []() {
-                if (!RenderThread::getInstance().getProfilerCapture().isActive()) {
-                    RenderThread::getInstance().getProfilerCapture().start();
+            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F8}, []() {
+                if (!Runtime::get().renderThread->getProfilerCapture().isActive()) {
+                    Runtime::get().renderThread->getProfilerCapture().start();
                 }
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().setMouseMoveCallback([](double x, double y) {
+            Runtime::get().inputThread->setMouseMoveCallback([](double x, double y) {
                 MessageBus::Get().send(ThreadName::Renderer, [x, y]() {
-                    RenderThread::getInstance().getUI().onMouseMove(x, y);
+                    Runtime::get().renderThread->getUI().onMouseMove(x, y);
                 });
             });
         });
         MessageBus::Get().send(ThreadName::Input, [this]() {
-            InputThread::getInstance().setMouseButtonCallback([this](int button, int action, int mods) {
-                double x = InputThread::getInstance().getLastX();
-                double y = InputThread::getInstance().getLastY();
+            Runtime::get().inputThread->setMouseButtonCallback([this](int button, int action, int mods) {
+                double x = Runtime::get().inputThread->getLastX();
+                double y = Runtime::get().inputThread->getLastY();
                 MessageBus::Get().send(ThreadName::Renderer, [button, action, mods, x, y]() {
-                    RenderThread::getInstance().getUI().onMouseButton(button, action, mods, x, y);
+                    Runtime::get().renderThread->getUI().onMouseButton(button, action, mods, x, y);
                 });
                 MessageBus::Get().send(ThreadName::GameLogic, [this, button, action, mods]() {
                     if (screenManager->getCurrent())
@@ -143,50 +153,50 @@ namespace kc {
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().setScrollCallback([](double dx, double dy) {
+            Runtime::get().inputThread->setScrollCallback([](double dx, double dy) {
                 MessageBus::Get().send(ThreadName::Renderer, [dx, dy]() {
-                    RenderThread::getInstance().getUI().onScroll(dx, dy);
+                    Runtime::get().renderThread->getUI().onScroll(dx, dy);
                 });
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().setKeyCallback([](int key, int scancode, int action, int mods) {
-                InputThread::getInstance().getKeyBindHandler().onKeyEvent(key, scancode, action, mods);
+            Runtime::get().inputThread->setKeyCallback([](int key, int scancode, int action, int mods) {
+                Runtime::get().inputThread->getKeyBindHandler().onKeyEvent(key, scancode, action, mods);
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().setCharCallback([](unsigned int codepoint) {
-                InputThread::getInstance().getKeyBindHandler().onChar(codepoint);
+            Runtime::get().inputThread->setCharCallback([](unsigned int codepoint) {
+                Runtime::get().inputThread->getKeyBindHandler().onChar(codepoint);
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().getKeyBindHandler().setUiKeyCallback([](int key, int action) {
-                RenderThread::getInstance().getUI().onKey(key, action);
+            Runtime::get().inputThread->getKeyBindHandler().setUiKeyCallback([](int key, int action) {
+                Runtime::get().renderThread->getUI().onKey(key, action);
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().getKeyBindHandler().setUiCharCallback([](unsigned int codepoint) {
-                RenderThread::getInstance().getUI().onChar(codepoint);
+            Runtime::get().inputThread->getKeyBindHandler().setUiCharCallback([](unsigned int codepoint) {
+                Runtime::get().renderThread->getUI().onChar(codepoint);
             });
         });
     }
 
     void Kingscraft::registerUICallbacks() {
-        RenderThread::getInstance().getUI().registerButtonHandler(BTN_QUIT_GAME, []() {
+        Runtime::get().renderThread->getUI().registerButtonHandler(BTN_QUIT_GAME, []() {
                 MessageBus::Get().send(ThreadName::Input, []() {
-                    InputThread::getInstance().setWindowClose();
+                    Runtime::get().inputThread->setWindowClose();
                 });
             });
 
-        RenderThread::getInstance().getUI().registerButtonHandler(BTN_ENTER_WORLD, [this]() {
+        Runtime::get().renderThread->getUI().registerButtonHandler(BTN_ENTER_WORLD, [this]() {
             MessageBus::Get().send(ThreadName::GameLogic, [this]() {
                 screenManager->setScreen<WorldScreen>();
             });
         });
 
-        RenderThread::getInstance().getUI().registerButtonHandler(BTN_RESPAWN, []() {
+        Runtime::get().renderThread->getUI().registerButtonHandler(BTN_RESPAWN, []() {
             MessageBus::Get().send(ThreadName::GameLogic, []() {
-                Kingscraft::getInstance().getWorld().getPlayerController().respawn();
+                Runtime::get().kingscraft->getWorld().getPlayerController().respawn();
             });
         });
     }

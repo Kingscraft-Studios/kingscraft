@@ -1,11 +1,10 @@
 #include "Core/World/Chunk.hpp"
-#include <cstring>
-#include <stdexcept>
 
 #include "Bus/MessageBus.hpp"
+#include "Core/Runtime.hpp"
 #include "Core/World/ChunkKey.hpp"
 #include "Core/World/ChunkUploadData.hpp"
-#include "Threads/Renderer.hpp"
+#include "Threads/RenderThread.hpp"
 
 namespace kc {
 
@@ -175,7 +174,7 @@ namespace kc {
                 emptyData.chunkKey = makeChunkKey(gridPos_.x, gridPos_.y);
 
                 MessageBus::Get().send(ThreadName::Renderer, [emptyData = std::move(emptyData)]() {
-                    RenderThread::getInstance().getUploader().upload(emptyData);
+                    Runtime::get().renderThread->getUploader().upload(emptyData);
                 });
 
                 hasUploaded_ = false;
@@ -219,7 +218,7 @@ namespace kc {
         uploadData.indices = std::move(combinedIndices);
 
         MessageBus::Get().send(ThreadName::Renderer, [uploadData = std::move(uploadData)]() {
-            RenderThread::getInstance().getUploader().upload(uploadData);
+            Runtime::get().renderThread->getUploader().upload(uploadData);
         });
 
         lastMeshHash_ = hash;

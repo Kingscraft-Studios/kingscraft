@@ -31,10 +31,16 @@ namespace kc {
         slotBlocks_[1] = &Blocks::DIRT;
         slotBlocks_[2] = &Blocks::STONE;
 
+        auto iconLayer = [](Block* block) -> int {
+            if (!block) return 0;
+            const Quad* side = block->getModel().findQuad(FaceDir::PosX);
+            return block->getTextureBaseOffset() + (side ? side->tileIndex : 0);
+        };
+
         int layers[3] = {
-            grass ? grass->getTextureBaseOffset() : 0,
-            dirt ? dirt->getTextureBaseOffset() : 0,
-            stone ? stone->getTextureBaseOffset() : 0,
+            iconLayer(grass),
+            iconLayer(dirt),
+            iconLayer(stone),
         };
 
         for (int i = 0; i < SLOT_COUNT; ++i) {

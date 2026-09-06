@@ -10,11 +10,12 @@
 #include "Core/KeyBindHandler.hpp"
 #include "Core/Keys.hpp"
 #include "Core/Raycast.hpp"
+#include "Core/Runtime.hpp"
 #include "Core/Blocks/Blocks.hpp"
 #include "Core/World/Physics/CollisionSystem.hpp"
 #include "Threads/Kingscraft.hpp"
 #include "Threads/InputThread.hpp"
-#include "Threads/Renderer.hpp"
+#include "Threads/RenderThread.hpp"
 #include "Threads/Engine.hpp"
 
 namespace kc {
@@ -26,7 +27,7 @@ namespace kc {
     }
 
     WorldScreen::WorldScreen() {
-        extent_ = InputThread::getInstance().getExtent().toVKExtent();
+        extent_ = Runtime::get().inputThread->getExtent().toVKExtent();
     }
 
     WorldScreen::~WorldScreen() {
@@ -34,26 +35,26 @@ namespace kc {
     }
 
     void WorldScreen::init() {
-        auto& world = Kingscraft::getInstance().getWorld();
-        RenderThread::getInstance().getUI().setBlockTexture(RenderThread::getInstance().getTexCache().getImageView(), RenderThread::getInstance().getTexCache().getSampler());
+        auto& world = Runtime::get().kingscraft->getWorld();
+        Runtime::get().renderThread->getUI().setBlockTexture(Runtime::get().renderThread->getTexCache().getImageView(), Runtime::get().renderThread->getTexCache().getSampler());
 
         world.getPlayerController().setCaptured(true);
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         });
         MessageBus::Get().send(ThreadName::Input, []() {
-            InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
+            Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
         });
-        fpsCounter_.init(RenderThread::getInstance().getUI());
-        Engine::Get().getDiagnostics().setDispatcher(ThreadName::Renderer,
+        fpsCounter_.init(Runtime::get().renderThread->getUI());
+        Engine::Get().getDiagnostics().setDispatcher(ThreadName::Renderer, 4.0,
             [this](const FrameMetrics& frame) {
                 fpsCounter_.setFrame(frame);
-                fpsCounter_.update(RenderThread::getInstance().getUI());
+                fpsCounter_.update(Runtime::get().renderThread->getUI());
             });
-        hotbar_.init(RenderThread::getInstance().getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
-        deathScreen_.init(RenderThread::getInstance().getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+        hotbar_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+        deathScreen_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
 
-        crosshairStyle_ = RenderThread::getInstance().getUI().registerStyle(UiStyle{
+        crosshairStyle_ = Runtime::get().renderThread->getUI().registerStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = {1.0f, 1.0f, 1.0f, 0.9f},
         });
@@ -61,48 +62,48 @@ namespace kc {
         crosshairH_.setSize({20.0f, 2.0f});
         crosshairH_.setStyleIndex(crosshairStyle_);
         crosshairH_.setName("CrosshairH");
-        RenderThread::getInstance().getUI().addElement(&crosshairH_);
+        Runtime::get().renderThread->getUI().addElement(&crosshairH_);
         crosshairV_.setAnchor({0.5f, 0.5f}, {-1.0f, -10.0f});
         crosshairV_.setSize({2.0f, 20.0f});
         crosshairV_.setStyleIndex(crosshairStyle_);
         crosshairV_.setName("CrosshairV");
-        RenderThread::getInstance().getUI().addElement(&crosshairV_);
-        RenderThread::getInstance().getUI().resize(static_cast<int>(extent_.width),
+        Runtime::get().renderThread->getUI().addElement(&crosshairV_);
+        Runtime::get().renderThread->getUI().resize(static_cast<int>(extent_.width),
                              static_cast<int>(extent_.height));
 
-        RenderThread::getInstance().getUI().setScrollCallback([this](double, double dy) {
+        Runtime::get().renderThread->getUI().setScrollCallback([this](double, double dy) {
             if (dy > 0)
-                hotbar_.selectSlot(RenderThread::getInstance().getUI(), hotbar_.getSelectedSlot() - 1);
+                hotbar_.selectSlot(Runtime::get().renderThread->getUI(), hotbar_.getSelectedSlot() - 1);
             else if (dy < 0)
-                hotbar_.selectSlot(RenderThread::getInstance().getUI(), hotbar_.getSelectedSlot() + 1);
+                hotbar_.selectSlot(Runtime::get().renderThread->getUI(), hotbar_.getSelectedSlot() + 1);
         });
 
         for (int i = 0; i < UiHotbar::SLOT_COUNT; ++i) {
             int key = Keys::_1 + i;
             MessageBus::Get().send(ThreadName::Input, [key, i, this]() {
-                InputThread::getInstance().getKeyBindHandler().onPress(BindLayer::Screen, {key}, [this, i]() {
-                    hotbar_.selectSlot(RenderThread::getInstance().getUI(), i);
+                Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Screen, {key}, [this, i]() {
+                    hotbar_.selectSlot(Runtime::get().renderThread->getUI(), i);
                 });
             });
         }
     }
 
     void WorldScreen::tick(double dt) {
-        auto& world = Kingscraft::getInstance().getWorld();
-        bool debug = RenderThread::getInstance().getUI().isDebugModeOn();
+        auto& world = Runtime::get().kingscraft->getWorld();
+        bool debug = Runtime::get().renderThread->getUI().isDebugModeOn();
 
         if (debug != wasDebugOn_ && !world.getPlayerController().isDead()) {
             wasDebugOn_ = debug;
             if (debug) {
                 MessageBus::Get().send(ThreadName::Input, []() {
-                    InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-                    InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
+                    Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                    Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
                 });
                 world.getPlayerController().setCaptured(false);
             } else {
                 MessageBus::Get().send(ThreadName::Input, []() {
-                    InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                    InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
+                    Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                    Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
                 });
         world.getPlayerController().setCaptured(true);
         world.getPlayerController().resetMouse();
@@ -115,24 +116,24 @@ namespace kc {
         bool dead = world.getPlayerController().isDead();
         if (dead && !wasDead_) {
             MessageBus::Get().send(ThreadName::Input, []() {
-                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-                InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
+                Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
             });
             world.getPlayerController().setCaptured(false);
             world.getPlayerController().resetMouse();
-            deathScreen_.show(RenderThread::getInstance().getUI());
+            deathScreen_.show(Runtime::get().renderThread->getUI());
         } else if (!dead && wasDead_) {
             MessageBus::Get().send(ThreadName::Input, []() {
-                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                InputThread::getInstance().getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
+                Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
             });
             world.getPlayerController().setCaptured(true);
             world.getPlayerController().resetMouse();
-            deathScreen_.hide(RenderThread::getInstance().getUI());
+            deathScreen_.hide(Runtime::get().renderThread->getUI());
         }
         wasDead_ = dead;
 
-        VkExtent2D currentExtent = InputThread::getInstance().getExtent().toVKExtent();
+        VkExtent2D currentExtent = Runtime::get().inputThread->getExtent().toVKExtent();
         if (currentExtent.width != extent_.width || currentExtent.height != extent_.height) {
             extent_ = currentExtent;
             hotbar_.resize(static_cast<float>(extent_.width), static_cast<float>(extent_.height));
@@ -141,20 +142,20 @@ namespace kc {
     }
 
     void WorldScreen::render(FrameScene& scene) {
-        auto& world = Kingscraft::getInstance().getWorld();
+        auto& world = Runtime::get().kingscraft->getWorld();
         auto& settings = RendererSettings::get();
         world.getPlayerController().updateProjection(extent_, settings.fov,
                                            settings.nearPlane, settings.farPlane);
 
         glm::mat4 viewProj = world.getPlayerController().getViewProj();
         scene.camera.viewProj = viewProj;
-        float worldHeight = static_cast<float>(Kingscraft::getInstance().getWorld().getHeight());
+        float worldHeight = static_cast<float>(Runtime::get().kingscraft->getWorld().getHeight());
 
         scene.highlight.enabled = false;
         if (world.getPlayerController().isCursorCaptured()) {
             const Camera& cam = world.getPlayerController().getCamera();
             RaycastHit hit = raycastBlock(cam.getPosition(), cam.getForward(), 8.0f,
-                                          Kingscraft::getInstance().getWorld());
+                                          Runtime::get().kingscraft->getWorld());
             if (hit.hit) {
                 scene.highlight.enabled = true;
                 scene.highlight.position = glm::vec3(static_cast<float>(hit.x),
@@ -166,10 +167,10 @@ namespace kc {
         double frustumMs = 0.0, drawMs = 0.0;
         uint32_t visibleChunks = 0, visibleSubChunks = 0;
         uint32_t occlusionTested = 0, occlusionRemoved = 0;
-        terrainRenderer_.render(scene, Kingscraft::getInstance().getWorld().getLoadedChunks(),
+        terrainRenderer_.render(scene, Runtime::get().kingscraft->getWorld().getLoadedChunks(),
                                 viewProj, world.getPlayerController().getCamera().getPosition(),
                                 settings.enableFrustumCulling, worldHeight,
-                                worldChunkLookup, &Kingscraft::getInstance().getWorld(),
+                                worldChunkLookup, &Runtime::get().kingscraft->getWorld(),
                                 &frustumMs, &drawMs, &visibleChunks,
                                 &visibleSubChunks, &occlusionTested,
                                 &occlusionRemoved);
@@ -182,30 +183,30 @@ namespace kc {
         cpuMetrics.occlusionTested = occlusionTested;
         cpuMetrics.occlusionRemoved = occlusionRemoved;
 
-        if (RenderThread::getInstance().getProfilerCapture().isActive()) {
-            RenderThread::getInstance().getProfilerCapture().feedFrame(
+        if (Runtime::get().renderThread->getProfilerCapture().isActive()) {
+            Runtime::get().renderThread->getProfilerCapture().feedFrame(
                 Engine::Get().getDiagnostics().snapshot());
             scene.ui.enabled = true;
         }
     }
     void WorldScreen::cleanup() {
         Engine::Get().getDiagnostics().clearDispatcher(ThreadName::Renderer);
-        RenderThread::getInstance().getUI().setScrollCallback(nullptr);
-        hotbar_.cleanup(RenderThread::getInstance().getUI());
-        fpsCounter_.cleanup(RenderThread::getInstance().getUI());
-        deathScreen_.cleanup(RenderThread::getInstance().getUI());
-        RenderThread::getInstance().getUI().removeElement(&crosshairH_);
-        RenderThread::getInstance().getUI().removeElement(&crosshairV_);
-        if (InputThread::getInstance().isInitialized()) {
+        Runtime::get().renderThread->getUI().setScrollCallback(nullptr);
+        hotbar_.cleanup(Runtime::get().renderThread->getUI());
+        fpsCounter_.cleanup(Runtime::get().renderThread->getUI());
+        deathScreen_.cleanup(Runtime::get().renderThread->getUI());
+        Runtime::get().renderThread->getUI().removeElement(&crosshairH_);
+        Runtime::get().renderThread->getUI().removeElement(&crosshairV_);
+        if (Runtime::get().inputThread->isInitialized()) {
             MessageBus::Get().send(ThreadName::Input, []() {
-                InputThread::getInstance().setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             });
         }
     }
 
     void WorldScreen::onMouseButton(int button, int action, int mods) {
         (void)mods;
-        auto& world = Kingscraft::getInstance().getWorld();
+        auto& world = Runtime::get().kingscraft->getWorld();
         if (action != GLFW_PRESS) return;
         if (!world.getPlayerController().isCursorCaptured()) return;
 
@@ -213,12 +214,12 @@ namespace kc {
         glm::vec3 origin = cam.getPosition();
         glm::vec3 dir = cam.getForward();
 
-        auto hit = raycastBlock(origin, dir, 8.0f, Kingscraft::getInstance().getWorld());
+        auto hit = raycastBlock(origin, dir, 8.0f, Runtime::get().kingscraft->getWorld());
         if (!hit.hit) return;
 
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            Kingscraft::getInstance().getWorld().setBlock(hit.x, hit.y, hit.z, Blocks::AIR);
-            Kingscraft::getInstance().getWorld().remeshDirtyChunks();
+            Runtime::get().kingscraft->getWorld().setBlock(hit.x, hit.y, hit.z, Blocks::AIR);
+            Runtime::get().kingscraft->getWorld().remeshDirtyChunks();
             return;
         }
 
@@ -234,7 +235,7 @@ namespace kc {
         int placeY = hit.y + faceNormals[hit.face][1];
         int placeZ = hit.z + faceNormals[hit.face][2];
 
-        if (placeY < 0 || placeY >= Kingscraft::getInstance().getWorld().getHeight()) return;
+        if (placeY < 0 || placeY >= Runtime::get().kingscraft->getWorld().getHeight()) return;
 
         auto* key = hotbar_.getSlotBlock(hotbar_.getSelectedSlot());
         if (!key) return;
@@ -247,8 +248,8 @@ namespace kc {
             return;
         }
 
-        Kingscraft::getInstance().getWorld().setBlock(placeX, placeY, placeZ, block);
-        Kingscraft::getInstance().getWorld().remeshDirtyChunks();
+        Runtime::get().kingscraft->getWorld().setBlock(placeX, placeY, placeZ, block);
+        Runtime::get().kingscraft->getWorld().remeshDirtyChunks();
     }
 
 } // namespace kc

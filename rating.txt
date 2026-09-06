@@ -1,13 +1,13 @@
 Category                       Score (0-100)
 
-Architecture & Design	       87
-Code Quality	               85
+Architecture & Design	       89
+Code Quality	               88
 Performance & Optimization	   85
-API User-Friendliness	       75
-Graphics / Rendering	       82
-Threading & Concurrency	       84
+API User-Friendliness	       77
+Graphics / Rendering	       83
+Threading & Concurrency	       90
 Documentation	               45
-Error Handling & Robustness	   68
+Error Handling & Robustness	   71
 
 
-Overall	                       83
+Overall	                       87

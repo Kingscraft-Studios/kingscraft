@@ -3,7 +3,8 @@
 #include <cstring>
 #include <unordered_set>
 
-#include "Threads/Renderer.hpp"
+#include "Core/Runtime.hpp"
+#include "Threads/RenderThread.hpp"
 #include "Util/LogUtils.hpp"
 
 namespace kc {
@@ -35,7 +36,7 @@ namespace kc {
     }
 
     void ChunkUploadProcessor::upload(const ChunkUploadData &data) {
-        auto& device = RenderThread::getInstance().getDevice();
+        auto& device = Runtime::get().renderThread->getDevice();
 
         auto it = gpuChunks.find(data.chunkKey);
         if (it != gpuChunks.end()) {
@@ -110,7 +111,7 @@ namespace kc {
         if (frameCount_ < chunk.destroyAfterFrame)
             return false;
 
-        auto& device = RenderThread::getInstance().getDevice();
+        auto& device = Runtime::get().renderThread->getDevice();
 
         if (chunk.data.uploadFence && chunk.data.uploadFence->status() != VK_SUCCESS)
             return false;

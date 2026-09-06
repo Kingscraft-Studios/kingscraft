@@ -35,8 +35,10 @@ bool MessageBus::send(Message msg) {
     if (it == subscribers_.end())
         return false;
     auto mailbox = it->second.lock();
-    if (!mailbox)
+    if (!mailbox) {
+        log(LogLevel::WARN, "Unable to send message to target thread. Target isn't subscribed yet!");
         return false;
+    }
     mailbox->push(std::move(msg));
     return true;
 }
@@ -49,17 +51,17 @@ bool MessageBus::send(ThreadName target, std::function<void()> payload) {
     return send(std::move(msg));
 }
 
-void MessageBus::signalQuit() {
-    {
-        std::lock_guard lock(quitMutex_);
-        quitting_ = true;
-    }
-    quitCV_.notify_one();
-}
+void MessageBus::log(LogLevel level, const std::string& line) {
+    // FIXME: If log() is called BEFORE the Engine Subs to Mailbox the Log is Discarded!
+    std::shared_lock lock(rwMutex_);
+    auto it = subscribers_.find(ThreadName::Engine);
+    if (it == subscribers_.end())
+        return;
+    auto mailbox = it->second.lock();
 
-void MessageBus::waitForQuit() {
-    std::unique_lock lock(quitMutex_);
-    quitCV_.wait(lock, [&]() { return quitting_; });
+    // No need to Check if Mailbox Exists
+    mailbox->push({ThreadName::Engine, [level, line]() {
+        Logger::Get().log(level, ThreadName::MessageBus, line);
+    }});
 }
-
 } // namespace kc

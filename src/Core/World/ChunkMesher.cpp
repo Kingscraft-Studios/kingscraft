@@ -41,15 +41,6 @@ namespace {
         false,  // dir 4 (PosX): cross(Z, Y) = -X, outward = +X, dot < 0 → CW → keep
         true    // dir 5 (NegX): cross(Z, Y) = -X, outward = -X, dot > 0 → CCW → flip
     };
-
-    const Quad* findQuad(const BlockModel& model, FaceDir dir) {
-        for (const auto& elem : model.getElements()) {
-            for (const auto& q : elem.quads) {
-                if (q.face == dir) return &q;
-            }
-        }
-        return nullptr;
-    }
 }
 
 void ChunkMesher::generateSubChunk(
@@ -132,7 +123,7 @@ void ChunkMesher::generateSubChunk(
                     Block* block = registry.get(blockId);
                     if (!block) continue;
 
-                    const Quad* quad = findQuad(block->getModel(), faceDirs[dir]);
+                    const Quad* quad = block->getModel().findQuad(faceDirs[dir]);
                     if (!quad) continue;
 
                     uint16_t gti = static_cast<uint16_t>(block->getTextureBaseOffset() + quad->tileIndex);
@@ -321,7 +312,7 @@ void ChunkMesher::emitGateFaces(
             Block* block = registry.get(blockId);
             if (!block) continue;
 
-            const Quad* quad = findQuad(block->getModel(), faceDirs[gate]);
+            const Quad* quad = block->getModel().findQuad(faceDirs[gate]);
             if (!quad) continue;
 
             int idx = v * uDim + u;

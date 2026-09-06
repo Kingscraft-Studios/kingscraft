@@ -6,6 +6,7 @@
 #include "Threads/InputThread.hpp"
 #include "Vulkan/GLFWWindow.hpp"
 #include <cmath>
+#include "Core/Runtime.hpp"
 
 namespace kc {
 
@@ -15,8 +16,8 @@ namespace kc {
 
     void PlayerController::init(KeyBindHandler& keybinds) {
         keybinds_ = &keybinds;
-        lastMouseX_ = InputThread::getInstance().getLastX();
-        lastMouseY_ = InputThread::getInstance().getLastY();
+        lastMouseX_ = Runtime::get().inputThread->getLastX();
+        lastMouseY_ = Runtime::get().inputThread->getLastY();
         bodyPos_ = spawnPos_;
         velocityY_ = 0.0f;
 
@@ -29,7 +30,7 @@ namespace kc {
     }
 
     void PlayerController::tick(World& world, double dt) {
-        if (!keybinds_ || !InputThread::getInstance().isInitialized()) return;
+        if (!keybinds_ || !Runtime::get().inputThread->isInitialized()) return;
         if (dead_) return;
         if (!cursorCaptured_) return;
 
@@ -83,8 +84,8 @@ namespace kc {
 
         camera_.setPosition(bodyPos_ + glm::vec3(Attributes::PLAYER_WIDTH * 0.5f, Attributes::EYE_HEIGHT, Attributes::PLAYER_WIDTH * 0.5f));
 
-        double mx = InputThread::getInstance().getLastX();
-        double my = InputThread::getInstance().getLastY();
+        double mx = Runtime::get().inputThread->getLastX();
+        double my = Runtime::get().inputThread->getLastY();
         double dx = mx - lastMouseX_;
         double dy = lastMouseY_ - my;
         lastMouseX_ = mx;
@@ -112,9 +113,9 @@ namespace kc {
     }
 
     void PlayerController::resetMouse() {
-        if (InputThread::getInstance().isInitialized()) {
-            lastMouseX_ = InputThread::getInstance().getLastX();
-            lastMouseY_ = InputThread::getInstance().getLastY();
+        if (Runtime::get().inputThread->isInitialized()) {
+            lastMouseX_ = Runtime::get().inputThread->getLastX();
+            lastMouseY_ = Runtime::get().inputThread->getLastY();
         }
     }
 

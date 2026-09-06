@@ -14,9 +14,13 @@ namespace kc {
         void update();
         void cleanup();
 
-        void setDispatcher(ThreadName target, std::function<void(const FrameMetrics&)> cb);
+        void setDispatcher(ThreadName target, double hz, std::function<void(const FrameMetrics&)> cb);
         void clearDispatcher(ThreadName target);
         void send();
+
+        // Seconds until the earliest dispatcher is due for its next snapshot.
+        // Returns 0.25 when no dispatchers are registered.
+        double nextDispatchIn() const;
 
         GameLogicMetrics& getCPUMetrics() { return metrics_.cpu(); }
         RenderThreadMetrics& getGPUMetrics() { return metrics_.gpu(); }
@@ -28,6 +32,8 @@ namespace kc {
     private:
         struct DispatcherEntry {
             ThreadName target;
+            double hz;
+            double lastSendSec_ = 0.0;
             std::function<void(const FrameMetrics&)> cb;
         };
 
