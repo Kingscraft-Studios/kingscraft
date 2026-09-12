@@ -45,6 +45,7 @@ namespace kc {
 
         // Style system — delegates to engine
         uint32_t registerStyle(const UiStyle& style);
+        void updateStyle(uint32_t index, const UiStyle& style);
         void updateStylePool();
         void markDirty(uint32_t elementId);
 

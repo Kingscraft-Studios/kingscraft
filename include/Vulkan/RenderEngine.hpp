@@ -14,6 +14,7 @@
 #include "Renderer/WorldRenderer.hpp"
 #include "Threads/InputThread.hpp"
 #include "Util/TimeUtil.hpp"
+#include <memory>
 
 namespace kc {
 
@@ -45,6 +46,11 @@ namespace kc {
         void resumeRenderer();
 
         void swapchainRecreate(bool recreate) { requestSwapchainRecreate = recreate; }
+
+        // Runs on the renderer thread (dispatched from the registry-reload
+        // listener): rebuilds the texture array, world renderer, and UI block
+        // texture, then forwards the game-thread half to Kingscraft.
+        void refreshFromReload();
 
         Device& getDevice() { return device; }
         Renderer& getRenderer() { return *renderer; }

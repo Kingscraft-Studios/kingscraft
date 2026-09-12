@@ -48,6 +48,7 @@ namespace kc {
 
         // Style system
         uint32_t registerStyle(const UiStyle& style);
+        void updateStyle(uint32_t index, const UiStyle& style);
         void markDirty(uint32_t elementId, int styleIndex = -1);
         void updateStylePool();
         uint32_t allocateElementId();

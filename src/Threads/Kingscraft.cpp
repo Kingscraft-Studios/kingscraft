@@ -11,6 +11,7 @@
 #include <thread>
 
 #include "Core/MainMenu.hpp"
+#include "Core/Registries.hpp"
 #include "Core/Runtime.hpp"
 
 namespace kc {
@@ -130,6 +131,11 @@ namespace kc {
                 if (!Runtime::get().renderThread->getProfilerCapture().isActive()) {
                     Runtime::get().renderThread->getProfilerCapture().start();
                 }
+            });
+        });
+        MessageBus::Get().send(ThreadName::Input, []() {
+            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F10}, []() {
+                Registries::reload();
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {

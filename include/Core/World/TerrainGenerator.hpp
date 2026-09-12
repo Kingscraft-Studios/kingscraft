@@ -62,6 +62,9 @@ namespace kc {
 
                     int y = top;
                     for (auto& layer : cfg.layers) {
+                        // Block may have been removed from the registry by a
+                        // reload; treat it as air instead of dereferencing null.
+                        if (!layer.block) continue;
                         uint64_t blockId = static_cast<uint64_t>(layer.block->getEncodedId());
                         if (layer.depth > 0) {
                             for (int dy = 0; dy < layer.depth && y - dy >= 0; ++dy)

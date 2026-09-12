@@ -103,6 +103,30 @@ namespace kc {
         group_.addToWrapper(ui);
     }
 
+    void UiHotbar::refresh(UiWrapper& ui) {
+        UiGuard guard(ui);
+
+        auto iconLayer = [](Block* block) -> int {
+            if (!block) return 0;
+            const Quad* side = block->getModel().findQuad(FaceDir::PosX);
+            return block->getTextureBaseOffset() + (side ? side->tileIndex : 0);
+        };
+
+        int layers[3] = {
+            iconLayer(Blocks::GRASS_BLOCK),
+            iconLayer(Blocks::DIRT),
+            iconLayer(Blocks::STONE),
+        };
+
+        for (int i = 0; i < 3; ++i) {
+            ui.updateStyle(iconStyles_[i], UiStyle{
+                .mode = RenderMode::Texture,
+                .color1 = {1.0f, 1.0f, 1.0f, 1.0f},
+                .textureLayer = static_cast<float>(layers[i]),
+            });
+        }
+    }
+
     void UiHotbar::cleanup(UiWrapper& ui) {
         group_.removeFromWrapper(ui);
     }

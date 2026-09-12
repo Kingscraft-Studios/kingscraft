@@ -60,6 +60,8 @@ namespace kc {
 
         diagnostics.cleanup();
 
+        Bootstrapper::Shutdown();
+
         // Engine Specific Shutdown
         MessageBus::Get().unsubscribe(ThreadName::Engine);
         runningMailbox = false;

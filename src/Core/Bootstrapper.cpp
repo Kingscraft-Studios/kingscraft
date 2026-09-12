@@ -6,6 +6,9 @@
 #include <fstream>
 
 #include "Core/Validators/PipelineCacheValidator.hpp"
+#include "Event/EventManager.hpp"
+#include "Listener/RenderRegistryReloadListener.hpp"
+#include "Listener/WorldRegistryReloadListener.hpp"
 #include "Util/LogUtils.hpp"
 
 namespace kc {
@@ -45,6 +48,13 @@ namespace kc {
         } catch (std::runtime_error& e) {
             LogUtils::error(ThreadName::Renderer, StringBuilder::build("Error: ", e.what()));
         }
+
+        // Engine-wide event listeners. Bukkit style: each listener observes the
+        // events it cares about and does everything itself inside its handler;
+        // nothing in the engine reaches out to wire systems together. Stays
+        // registered until EventManager is unregistered/destroyed.
+        EventManager::get().registerListener<RenderRegistryReloadListener>();
+        EventManager::get().registerListener<WorldRegistryReloadListener>();
     }
 
     const std::vector<char>& Bootstrapper::getShader(const std::string& path) const {

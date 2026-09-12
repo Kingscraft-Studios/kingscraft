@@ -23,6 +23,10 @@ namespace kc {
             app->swapchainRecreate(recreate);
         }
 
+        void reloadTextures() {
+            app->refreshFromReload();
+        }
+
         void requestTeardown();
 
         UiWrapper& getUI() { return app->getUiSystem(); }

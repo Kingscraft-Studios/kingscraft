@@ -18,7 +18,9 @@ namespace kc {
         static const AABB empty(glm::vec3(0.0f), glm::vec3(0.0f));
         if (blockId == 0) return empty;
 
-        const Block* block = Registry<Block>::getRegistry().get(blockId);
+        // Hold a strong ref so a concurrent registry reload can't free the block
+        // while its collision box is being read.
+        auto block = Registry<Block>::getRegistry().getShared(blockId);
         if (!block) return empty;
 
         const AABB& box = block->getCollisionBox();

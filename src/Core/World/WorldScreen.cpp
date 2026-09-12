@@ -141,7 +141,11 @@ namespace kc {
         }
     }
 
-    void WorldScreen::render(FrameScene& scene) {
+    void WorldScreen::refreshHotbar() {
+    hotbar_.refresh(Runtime::get().renderThread->getUI());
+}
+
+void WorldScreen::render(FrameScene& scene) {
         auto& world = Runtime::get().kingscraft->getWorld();
         auto& settings = RendererSettings::get();
         world.getPlayerController().updateProjection(extent_, settings.fov,

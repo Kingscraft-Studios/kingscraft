@@ -201,6 +201,11 @@ namespace kc {
         return engine_ ? engine_->registerStyle(style) : 0;
     }
 
+    void UiWrapper::updateStyle(uint32_t index, const UiStyle& style) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        if (engine_) engine_->updateStyle(index, style);
+    }
+
     void UiWrapper::updateStylePool() {
         std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         if (engine_) engine_->updateStylePool();

@@ -22,6 +22,10 @@ namespace kc {
         void render(FrameScene& scene) override;
         void cleanup() override;
         void onMouseButton(int button, int action, int mods) override;
+
+        // Rebuilds the hotbar icons after a registry reload changed the
+        // block textures (called from the GameLogic thread).
+        void refreshHotbar();
     private:
         VkExtent2D extent_{};
 

@@ -120,7 +120,7 @@ uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
                         if (getBlock(nc[0], nc[1], nc[2]) != 0) continue;
                     }
 
-                    Block* block = registry.get(blockId);
+                    auto block = registry.getShared(blockId);
                     if (!block) continue;
 
                     const Quad* quad = block->getModel().findQuad(faceDirs[dir]);
@@ -309,7 +309,7 @@ void ChunkMesher::emitGateFaces(
                 if (getBlock(nc[0], nc[1], nc[2]) != 0) continue;
             }
 
-            Block* block = registry.get(blockId);
+            auto block = registry.getShared(blockId);
             if (!block) continue;
 
             const Quad* quad = block->getModel().findQuad(faceDirs[gate]);

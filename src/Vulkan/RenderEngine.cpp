@@ -8,6 +8,8 @@
 
 #include "Bus/MessageBus.hpp"
 #include "Core/Registries.hpp"
+#include "Event/EventManager.hpp"
+#include "Event/Events/RegistryReloadPostEvent.hpp"
 #include "Renderer/FrameScene.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/Engine.hpp"
@@ -40,6 +42,7 @@ namespace kc {
             worldRenderer.init(device, *textureCache_, renderer->getWorldRenderPass());
             worldRendererInitialized = true;
         }
+
         auto currentExtent = Runtime::get().inputThread->getExtent();
 
         if ((requestSwapchainRecreate || Runtime::get().inputThread->wasWindowResized()) && currentExtent.width > 0 && currentExtent.height > 0) {
@@ -90,6 +93,25 @@ namespace kc {
 
     void RenderEngine::resumeRenderer() {
         renderState = RenderState::Running;
+    }
+
+    void RenderEngine::refreshFromReload() {
+        // Runs inside the renderer mailbox, before the frame: the block set and
+        // its texture array changed, so the descriptor layout bound to the old
+        // pipeline layout is stale. Idle the GPU and rebuild everything the
+        // initial init created, then hand the game thread its half.
+        vkDeviceWaitIdle(device.device());
+
+        textureCache_->updateFromRegistry();
+        worldRenderer.cleanup();
+        worldRenderer.init(device, *textureCache_, renderer->getWorldRenderPass());
+        uiSystem->setBlockTexture(textureCache_->getImageView(), textureCache_->getSampler());
+
+        // Offsets are patched and the renderer is rebuilt: hand the game thread
+        // its half by firing the post event there (a safe handoff, never raced).
+        MessageBus::Get().send(ThreadName::GameLogic, []() {
+            EventManager::get().callEvent<RegistryReloadPostEvent>();
+        });
     }
 
     void RenderEngine::recreateSwapChain() {

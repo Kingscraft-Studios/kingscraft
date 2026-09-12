@@ -221,6 +221,15 @@ namespace kc {
         }
     }
 
+    void World::remeshAllChunks() {
+        {
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            for (auto& [key, chunk] : chunks_)
+                chunk->markDirty();
+        }
+        remeshDirtyChunks();
+    }
+
     void World::loadChunkSync(int gridX, int gridZ) {
         if (isChunkLoaded(gridX, gridZ)) return;
 

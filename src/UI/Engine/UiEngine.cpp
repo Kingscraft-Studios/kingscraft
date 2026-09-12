@@ -96,6 +96,12 @@ namespace kc {
         return index;
     }
 
+    void UiEngine::updateStyle(uint32_t index, const UiStyle& style) {
+        if (index >= stylePool_.size()) return;
+        stylePool_[index] = style.toGpu();
+        stylePoolDirty_ = true;
+    }
+
     void UiEngine::updateStylePool() {
         stylePoolDirty_ = true;
     }

@@ -25,6 +25,9 @@ namespace kc {
 
         void init(UiWrapper& ui, float screenW, float screenH);
         void cleanup(UiWrapper& ui);
+        // Recomputes the block-icon texture layers after a registry reload and
+        // patches the existing styles in place (no pool growth).
+        void refresh(UiWrapper& ui);
 
         void resize(float screenW, float screenH);
         void selectSlot(UiWrapper& ui, int index);

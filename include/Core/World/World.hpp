@@ -45,6 +45,9 @@ namespace kc {
         uint64_t getBlock(int worldX, int worldY, int worldZ) const;
         int getSurfaceHeight(int worldX, int worldZ) const;
         void remeshDirtyChunks();
+        // Marks every loaded chunk dirty (all subchunks) and queues a full
+        // remesh; used after a registry reload changes texture offsets.
+        void remeshAllChunks();
 
         static int worldToGrid(float worldCoord, int chunkSize);
 
