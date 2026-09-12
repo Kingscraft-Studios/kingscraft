@@ -5,6 +5,9 @@
 #include "Util/StringBuilder.hpp"
 
 #include <cstdint>
+#include <sstream>
+#include <string>
+#include <vector>
 
 namespace kc {
     class IO;
@@ -13,7 +16,7 @@ namespace kc {
     public:
         explicit ChunkTemplate(IO& io) : IOTemplateBase(io) {}
 
-        std::vector<uint8_t> load(int gridX, int gridZ) {
+        std::vector<uint64_t> load(int gridX, int gridZ) {
             auto path = buildPath(gridX, gridZ);
             auto fileData = readBytes(path);
 
@@ -22,7 +25,7 @@ namespace kc {
 
             return formatted;
         }
-        void save(int gridX, int gridZ, const std::vector<uint8_t>& data) {
+        void save(int gridX, int gridZ, const std::vector<uint64_t>& data) {
             auto path = buildPath(gridX, gridZ);
 
             // Serialize the BlockIds
@@ -34,13 +37,25 @@ namespace kc {
 
         // Pure encode/decode (no file I/O) — shared with RegionTemplate so
         // region files reuse the same block-grid text layout.
-        std::string serialize(const std::vector<uint8_t>& data) {
+        //
+        // Each cell is the encoded uint64 identifier as 16 lowercase hex digits
+        // (0 = air/empty), space separated, one row per line. Rows are grouped
+        // per horizontal slice with a blank line between slices.
+        std::string serialize(const std::vector<uint64_t>& data) {
             auto& s = RendererSettings::get();
             int N = s.chunkSize;
             int h = s.worldHeight;
 
+            static const char* HEX = "0123456789abcdef";
+
             std::string out;
-            out.reserve(N * h + h * 2);
+            out.reserve(static_cast<size_t>(N) * h * (16 + 1));
+
+            auto appendHex = [&out](uint64_t v) {
+                char buf[16];
+                for (int i = 15; i >= 0; --i) { buf[i] = HEX[v & 0xF]; v >>= 4; }
+                out.append(buf, 16);
+            };
 
             for (int y = 0; y < h; ++y) {
                 if (y > 0) out += '\n';
@@ -48,8 +63,9 @@ namespace kc {
                 for (int z = 0; z < N; ++z) {
                     for (int x = 0; x < N; ++x) {
                         size_t idx = static_cast<size_t>(y) * N * N + static_cast<size_t>(z) * N + x;
-                        uint8_t id = (idx < data.size()) ? data[idx] : 0;
-                        out += (id < 4) ? BLOCK_TO_CHAR[id] : '?';
+                        uint64_t id = (idx < data.size()) ? data[idx] : 0;
+                        appendHex(id);
+                        out += ' ';
                     }
                     out += '\n';
                 }
@@ -57,13 +73,13 @@ namespace kc {
 
             return out;
         }
-        std::vector<uint8_t> deserialize(std::vector<char>& data) {
+        std::vector<uint64_t> deserialize(std::vector<char>& data) {
             if (data.empty()) return {};
             auto& s = RendererSettings::get();
             int N = s.chunkSize;
             int h = s.worldHeight;
 
-            std::vector<uint8_t> blockData(static_cast<size_t>(N) * h * N, 0);
+            std::vector<uint64_t> blockData(static_cast<size_t>(N) * h * N, 0);
 
             std::string content(data.begin(), data.end());
             size_t pos = 0;
@@ -81,10 +97,13 @@ namespace kc {
                 int y = dataLine / N;
                 int z = dataLine % N;
 
-                for (int x = 0; x < N && x < static_cast<int>(line.size()); ++x) {
+                std::istringstream iss(line);
+                for (int x = 0; x < N; ++x) {
+                    uint64_t id = 0;
+                    if (!(iss >> std::hex >> id)) break;
                     size_t idx = static_cast<size_t>(y) * N * N + static_cast<size_t>(z) * N + x;
                     if (idx < blockData.size())
-                        blockData[idx] = charToBlock(line[x]);
+                        blockData[idx] = id;
                 }
                 dataLine++;
             }
@@ -93,23 +112,7 @@ namespace kc {
         }
 
     private:
-        static constexpr char BLOCK_TO_CHAR[256] = {
-            '.',  // 0 = AIR
-            'G',  // 1 = GRASS
-            'S',  // 2 = STONE
-            'D',  // 3 = DIRT
-        };
-
-        static uint8_t charToBlock(char c) {
-            switch (c) {
-                case 'G': return 1;
-                case 'S': return 2;
-                case 'D': return 3;
-                default:  return 0;
-            }
-        }
-
-std::string buildPath(int gridX, int gridZ) {
+        std::string buildPath(int gridX, int gridZ) {
             return StringBuilder::build("world/chunks/", gridX, "_", gridZ, ".txt");
         }
     };

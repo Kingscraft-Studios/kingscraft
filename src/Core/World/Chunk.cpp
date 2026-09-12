@@ -36,14 +36,14 @@ namespace kc {
         rebuildHeightmap();
     }
 
-    uint8_t Chunk::getBlock(int x, int y, int z) const {
+    uint64_t Chunk::getBlock(int x, int y, int z) const {
         if (!blockData_ || blockData_->empty()) return 0;
         return (*blockData_)[static_cast<size_t>(y) * chunkSize_ * chunkSize_
                              + static_cast<size_t>(z) * chunkSize_
                              + static_cast<size_t>(x)];
     }
 
-    void Chunk::setBlock(int x, int y, int z, uint8_t blockId) {
+    void Chunk::setBlock(int x, int y, int z, uint64_t blockId) {
         if (!blockData_ || blockData_->empty()) return;
         if (x < 0 || x >= chunkSize_ || y < 0 || y >= height_ || z < 0 || z >= chunkSize_)
             return;
@@ -52,7 +52,7 @@ namespace kc {
         // pending mesh task). Edits are rare, so clone the 25KB buffer, mutate
         // the clone, then publish the new handle — the old buffer stays alive
         // for whoever still holds it.
-        std::vector<uint8_t> data = *blockData_;
+        std::vector<uint64_t> data = *blockData_;
         data[static_cast<size_t>(y) * chunkSize_ * chunkSize_
              + static_cast<size_t>(z) * chunkSize_
              + static_cast<size_t>(x)] = blockId;
@@ -82,7 +82,7 @@ namespace kc {
             }
         }
 
-        blockData_ = std::make_shared<const std::vector<uint8_t>>(std::move(data));
+        blockData_ = std::make_shared<const std::vector<uint64_t>>(std::move(data));
 
         int subIdx = y / static_cast<int>(SUBCHUNK_H);
         if (static_cast<size_t>(subIdx) < subChunks_.size())

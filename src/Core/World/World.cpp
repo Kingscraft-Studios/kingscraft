@@ -15,8 +15,8 @@
 
 namespace {
 
-    std::vector<uint8_t> extractEdgeStrip(const std::vector<uint8_t>& src, int N, int h, int edgeDir) {
-        std::vector<uint8_t> strip(static_cast<size_t>(h) * N, 0);
+    std::vector<uint64_t> extractEdgeStrip(const std::vector<uint64_t>& src, int N, int h, int edgeDir) {
+        std::vector<uint64_t> strip(static_cast<size_t>(h) * N, 0);
         if (edgeDir < 2) {
             int x = (edgeDir == 0) ? 0 : (N - 1);
             for (int y = 0; y < h; ++y)
@@ -154,7 +154,7 @@ namespace kc {
         if (!chunk) return false;
         int lx = worldX - gx * chunkSize_;
         int lz = worldZ - gz * chunkSize_;
-        chunk->setBlock(lx, worldY, lz, static_cast<uint8_t>(block.getId()));
+        chunk->setBlock(lx, worldY, lz, block.getEncodedId());
 
         // chunk->setBlock copy-on-writes to a fresh buffer; point the cache at
         // the same handle so cache and live chunk always share one grid.
@@ -172,7 +172,7 @@ namespace kc {
         return true;
     }
 
-    uint8_t World::getBlock(int worldX, int worldY, int worldZ) const {
+    uint64_t World::getBlock(int worldX, int worldY, int worldZ) const {
         if (worldY < 0 || worldY >= height_) return 0;
         int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
         int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
@@ -240,15 +240,15 @@ namespace kc {
         BlockDataPtr handle;
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
-            handle = std::make_shared<const std::vector<uint8_t>>(std::move(blockIds));
+            handle = std::make_shared<const std::vector<uint64_t>>(std::move(blockIds));
             blockCache_[makeChunkKey(gridX, gridZ)] = handle;
         }
 
-        std::vector<uint8_t> edgePosX, edgeNegX, edgePosZ, edgeNegZ;
-        const std::vector<uint8_t>* pEdgePosX = nullptr;
-        const std::vector<uint8_t>* pEdgeNegX = nullptr;
-        const std::vector<uint8_t>* pEdgePosZ = nullptr;
-        const std::vector<uint8_t>* pEdgeNegZ = nullptr;
+        std::vector<uint64_t> edgePosX, edgeNegX, edgePosZ, edgeNegZ;
+        const std::vector<uint64_t>* pEdgePosX = nullptr;
+        const std::vector<uint64_t>* pEdgeNegX = nullptr;
+        const std::vector<uint64_t>* pEdgePosZ = nullptr;
+        const std::vector<uint64_t>* pEdgeNegZ = nullptr;
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             auto it = blockCache_.find(makeChunkKey(gridX + 1, gridZ));
@@ -349,7 +349,7 @@ namespace kc {
             {
                 std::lock_guard<std::mutex> lock(cacheMutex_);
                 blockCache_[makeChunkKey(gx, gz)] =
-                    std::make_shared<const std::vector<uint8_t>>(std::move(blockIds));
+                    std::make_shared<const std::vector<uint64_t>>(std::move(blockIds));
             }
 
             {
@@ -416,8 +416,8 @@ namespace kc {
                     blockData = it->second;
                 }
 
-                std::vector<uint8_t> strip[4];
-                const std::vector<uint8_t>* edges[4] = {};
+                std::vector<uint64_t> strip[4];
+                const std::vector<uint64_t>* edges[4] = {};
                 {
                     std::lock_guard<std::mutex> lock(cacheMutex_);
                     constexpr int edx[4] = {1, -1, 0, 0};
@@ -501,8 +501,8 @@ namespace kc {
                         else if (sdir == 2) nbz += 1;
                         else nbz -= 1;
 
-                        std::vector<uint8_t> strip;
-                        const std::vector<uint8_t>* pStrip = nullptr;
+                        std::vector<uint64_t> strip;
+                        const std::vector<uint64_t>* pStrip = nullptr;
                         {
                             std::lock_guard<std::mutex> lock(cacheMutex_);
                             auto it = blockCache_.find(makeChunkKey(nbx, nbz));
@@ -512,7 +512,7 @@ namespace kc {
                             }
                         }
 
-                        const std::vector<uint8_t>* edges[4] = {};
+                        const std::vector<uint64_t>* edges[4] = {};
                         edges[sdir] = pStrip;
                         ChunkMesher::emitGateFaces(slab, *blockData, N, h, slab.yBase, gate,
                                                    edges[0], edges[1], edges[2], edges[3]);
@@ -537,8 +537,8 @@ namespace kc {
                 blockData = it->second;
             }
 
-            std::vector<uint8_t> strip[4];
-            const std::vector<uint8_t>* edges[4] = {};
+            std::vector<uint64_t> strip[4];
+            const std::vector<uint64_t>* edges[4] = {};
             {
                 std::lock_guard<std::mutex> lock(cacheMutex_);
                 constexpr int edx[4] = {1, -1, 0, 0};
@@ -554,7 +554,7 @@ namespace kc {
 
             auto tempChunk = std::make_unique<Chunk>(glm::ivec2(gx, gz), N, 1.0f, h);
             tempChunk->setBlockData(blockData, N, h);   // shares the cache grid, no copy
-            const std::vector<uint8_t>& chunkData = tempChunk->getBlockData();
+            const std::vector<uint64_t>& chunkData = tempChunk->getBlockData();
             for (auto& sub : tempChunk->getSubChunks()) {
                 ChunkMesher::generateSubChunk(sub, chunkData, N, h, sub.yBase,
                                               edges[0], edges[1], edges[2], edges[3]);

@@ -42,7 +42,7 @@ namespace kc {
         const int maxSteps = static_cast<int>(maxDist * 2.0f) + 16;
 
         for (int i = 0; i < maxSteps; ++i) {
-            uint8_t block = world.getBlock(curX, curY, curZ);
+            uint64_t block = world.getBlock(curX, curY, curZ);
             if (block != 0) {
                 result.x = curX;
                 result.y = curY;

@@ -8,7 +8,7 @@ namespace kc {
     class TerrainGenSettings {
     public:
         struct Layer {
-            const RegistryKey<Block>* block;
+            RegistryKey<Block> block;
             int depth; // layers thick; 0 = fill to bottom
         };
 
@@ -28,9 +28,9 @@ namespace kc {
 
         // Layers (ordered top -> bottom from surface height)
         std::vector<Layer> layers = {
-            {&Blocks::GRASS_BLOCK, 1}, // surface
-            {&Blocks::DIRT,        2}, // below
-            {&Blocks::STONE,       0}, // fill to bottom
+            {Blocks::GRASS_BLOCK, 1}, // surface
+            {Blocks::DIRT,        2}, // below
+            {Blocks::STONE,       0}, // fill to bottom
         };
 
     private:

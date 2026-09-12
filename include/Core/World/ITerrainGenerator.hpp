@@ -8,7 +8,7 @@ namespace kc {
 class ITerrainGenerator {
 public:
     virtual ~ITerrainGenerator() = default;
-    virtual std::vector<uint8_t> generateBlocks(
+    virtual std::vector<uint64_t> generateBlocks(
         int gridX, int gridZ, int chunkSize, int height) = 0;
 };
 

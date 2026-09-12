@@ -30,8 +30,9 @@ namespace kc {
         void selectSlot(UiWrapper& ui, int index);
         int getSelectedSlot() const { return selectedSlot_.load(std::memory_order_relaxed); }
 
-        const RegistryKey<Block>* getSlotBlock(int slot) const {
-            return (slot >= 0 && slot < SLOT_COUNT) ? slotBlocks_[slot] : nullptr;
+        const RegistryKey<Block>& getSlotBlock(int slot) const {
+            static const RegistryKey<Block> kInvalid;
+            return (slot >= 0 && slot < SLOT_COUNT) ? slotBlocks_[slot] : kInvalid;
         }
 
     private:
@@ -50,7 +51,7 @@ namespace kc {
         UiImage slotIcons_[SLOT_COUNT];
         UiTextBlock slotNumbers_[SLOT_COUNT];
 
-        const RegistryKey<Block>* slotBlocks_[SLOT_COUNT] = {};
+        RegistryKey<Block> slotBlocks_[SLOT_COUNT] = {};
 
         uint32_t bgStyle_ = 0;
         uint32_t slotStyle_ = 0;

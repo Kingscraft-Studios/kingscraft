@@ -37,7 +37,7 @@ namespace kc {
         explicit RegionTemplate(IO& io, ChunkTemplate& chunkTemplate)
             : IOTemplateBase(io), chunk_(chunkTemplate) {}
 
-        std::vector<uint8_t> load(int gridX, int gridZ) {
+        std::vector<uint64_t> load(int gridX, int gridZ) {
             std::lock_guard<std::mutex> lock(mutex_);
             uint64_t k = regionKeyOfChunk(gridX, gridZ);
 
@@ -61,7 +61,7 @@ namespace kc {
         }
 
         // Immediate write (rarely needed; most callers prefer queueSave + flush).
-        void save(int gridX, int gridZ, const std::vector<uint8_t>& data) {
+        void save(int gridX, int gridZ, const std::vector<uint64_t>& data) {
             std::lock_guard<std::mutex> lock(mutex_);
             uint64_t k = regionKeyOfChunk(gridX, gridZ);
             pending_[k][chunkKey(gridX, gridZ)] = chunk_.serialize(data);
@@ -73,7 +73,7 @@ namespace kc {
         // newest text (only the last edit reaches disk). Memory-only: the
         // disk is touched once per region by flush() — synchronous per-chunk
         // rewrites of the whole region file here were the shutdown bottleneck.
-        void queueSave(int gridX, int gridZ, const std::vector<uint8_t>& data) {
+        void queueSave(int gridX, int gridZ, const std::vector<uint64_t>& data) {
             std::lock_guard<std::mutex> lock(mutex_);
             uint64_t k = regionKeyOfChunk(gridX, gridZ);
             pending_[k][chunkKey(gridX, gridZ)] = chunk_.serialize(data);

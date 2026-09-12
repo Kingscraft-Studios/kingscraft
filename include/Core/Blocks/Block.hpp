@@ -21,7 +21,12 @@ public:
 
     const BlockModel& getModel() const { return model_; }
 
-    int getId() const { return Registry<Block>::getRegistry().getID(this); }
+    // Encoded uint64 identifier used as the persisted/cell value. Air overrides
+    // this to 0 (the "empty cell" encoding) so heightmaps, collision and the
+    // mesher keep treating 0 as "nothing".
+    virtual uint64_t getEncodedId() const {
+        return Registry<Block>::getRegistry().getEncodedID(this);
+    }
 
     int getTextureBaseOffset() const { return textureBaseOffset_; }
     void setTextureBaseOffset(int offset) { textureBaseOffset_ = offset; }

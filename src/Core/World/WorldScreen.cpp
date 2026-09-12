@@ -237,10 +237,10 @@ namespace kc {
 
         if (placeY < 0 || placeY >= Runtime::get().kingscraft->getWorld().getHeight()) return;
 
-        auto* key = hotbar_.getSlotBlock(hotbar_.getSelectedSlot());
+        const RegistryKey<Block>& key = hotbar_.getSlotBlock(hotbar_.getSelectedSlot());
         if (!key) return;
 
-        const Block& block = *key;
+        const Block& block = key;
         if (&block == Blocks::AIR) return;
 
         if (world.getPlayerController().getBodyAABB().overlaps(

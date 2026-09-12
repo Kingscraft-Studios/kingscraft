@@ -43,12 +43,12 @@ namespace kc {
     public:
         DefaultTerrainGenerator() : noise_() {}
 
-        std::vector<uint8_t> generateBlocks(
+        std::vector<uint64_t> generateBlocks(
             int gridX, int gridZ, int chunkSize, int height) override
         {
             auto& cfg = TerrainGenSettings::get();
 
-            std::vector<uint8_t> blockIds(static_cast<size_t>(chunkSize) * height * chunkSize, 0);
+            std::vector<uint64_t> blockIds(static_cast<size_t>(chunkSize) * height * chunkSize, 0);
 
             float originX = static_cast<float>(gridX) * chunkSize;
             float originZ = static_cast<float>(gridZ) * chunkSize;
@@ -62,7 +62,7 @@ namespace kc {
 
                     int y = top;
                     for (auto& layer : cfg.layers) {
-                        uint8_t blockId = static_cast<uint8_t>(layer.block->getId());
+                        uint64_t blockId = static_cast<uint64_t>(layer.block->getEncodedId());
                         if (layer.depth > 0) {
                             for (int dy = 0; dy < layer.depth && y - dy >= 0; ++dy)
                                 blockIds[static_cast<size_t>(y - dy) * chunkSize * chunkSize + z * chunkSize + x] = blockId;

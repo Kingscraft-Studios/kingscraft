@@ -34,7 +34,6 @@ void TextureCache::updateFromRegistry() {
     cleanup();
 
     auto& registry = Registry<Block>::getRegistry();
-    int blockCount = registry.size();
 
     struct DecodedTex {
         std::vector<unsigned char> pixels;
@@ -43,10 +42,8 @@ void TextureCache::updateFromRegistry() {
     };
     std::vector<DecodedTex> decoded;
 
-    for (int i = 0; i < blockCount; ++i) {
-        Block* block = registry.get(i);
-        if (!block) continue;
-        const auto& model = block->getModel();
+    registry.forEach([&](uint64_t, Block& block) {
+        const auto& model = block.getModel();
         for (const auto& texData : model.getTextures()) {
             if (!texData.isValid()) continue;
             int w, h, channels;
@@ -62,7 +59,7 @@ void TextureCache::updateFromRegistry() {
             stbi_image_free(pixels);
             decoded.push_back(std::move(dec));
         }
-    }
+    });
 
     if (decoded.empty() || decoded[0].width == 0 || decoded[0].height == 0)
         return;
@@ -70,12 +67,10 @@ void TextureCache::updateFromRegistry() {
     // Patch per-block texture base offsets so mesher can compute global texIndex
     {
         int globalIdx = 0;
-        for (int i = 0; i < blockCount; ++i) {
-            Block* b = registry.get(i);
-            if (!b) continue;
-            b->setTextureBaseOffset(globalIdx);
-            globalIdx += static_cast<int>(b->getModel().getTextures().size());
-        }
+        registry.forEach([&globalIdx](uint64_t, Block& b) {
+            b.setTextureBaseOffset(globalIdx);
+            globalIdx += static_cast<int>(b.getModel().getTextures().size());
+        });
     }
 
     layerCount_ = static_cast<uint32_t>(decoded.size());

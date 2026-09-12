@@ -42,7 +42,7 @@ namespace kc {
         const Chunk* getChunk(int gridX, int gridZ) const;
 
         bool setBlock(int worldX, int worldY, int worldZ, const Block& block);
-        uint8_t getBlock(int worldX, int worldY, int worldZ) const;
+        uint64_t getBlock(int worldX, int worldY, int worldZ) const;
         int getSurfaceHeight(int worldX, int worldZ) const;
         void remeshDirtyChunks();
 

@@ -45,13 +45,13 @@ namespace {
 
 void ChunkMesher::generateSubChunk(
     SubChunk& subChunk,
-    const std::vector<uint8_t>& blockIds,
+    const std::vector<uint64_t>& blockIds,
     int N, int height,
     int yBase,
-    const std::vector<uint8_t>* edgePosX,
-    const std::vector<uint8_t>* edgeNegX,
-    const std::vector<uint8_t>* edgePosZ,
-    const std::vector<uint8_t>* edgeNegZ)
+    const std::vector<uint64_t>* edgePosX,
+    const std::vector<uint64_t>* edgeNegX,
+    const std::vector<uint64_t>* edgePosZ,
+    const std::vector<uint64_t>* edgeNegZ)
 {
     auto& vertices = subChunk.vertices;
     auto& indices = subChunk.indices;
@@ -64,7 +64,7 @@ void ChunkMesher::generateSubChunk(
 
     auto& registry = Registry<Block>::getRegistry();
 
-    auto getBlock = [&](int x, int y, int z) -> uint8_t {
+    auto getBlock = [&](int x, int y, int z) -> uint64_t {
         if (y < 0 || y >= height)
             return 0;
         if (x < 0) {
@@ -112,7 +112,7 @@ void ChunkMesher::generateSubChunk(
                     if (ua == 1) coords[1] += yBase;
                     if (va == 1) coords[1] += yBase;
 
-                    uint8_t blockId = getBlock(coords[0], coords[1], coords[2]);
+uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
                     if (blockId == 0) continue;
 
                     {
@@ -237,14 +237,14 @@ void ChunkMesher::generateSubChunk(
 
 void ChunkMesher::emitGateFaces(
     SubChunk& subChunk,
-    const std::vector<uint8_t>& blockIds,
+    const std::vector<uint64_t>& blockIds,
     int N, int height,
     int yBase,
     int gate,
-    const std::vector<uint8_t>* edgePosX,
-    const std::vector<uint8_t>* edgeNegX,
-    const std::vector<uint8_t>* edgePosZ,
-    const std::vector<uint8_t>* edgeNegZ)
+    const std::vector<uint64_t>* edgePosX,
+    const std::vector<uint64_t>* edgeNegX,
+    const std::vector<uint64_t>* edgePosZ,
+    const std::vector<uint64_t>* edgeNegZ)
 {
     if (gate < 2 || gate > 5) return;
 
@@ -256,7 +256,7 @@ void ChunkMesher::emitGateFaces(
 
     auto& registry = Registry<Block>::getRegistry();
 
-    auto getBlock = [&](int x, int y, int z) -> uint8_t {
+    auto getBlock = [&](int x, int y, int z) -> uint64_t {
         if (y < 0 || y >= height)
             return 0;
         if (x < 0) {
@@ -301,7 +301,7 @@ void ChunkMesher::emitGateFaces(
             if (ua == 1) coords[1] += yBase;
             if (va == 1) coords[1] += yBase;
 
-            uint8_t blockId = getBlock(coords[0], coords[1], coords[2]);
+            uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
             if (blockId == 0) continue;
 
             {

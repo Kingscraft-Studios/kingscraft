@@ -14,7 +14,7 @@ namespace kc {
         return getWorldBlockAABB(world, x, y, z).has_value();
     }
 
-    const AABB& CollisionSystem::getBlockCollisionBox(uint8_t blockId) {
+    const AABB& CollisionSystem::getBlockCollisionBox(uint64_t blockId) {
         static const AABB empty(glm::vec3(0.0f), glm::vec3(0.0f));
         if (blockId == 0) return empty;
 
@@ -25,7 +25,7 @@ namespace kc {
         return box.isEmpty() ? empty : box;
     }
 
-    AABB CollisionSystem::blockAABBAt(uint8_t blockId, int x, int y, int z) {
+    AABB CollisionSystem::blockAABBAt(uint64_t blockId, int x, int y, int z) {
         const AABB& box = getBlockCollisionBox(blockId);
         if (box.isEmpty()) return box;
 
@@ -34,13 +34,13 @@ namespace kc {
     }
 
     AABB CollisionSystem::blockAABBAt(const Block& block, int x, int y, int z) {
-        return blockAABBAt(static_cast<uint8_t>(block.getId()), x, y, z);
+        return blockAABBAt(block.getEncodedId(), x, y, z);
     }
 
     std::optional<AABB> CollisionSystem::getWorldBlockAABB(const World& world, int x, int y, int z) {
         if (y < 0 || y >= world.getHeight()) return std::nullopt;
 
-        const uint8_t blockId = world.getBlock(x, y, z);
+        const uint64_t blockId = world.getBlock(x, y, z);
         if (blockId == 0) return std::nullopt;
 
         const AABB& box = getBlockCollisionBox(blockId);

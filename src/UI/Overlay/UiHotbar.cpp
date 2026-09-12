@@ -27,9 +27,9 @@ namespace kc {
         Block* grass = Blocks::GRASS_BLOCK;
         Block* dirt = Blocks::DIRT;
         Block* stone = Blocks::STONE;
-        slotBlocks_[0] = &Blocks::GRASS_BLOCK;
-        slotBlocks_[1] = &Blocks::DIRT;
-        slotBlocks_[2] = &Blocks::STONE;
+        slotBlocks_[0] = Blocks::GRASS_BLOCK;
+        slotBlocks_[1] = Blocks::DIRT;
+        slotBlocks_[2] = Blocks::STONE;
 
         auto iconLayer = [](Block* block) -> int {
             if (!block) return 0;

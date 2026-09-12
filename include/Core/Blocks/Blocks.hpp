@@ -2,6 +2,7 @@
 
 #include "Core/Registry.hpp"
 #include "Core/RegistryKey.hpp"
+#include "Core/ResourceLocation.hpp"
 #include "Core/Resources/BlockModel.hpp"
 #include "Block.hpp"
 #include "Bus/MessageBus.hpp"
@@ -10,10 +11,10 @@ namespace kc {
 
 class Blocks {
 public:
-    inline static const RegistryKey<Block> AIR = Registry<Block>::getRegistry().createKey();
-    inline static const RegistryKey<Block> GRASS_BLOCK = Registry<Block>::getRegistry().createKey();
-    inline static const RegistryKey<Block> STONE = Registry<Block>::getRegistry().createKey();
-    inline static const RegistryKey<Block> DIRT = Registry<Block>::getRegistry().createKey();
+    inline static const RegistryKey<Block> AIR = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("air"));
+    inline static const RegistryKey<Block> GRASS_BLOCK = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("grass_block"));
+    inline static const RegistryKey<Block> STONE = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("stone"));
+    inline static const RegistryKey<Block> DIRT = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("dirt"));
 
     static void registerBlocks(int& pending);
 

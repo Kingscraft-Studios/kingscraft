@@ -8,6 +8,7 @@ namespace kc {
             return AABB(glm::vec3(0.0f), glm::vec3(0.0f));
         }
 
+        uint64_t getEncodedId() const override { return 0; }
         bool isSolid() const override { return false; }
         bool isReplaceable() const override { return true; }
         int getLightAbsorption() const override { return 0; }

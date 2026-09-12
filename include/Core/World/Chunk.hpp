@@ -57,8 +57,9 @@ namespace kc {
     };
 
     // Immutable block grid, shared between blockCache_ and live chunks. Mesh
-    // tasks grab the handle (no 25KB copy); block edits copy-on-write.
-    using BlockDataPtr = std::shared_ptr<const std::vector<uint8_t>>;
+    // tasks grab the handle (no copy); block edits copy-on-write. Each cell
+    // holds the encoded uint64 identifier (0 = air/empty).
+    using BlockDataPtr = std::shared_ptr<const std::vector<uint64_t>>;
 
     class Chunk {
     public:
@@ -71,14 +72,14 @@ namespace kc {
         std::vector<SubChunk>& getSubChunks() { return subChunks_; }
         const std::vector<SubChunk>& getSubChunks() const { return subChunks_; }
 
-        const std::vector<uint8_t>& getBlockData() const {
-            static const std::vector<uint8_t> kEmpty;
+        const std::vector<uint64_t>& getBlockData() const {
+            static const std::vector<uint64_t> kEmpty;
             return blockData_ ? *blockData_ : kEmpty;
         }
         BlockDataPtr getBlockDataPtr() const { return blockData_; }
         void setBlockData(BlockDataPtr data, int chunkSize, int height);
-        uint8_t getBlock(int x, int y, int z) const;
-        void setBlock(int x, int y, int z, uint8_t blockId);
+        uint64_t getBlock(int x, int y, int z) const;
+        void setBlock(int x, int y, int z, uint64_t blockId);
 
         int getBlockDataSize() const { return chunkSize_; }
         int getHeight() const { return height_; }
