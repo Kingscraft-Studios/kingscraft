@@ -3,6 +3,7 @@
 #include <thread>
 #include <unordered_map>
 
+#include "Event/detail/CurrentThread.hpp"
 #include "Threads/BaseThread.hpp"
 #include "Util/LogUtils.hpp"
 
@@ -37,7 +38,10 @@ namespace kc {
             std::promise<std::unique_ptr<BaseThread>> promise;
             std::future<std::unique_ptr<BaseThread>> future = promise.get_future();
 
-            std::thread t([p = std::move(promise), ...capturedArgs = std::forward<Args>(args)]() mutable {
+            ThreadName threadName = workerToThreadName(worker);
+
+            std::thread t([p = std::move(promise), threadName, ...capturedArgs = std::forward<Args>(args)]() mutable {
+                detail::setCurrentThread(threadName);
                 auto instance = std::make_unique<T>(std::forward<decltype(capturedArgs)>(capturedArgs)...);
                 BaseThread* rawPtr = instance.get();
                 p.set_value(std::move(instance));

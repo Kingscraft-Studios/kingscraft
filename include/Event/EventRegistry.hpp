@@ -2,9 +2,14 @@
 #include <mutex>
 #include <unordered_set>
 
+#include "Events/BlockBreakEvent.hpp"
+#include "Events/BlockChangedEvent.hpp"
+#include "Events/BlockPlaceEvent.hpp"
+#include "Events/ChunkLoadedEvent.hpp"
+#include "Events/ChunkUnloadedEvent.hpp"
+#include "Events/PlayerDeathEvent.hpp"
+#include "Events/PlayerRespawnEvent.hpp"
 #include "Events/RegistryReloadEvent.hpp"
-#include "Events/RegistryReloadPostEvent.hpp"
-#include "Events/RegistryReloadPreEvent.hpp"
 #include "detail/TypeId.hpp"
 #include "detail/TypeTag.hpp"
 
@@ -33,9 +38,14 @@ namespace kc {
     // When a new event class is created, add it here (one line). This is the
     // list registerListener<L>() folds over to discover L's handlers.
     using EventRegistryTypes = detail::TypeList<
-        RegistryReloadPreEvent,
         RegistryReloadEvent,
-        RegistryReloadPostEvent
+        BlockBreakEvent,
+        BlockPlaceEvent,
+        BlockChangedEvent,
+        PlayerDeathEvent,
+        PlayerRespawnEvent,
+        ChunkLoadedEvent,
+        ChunkUnloadedEvent
     >;
 
     // Runtime, auto-populated "which types have been seen/fired" directory.

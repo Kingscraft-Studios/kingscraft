@@ -26,13 +26,17 @@ namespace kc {
         // Rebuilds the hotbar icons after a registry reload changed the
         // block textures (called from the GameLogic thread).
         void refreshHotbar();
+
+        // Driven by PlayerLifecycleListener when the player dies/respawns;
+        // owns the cursor + UI-layer + death-overlay transition (GameLogic thread).
+        void onPlayerDeath();
+        void onPlayerRespawn();
     private:
         VkExtent2D extent_{};
 
         TerrainRenderer terrainRenderer_;
         UiFpsCounter fpsCounter_;
         bool wasDebugOn_ = false;
-        bool wasDead_ = false;
         UiHotbar hotbar_;
         UiDeathScreen deathScreen_;
         UiRect crosshairH_;

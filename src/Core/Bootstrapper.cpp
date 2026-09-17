@@ -7,6 +7,9 @@
 
 #include "Core/Validators/PipelineCacheValidator.hpp"
 #include "Event/EventManager.hpp"
+#include "Listener/ChunkLifecycleListener.hpp"
+#include "Listener/PlayerBlockInteractionListener.hpp"
+#include "Listener/PlayerLifecycleListener.hpp"
 #include "Listener/RenderRegistryReloadListener.hpp"
 #include "Listener/WorldRegistryReloadListener.hpp"
 #include "Util/LogUtils.hpp"
@@ -55,6 +58,9 @@ namespace kc {
         // registered until EventManager is unregistered/destroyed.
         EventManager::get().registerListener<RenderRegistryReloadListener>();
         EventManager::get().registerListener<WorldRegistryReloadListener>();
+        EventManager::get().registerListener<PlayerBlockInteractionListener>();
+        EventManager::get().registerListener<PlayerLifecycleListener>();
+        EventManager::get().registerListener<ChunkLifecycleListener>();
     }
 
     const std::vector<char>& Bootstrapper::getShader(const std::string& path) const {

@@ -1,7 +1,12 @@
 #include "Core/World/WorldScreen.hpp"
 
+#include <utility>
+
 #include "Bus/MessageBus.hpp"
 #include "Core/World/World.hpp"
+#include "Event/EventManager.hpp"
+#include "Event/Events/BlockBreakEvent.hpp"
+#include "Event/Events/BlockPlaceEvent.hpp"
 #include "UI/Debug/ProfilingCapture.hpp"
 #include "Vulkan/TextureCache.hpp"
 #include "UI/UiWrapper.hpp"
@@ -113,26 +118,6 @@ namespace kc {
 
         world.tick(dt);
 
-        bool dead = world.getPlayerController().isDead();
-        if (dead && !wasDead_) {
-            MessageBus::Get().send(ThreadName::Input, []() {
-                Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-                Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
-            });
-            world.getPlayerController().setCaptured(false);
-            world.getPlayerController().resetMouse();
-            deathScreen_.show(Runtime::get().renderThread->getUI());
-        } else if (!dead && wasDead_) {
-            MessageBus::Get().send(ThreadName::Input, []() {
-                Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
-            });
-            world.getPlayerController().setCaptured(true);
-            world.getPlayerController().resetMouse();
-            deathScreen_.hide(Runtime::get().renderThread->getUI());
-        }
-        wasDead_ = dead;
-
         VkExtent2D currentExtent = Runtime::get().inputThread->getExtent().toVKExtent();
         if (currentExtent.width != extent_.width || currentExtent.height != extent_.height) {
             extent_ = currentExtent;
@@ -144,6 +129,28 @@ namespace kc {
     void WorldScreen::refreshHotbar() {
     hotbar_.refresh(Runtime::get().renderThread->getUI());
 }
+
+void WorldScreen::onPlayerDeath() {
+        auto& world = Runtime::get().kingscraft->getWorld();
+        MessageBus::Get().send(ThreadName::Input, []() {
+            Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
+        });
+        world.getPlayerController().setCaptured(false);
+        world.getPlayerController().resetMouse();
+        deathScreen_.show(Runtime::get().renderThread->getUI());
+    }
+
+    void WorldScreen::onPlayerRespawn() {
+        auto& world = Runtime::get().kingscraft->getWorld();
+        MessageBus::Get().send(ThreadName::Input, []() {
+            Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
+        });
+        world.getPlayerController().setCaptured(true);
+        world.getPlayerController().resetMouse();
+        deathScreen_.hide(Runtime::get().renderThread->getUI());
+    }
 
 void WorldScreen::render(FrameScene& scene) {
         auto& world = Runtime::get().kingscraft->getWorld();
@@ -218,12 +225,11 @@ void WorldScreen::render(FrameScene& scene) {
         glm::vec3 origin = cam.getPosition();
         glm::vec3 dir = cam.getForward();
 
-        auto hit = raycastBlock(origin, dir, 8.0f, Runtime::get().kingscraft->getWorld());
+        auto hit = raycastBlock(origin, dir, 8.0f, world);
         if (!hit.hit) return;
 
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            Runtime::get().kingscraft->getWorld().setBlock(hit.x, hit.y, hit.z, Blocks::AIR);
-            Runtime::get().kingscraft->getWorld().remeshDirtyChunks();
+            EventManager::get().callEvent<BlockBreakEvent>(hit.x, hit.y, hit.z);
             return;
         }
 
@@ -239,21 +245,15 @@ void WorldScreen::render(FrameScene& scene) {
         int placeY = hit.y + faceNormals[hit.face][1];
         int placeZ = hit.z + faceNormals[hit.face][2];
 
-        if (placeY < 0 || placeY >= Runtime::get().kingscraft->getWorld().getHeight()) return;
-
         const RegistryKey<Block>& key = hotbar_.getSlotBlock(hotbar_.getSelectedSlot());
         if (!key) return;
 
-        const Block& block = key;
-        if (&block == Blocks::AIR) return;
+        const uint64_t replacedEnc = world.getBlock(placeX, placeY, placeZ);
+        RegistryKey<Block> replaced{
+            replacedEnc, Registry<Block>::getRegistry().getIdentifier(replacedEnc)};
 
-        if (world.getPlayerController().getBodyAABB().overlaps(
-                CollisionSystem::blockAABBAt(block, placeX, placeY, placeZ))) {
-            return;
-        }
-
-        Runtime::get().kingscraft->getWorld().setBlock(placeX, placeY, placeZ, block);
-        Runtime::get().kingscraft->getWorld().remeshDirtyChunks();
+        EventManager::get().callEvent<BlockPlaceEvent>(
+            placeX, placeY, placeZ, key, std::move(replaced), hit.face);
     }
 
 } // namespace kc

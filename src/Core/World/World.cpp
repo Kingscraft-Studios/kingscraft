@@ -4,9 +4,14 @@
 #include <cmath>
 
 #include "Bus/MessageBus.hpp"
+#include "Core/Registry.hpp"
 #include "Core/Runtime.hpp"
 #include "Core/Blocks/Block.hpp"
 #include "Core/World/Physics/Gravity.hpp"
+#include "Event/EventManager.hpp"
+#include "Event/Events/BlockChangedEvent.hpp"
+#include "Event/Events/ChunkLoadedEvent.hpp"
+#include "Event/Events/ChunkUnloadedEvent.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/IO.hpp"
@@ -154,6 +159,9 @@ namespace kc {
         if (!chunk) return false;
         int lx = worldX - gx * chunkSize_;
         int lz = worldZ - gz * chunkSize_;
+
+        const uint64_t previousEncoded = getBlock(worldX, worldY, worldZ);
+        const uint64_t currentEncoded = block.getEncodedId();
         chunk->setBlock(lx, worldY, lz, block.getEncodedId());
 
         // chunk->setBlock copy-on-writes to a fresh buffer; point the cache at
@@ -168,6 +176,13 @@ namespace kc {
         else if (lx == chunkSize_ - 1) queueGateRemesh(gx + 1, gz, 5);   // +X neighbor: re-cut its -X face
         if (lz == 0) queueGateRemesh(gx, gz - 1, 2);                // -Z neighbor: re-cut its +Z face
         else if (lz == chunkSize_ - 1) queueGateRemesh(gx, gz + 1, 3); // +Z neighbor: re-cut its -Z face
+
+        EventManager::get().callEvent<BlockChangedEvent>(
+            worldX, worldY, worldZ,
+            RegistryKey<Block>{previousEncoded,
+                Registry<Block>::getRegistry().getIdentifier(previousEncoded)},
+            RegistryKey<Block>{currentEncoded,
+                Registry<Block>::getRegistry().getIdentifier(currentEncoded)});
 
         return true;
     }
@@ -280,6 +295,8 @@ namespace kc {
 
         chunks_[makeChunkKey(gridX, gridZ)] = std::move(chunk);
         chunkCacheDirty_ = true;
+
+        EventManager::get().callEvent<ChunkLoadedEvent>(gridX, gridZ);
     }
 
     void World::unloadChunk(int gridX, int gridZ) {
@@ -304,7 +321,7 @@ namespace kc {
         pendingCleanup_[idx].push_back(std::move(it->second));
         chunks_.erase(it);
 
-        // NEW: Signal render thread to defer GPU cleanup
+        // Signal render thread to defer GPU cleanup
         MessageBus::Get().send(ThreadName::Renderer, [key]() {
             Runtime::get().renderThread->getUploader().unload(key);
         });
@@ -314,6 +331,8 @@ namespace kc {
             blockCache_.erase(key);
         }
         chunkCacheDirty_ = true;
+
+        EventManager::get().callEvent<ChunkUnloadedEvent>(gridX, gridZ);
 
         // Neighbors lose this chunk's opaque border — mark them so their
         // faces toward it are re-emitted on the gen thread.
@@ -599,6 +618,8 @@ namespace kc {
             r.chunk->upload();
             chunks_[key] = std::move(r.chunk);
             chunkCacheDirty_ = true;
+
+            EventManager::get().callEvent<ChunkLoadedEvent>(r.gx, r.gz);
 
             // Border faces of already-loaded neighbors must be re-culled now
             // that this chunk exists. One-way only: we never mark during a

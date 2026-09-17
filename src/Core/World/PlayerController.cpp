@@ -3,6 +3,9 @@
 #include "Core/Keys.hpp"
 #include "Core/World/Physics/CollisionSystem.hpp"
 #include "Core/World/World.hpp"
+#include "Event/EventManager.hpp"
+#include "Event/Events/PlayerDeathEvent.hpp"
+#include "Event/Events/PlayerRespawnEvent.hpp"
 #include "Threads/InputThread.hpp"
 #include "Vulkan/GLFWWindow.hpp"
 #include <cmath>
@@ -79,6 +82,7 @@ namespace kc {
             dead_ = true;
             velocityY_ = 0.0f;
             jumpRequested_ = false;
+            EventManager::get().callEvent<PlayerDeathEvent>(DeathCause::Void);
             return;
         }
 
@@ -102,6 +106,7 @@ namespace kc {
         respawnGrace_ = 0.4f;
         spawnPending_ = true;
         dead_ = false;
+        EventManager::get().callEvent<PlayerRespawnEvent>();
     }
 
     void PlayerController::updateProjection(VkExtent2D extent, float fov, float nearPlane, float farPlane) {

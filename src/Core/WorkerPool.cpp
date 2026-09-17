@@ -1,6 +1,7 @@
 #include "Core/WorkerPool.hpp"
 
 #include "Core/Runtime.hpp"
+#include "Event/detail/CurrentThread.hpp"
 #include "Util/LogUtils.hpp"
 
 namespace kc {
@@ -11,7 +12,8 @@ namespace kc {
         mailboxThread = std::thread([this](){ run();});
     }
 
-    void WorkerPool::run() {            // existing loop, on mailboxThread
+    void WorkerPool::run() {
+        detail::setCurrentThread(ThreadName::WorkerPool);
         Message msg;
         while (running) {
             if (mailbox->try_pop(msg)) {
@@ -81,6 +83,7 @@ namespace kc {
 
         transientWorkers.emplace_back(TransientWorker{
             std::thread([task = std::move(task), p = std::move(p)]() mutable {
+                detail::setCurrentThread(ThreadName::WorkerPool);
                 try {
                     task();
                 } catch (const std::exception& e) {

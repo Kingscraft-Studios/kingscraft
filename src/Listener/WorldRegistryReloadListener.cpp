@@ -6,10 +6,10 @@
 
 namespace kc {
 
-    void WorldRegistryReloadListener::onRegistryReloadPost(RegistryReloadPostEvent&) {
-        // Fired on the GameLogic thread (the renderer sent the message that
-        // fired this event), after renderer-side offsets are patched — safe to
-        // remesh against the fresh block textures.
+    void WorldRegistryReloadListener::onRegistryReload(RegistryReloadEvent&) {
+        // Routed to the GameLogic thread by the dispatcher, after the renderer
+        // listener (Highest priority) finished rebuilding — safe to remesh
+        // against the fresh block textures.
         Runtime::get().kingscraft->getWorld().remeshAllChunks();
 
         if (auto* worldScreen = dynamic_cast<WorldScreen*>(

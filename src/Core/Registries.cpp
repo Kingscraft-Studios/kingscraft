@@ -56,8 +56,6 @@ namespace kc {
             LogUtils::info(ThreadName::Registry, "Registry reload starting...");
 
             try {
-                EventManager::get().callEvent<RegistryReloadPreEvent>();
-
                 Registry<Block>::getRegistry().clear();
                 build();
 

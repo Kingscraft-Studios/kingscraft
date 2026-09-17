@@ -8,8 +8,6 @@
 
 #include "Bus/MessageBus.hpp"
 #include "Core/Registries.hpp"
-#include "Event/EventManager.hpp"
-#include "Event/Events/RegistryReloadPostEvent.hpp"
 #include "Renderer/FrameScene.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/Engine.hpp"
@@ -96,22 +94,18 @@ namespace kc {
     }
 
     void RenderEngine::refreshFromReload() {
-        // Runs inside the renderer mailbox, before the frame: the block set and
-        // its texture array changed, so the descriptor layout bound to the old
+        // Routed to the Renderer thread by the dispatcher (via the
+        // RenderRegistryReloadListener), before the frame: the block set and its
+        // texture array changed, so the descriptor layout bound to the old
         // pipeline layout is stale. Idle the GPU and rebuild everything the
-        // initial init created, then hand the game thread its half.
+        // initial init created. The game-side remesh runs on the GameLogic
+        // mailbox once this listener completes (dispatch waits on it).
         vkDeviceWaitIdle(device.device());
 
         textureCache_->updateFromRegistry();
         worldRenderer.cleanup();
         worldRenderer.init(device, *textureCache_, renderer->getWorldRenderPass());
         uiSystem->setBlockTexture(textureCache_->getImageView(), textureCache_->getSampler());
-
-        // Offsets are patched and the renderer is rebuilt: hand the game thread
-        // its half by firing the post event there (a safe handoff, never raced).
-        MessageBus::Get().send(ThreadName::GameLogic, []() {
-            EventManager::get().callEvent<RegistryReloadPostEvent>();
-        });
     }
 
     void RenderEngine::recreateSwapChain() {

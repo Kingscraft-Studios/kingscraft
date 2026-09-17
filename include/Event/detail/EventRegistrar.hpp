@@ -1,5 +1,6 @@
 #pragma once
 #include "TypeTag.hpp"
+#include "Bus/Message.hpp"
 #include "Event/EventPriority.hpp"
 #include "Event/Events/Event.hpp"
 #include "Event/Listener.hpp"
@@ -18,6 +19,11 @@ namespace kc::detail {
         template<typename L, typename E>
         static constexpr EventPriority priority() {
             return L::kcPriority((TypeTag<E>*)nullptr);
+        }
+
+        template<typename L, typename E>
+        static constexpr ThreadName thread() {
+            return L::kcThread((TypeTag<E>*)nullptr);
         }
     };
 

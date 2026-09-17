@@ -8,14 +8,14 @@
 namespace kc {
 
     // Renderer-side listener: rebuilds the texture array, world renderer, and
-    // UI block texture after a registry reload. The rebuild patches per-block
-    // texture offsets that the mesher reads, so this listener finishes before
-    // RegistryReloadPostEvent is fired and game-side systems remesh.
+    // UI block texture after a registry reload. Routed to the Renderer thread
+    // at Highest priority so the GPU-side rebuild finishes before the game-side
+    // remesh listener (GameLogic, High) runs.
     class RenderRegistryReloadListener : public Listener {
     public:
         // Must be public: EventManager's generated dispatch lambda calls the
         // kcOnEvent helper from outside the class.
-        KC_EVENT_HANDLER(RegistryReloadEvent, onRegistryReload)
+        KC_EVENT_HANDLER(RegistryReloadEvent, onRegistryReload, EventPriority::Highest, ThreadName::Renderer)
 
     private:
         void onRegistryReload(RegistryReloadEvent& event);

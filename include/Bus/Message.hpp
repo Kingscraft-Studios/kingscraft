@@ -4,6 +4,7 @@
 namespace kc {
 
 enum class ThreadName {
+    Unknown,
     Engine,
     Renderer,
     Registry,

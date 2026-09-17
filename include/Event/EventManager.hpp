@@ -105,7 +105,8 @@ namespace kc {
                     [listener](Event& event) {
                         ListenerType::template kcOnEvent<ListenerType>(*listener, event,
                             (detail::TypeTag<EventType>*)nullptr);
-                    }
+                    },
+                    detail::EventRegistrar::thread<ListenerType, EventType>()
                 });
             }
         });
@@ -144,7 +145,7 @@ namespace kc {
         static_assert(std::is_base_of_v<Event, CleanEvent>,
                       "callEvent<E>() requires E derived from kc::Event");
 
-        CleanEvent event(std::forward<Args>(args)...);
+        auto event = std::make_shared<CleanEvent>(std::forward<Args>(args)...);
         EventRegistry::get().template ensure<CleanEvent>();
         dispatcher.dispatch(event, detail::typeId<CleanEvent>());
     }

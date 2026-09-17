@@ -63,6 +63,7 @@ namespace kc {
 
         const char* threadToString(ThreadName thread) {
             switch (thread) {
+                case ThreadName::Unknown:     return "Unknown";
                 case ThreadName::Engine:       return "Engine";
                 case ThreadName::Renderer:     return "Renderer";
                 case ThreadName::Registry: return "Registry";
@@ -70,7 +71,6 @@ namespace kc {
                 case ThreadName::GameLogic: return "GameLogic";
                 case ThreadName::WorkerPool: return "WorkerPool";
                 case ThreadName::MessageBus: return "MessageBus";
-                break;
             }
 
             return "Unknown";

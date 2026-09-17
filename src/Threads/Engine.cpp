@@ -2,6 +2,7 @@
 #include "Threads/Logger.hpp"
 #include "Bus/MessageBus.hpp"
 #include "Core/Bootstrapper.hpp"
+#include "Event/detail/CurrentThread.hpp"
 
 #include <chrono>
 
@@ -18,6 +19,7 @@ namespace kc {
         mailbox_ = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::Engine, mailbox_);
         mailboxThread = std::thread([this]() {
+            detail::setCurrentThread(ThreadName::Engine);
             while (runningMailbox) {
                 Message msg;
                 while (mailbox_->pop_for(msg, std::chrono::milliseconds(100))) {
@@ -70,6 +72,7 @@ namespace kc {
     }
 
     void Engine::run() {
+        detail::setCurrentThread(ThreadName::Engine);
         while (running_) {
             {
                 std::unique_lock lock(runMtx_);
