@@ -50,12 +50,8 @@ namespace kc {
         MessageBus::Get().send(ThreadName::Input, []() {
             Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
         });
-        fpsCounter_.init(Runtime::get().renderThread->getUI());
-        Engine::Get().getDiagnostics().setDispatcher(ThreadName::Renderer, 4.0,
-            [this](const FrameMetrics& frame) {
-                fpsCounter_.setFrame(frame);
-                fpsCounter_.update(Runtime::get().renderThread->getUI());
-            });
+        fpsCounter_.init(Runtime::get().renderThread->getUI(),
+            static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         hotbar_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         deathScreen_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
 
@@ -83,7 +79,7 @@ namespace kc {
                 hotbar_.selectSlot(Runtime::get().renderThread->getUI(), hotbar_.getSelectedSlot() + 1);
         });
 
-        for (int i = 0; i < UiHotbar::SLOT_COUNT; ++i) {
+        for (int i = 0; i < UiHotbarOverlay::SLOT_COUNT; ++i) {
             int key = Keys::_1 + i;
             MessageBus::Get().send(ThreadName::Input, [key, i, this]() {
                 Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Screen, {key}, [this, i]() {
@@ -201,7 +197,6 @@ void WorldScreen::render(FrameScene& scene) {
         }
     }
     void WorldScreen::cleanup() {
-        Engine::Get().getDiagnostics().clearDispatcher(ThreadName::Renderer);
         Runtime::get().renderThread->getUI().setScrollCallback(nullptr);
         hotbar_.cleanup(Runtime::get().renderThread->getUI());
         fpsCounter_.cleanup(Runtime::get().renderThread->getUI());

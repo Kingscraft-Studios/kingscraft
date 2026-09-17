@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Overlay/UiOverlay.hpp"
 #include "UI/Elements/UiRect.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiButton.hpp"
@@ -9,21 +10,21 @@ namespace kc {
 
     class UiWrapper;
 
-    class UiDeathScreen {
+    class UiDeathScreenOverlay : public UiOverlay {
     public:
-        UiDeathScreen() = default;
-        ~UiDeathScreen() = default;
+        UiDeathScreenOverlay() = default;
+        ~UiDeathScreenOverlay() = default;
 
-        UiDeathScreen(const UiDeathScreen&) = delete;
-        UiDeathScreen& operator=(const UiDeathScreen&) = delete;
+        UiDeathScreenOverlay(const UiDeathScreenOverlay&) = delete;
+        UiDeathScreenOverlay& operator=(const UiDeathScreenOverlay&) = delete;
 
-        void init(UiWrapper& ui, float screenW, float screenH);
-        void cleanup(UiWrapper& ui);
+        void init(UiWrapper& ui, float screenW, float screenH) override;
+        void cleanup(UiWrapper& ui) override;
 
         void show(UiWrapper& ui);
         void hide(UiWrapper& ui);
 
-        void resize(float screenW, float screenH);
+        void resize(float screenW, float screenH) override;
 
     private:
         float screenW_ = 0.0f;

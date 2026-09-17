@@ -1,4 +1,4 @@
-#include "UI/Overlay/UiHotbar.hpp"
+#include "UI/Overlay/UiHotbarOverlay.hpp"
 #include "UI/UiWrapper.hpp"
 #include "UI/Engine/UiStyle.hpp"
 #include "Core/Blocks/Blocks.hpp"
@@ -7,7 +7,7 @@
 
 namespace kc {
 
-    void UiHotbar::init(UiWrapper& ui, float screenW, float screenH) {
+    void UiHotbarOverlay::init(UiWrapper& ui, float screenW, float screenH) {
         screenW_ = screenW;
         screenH_ = screenH;
         bgStyle_ = ui.registerStyle(UiStyle{
@@ -103,7 +103,7 @@ namespace kc {
         group_.addToWrapper(ui);
     }
 
-    void UiHotbar::refresh(UiWrapper& ui) {
+    void UiHotbarOverlay::refresh(UiWrapper& ui) {
         UiGuard guard(ui);
 
         auto iconLayer = [](Block* block) -> int {
@@ -127,16 +127,16 @@ namespace kc {
         }
     }
 
-    void UiHotbar::cleanup(UiWrapper& ui) {
+    void UiHotbarOverlay::cleanup(UiWrapper& ui) {
         group_.removeFromWrapper(ui);
     }
 
-    void UiHotbar::resize(float screenW, float screenH) {
+    void UiHotbarOverlay::resize(float screenW, float screenH) {
         screenW_ = screenW;
         screenH_ = screenH;
     }
 
-    void UiHotbar::selectSlot(UiWrapper& ui, int index) {
+    void UiHotbarOverlay::selectSlot(UiWrapper& ui, int index) {
         UiGuard guard(ui);
         selectedSlot_ = ((index % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
 

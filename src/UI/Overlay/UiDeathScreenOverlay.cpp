@@ -1,4 +1,4 @@
-#include "UI/Overlay/UiDeathScreen.hpp"
+#include "UI/Overlay/UiDeathScreenOverlay.hpp"
 
 #include "Core/Constants.hpp"
 #include "UI/UiWrapper.hpp"
@@ -6,7 +6,7 @@
 
 namespace kc {
 
-    void UiDeathScreen::init(UiWrapper& ui, float screenW, float screenH) {
+    void UiDeathScreenOverlay::init(UiWrapper& ui, float screenW, float screenH) {
         screenW_ = screenW;
         screenH_ = screenH;
 
@@ -73,11 +73,11 @@ namespace kc {
         group_.addToWrapper(ui);
     }
 
-    void UiDeathScreen::cleanup(UiWrapper& ui) {
+    void UiDeathScreenOverlay::cleanup(UiWrapper& ui) {
         group_.removeFromWrapper(ui);
     }
 
-    void UiDeathScreen::show(UiWrapper& ui) {
+    void UiDeathScreenOverlay::show(UiWrapper& ui) {
         UiGuard guard(ui);
         group_.setVisible(true);
         tint_.updateLayout(screenW_, screenH_);
@@ -86,12 +86,12 @@ namespace kc {
         respawnButton_.updateLayout(screenW_, screenH_);
     }
 
-    void UiDeathScreen::hide(UiWrapper& ui) {
+    void UiDeathScreenOverlay::hide(UiWrapper& ui) {
         UiGuard guard(ui);
         group_.setVisible(false);
     }
 
-    void UiDeathScreen::resize(float screenW, float screenH) {
+    void UiDeathScreenOverlay::resize(float screenW, float screenH) {
         screenW_ = screenW;
         screenH_ = screenH;
     }

@@ -3,9 +3,9 @@
 #include "Core/Screen.hpp"
 #include "Core/World/TerrainRenderer.hpp"
 #include "Core/World/World.hpp"
-#include "UI/Debug/UiFpsCounter.hpp"
-#include "UI/Overlay/UiHotbar.hpp"
-#include "UI/Overlay/UiDeathScreen.hpp"
+#include "UI/Overlay/UiFpsCounterOverlay.hpp"
+#include "UI/Overlay/UiHotbarOverlay.hpp"
+#include "UI/Overlay/UiDeathScreenOverlay.hpp"
 #include "UI/Elements/UiRect.hpp"
 #include <memory>
 #include <glm/glm.hpp>
@@ -35,10 +35,10 @@ namespace kc {
         VkExtent2D extent_{};
 
         TerrainRenderer terrainRenderer_;
-        UiFpsCounter fpsCounter_;
+        UiFpsCounterOverlay fpsCounter_;
         bool wasDebugOn_ = false;
-        UiHotbar hotbar_;
-        UiDeathScreen deathScreen_;
+        UiHotbarOverlay hotbar_;
+        UiDeathScreenOverlay deathScreen_;
         UiRect crosshairH_;
         UiRect crosshairV_;
         uint32_t crosshairStyle_ = 0;

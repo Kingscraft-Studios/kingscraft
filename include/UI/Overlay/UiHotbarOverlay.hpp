@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Overlay/UiOverlay.hpp"
 #include "UI/Elements/UiRect.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiImage.hpp"
@@ -13,23 +14,23 @@ namespace kc {
 
     class UiWrapper;
 
-    class UiHotbar {
+    class UiHotbarOverlay : public UiOverlay {
     public:
         static constexpr int SLOT_COUNT = 9;
         static constexpr float SLOT_SIZE = 40.0f;
         static constexpr float SLOT_GAP = 4.0f;
         static constexpr float BOTTOM_MARGIN = 20.0f;
 
-        UiHotbar() = default;
-        ~UiHotbar() = default;
+        UiHotbarOverlay() = default;
+        ~UiHotbarOverlay() = default;
 
-        void init(UiWrapper& ui, float screenW, float screenH);
-        void cleanup(UiWrapper& ui);
+        void init(UiWrapper& ui, float screenW, float screenH) override;
+        void cleanup(UiWrapper& ui) override;
         // Recomputes the block-icon texture layers after a registry reload and
         // patches the existing styles in place (no pool growth).
         void refresh(UiWrapper& ui);
 
-        void resize(float screenW, float screenH);
+        void resize(float screenW, float screenH) override;
         void selectSlot(UiWrapper& ui, int index);
         int getSelectedSlot() const { return selectedSlot_.load(std::memory_order_relaxed); }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Overlay/UiOverlay.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiGroup.hpp"
 #include "Util/TimeUtil.hpp"
@@ -9,12 +10,12 @@ namespace kc {
 
     class UiWrapper;
 
-    class UiFpsCounter {
+    class UiFpsCounterOverlay : public UiOverlay {
     public:
-        void init(UiWrapper& ui);
+        void init(UiWrapper& ui, float screenW, float screenH) override;
         void update(UiWrapper& ui);
         void setFrame(const FrameMetrics& frame);
-        void cleanup(UiWrapper& ui);
+        void cleanup(UiWrapper& ui) override;
 
     private:
         UiGroup group_;

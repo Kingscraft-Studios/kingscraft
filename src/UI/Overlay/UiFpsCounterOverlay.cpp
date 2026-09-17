@@ -1,10 +1,14 @@
-#include "UI/Debug/UiFpsCounter.hpp"
+#include "UI/Overlay/UiFpsCounterOverlay.hpp"
 #include "UI/UiWrapper.hpp"
 #include "UI/Engine/UiStyle.hpp"
+#include "Threads/Engine.hpp"
 
 namespace kc {
 
-    void UiFpsCounter::init(UiWrapper& ui) {
+    void UiFpsCounterOverlay::init(UiWrapper& ui, float screenW, float screenH) {
+        (void)screenW;
+        (void)screenH;
+
         styleIndex_ = ui.registerStyle(UiStyle{
             .mode = RenderMode::Font,
             .color1 = {1.0f, 1.0f, 1.0f, 1.0f}
@@ -43,9 +47,17 @@ namespace kc {
         group_.addToWrapper(ui);
 
         lastTime_ = TimeUtil::uptimeSeconds();
+
+        // Per-frame metrics feed (Renderer thread). Stays registered for the
+        // lifetime of this overlay and is released in cleanup().
+        Engine::Get().getDiagnostics().setDispatcher(ThreadName::Renderer, 4.0,
+            [this, &ui](const FrameMetrics& frame) {
+                setFrame(frame);
+                update(ui);
+            });
     }
 
-    void UiFpsCounter::update(UiWrapper& ui) {
+    void UiFpsCounterOverlay::update(UiWrapper& ui) {
         UiGuard guard(ui);
         double now = TimeUtil::uptimeSeconds();
         double dt = now - lastTime_;
@@ -91,7 +103,7 @@ namespace kc {
         }
     }
 
-    void UiFpsCounter::setFrame(const FrameMetrics& frame) {
+    void UiFpsCounterOverlay::setFrame(const FrameMetrics& frame) {
         latestCpuMs_ = frame.gpu.cpuFrameMs;
         latestGpuMs_ = frame.gpu.gpuFrameMs;
         latestWorldGpuMs_ = frame.gpu.worldGpuMs;
@@ -116,7 +128,8 @@ namespace kc {
         latestCIdle_ = frame.gpu.cIdle;
     }
 
-    void UiFpsCounter::cleanup(UiWrapper& ui) {
+    void UiFpsCounterOverlay::cleanup(UiWrapper& ui) {
+        Engine::Get().getDiagnostics().clearDispatcher(ThreadName::Renderer);
         group_.removeFromWrapper(ui);
     }
 
