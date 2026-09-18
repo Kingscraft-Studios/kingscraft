@@ -3,6 +3,7 @@
 #include "Core/World/Chunk.hpp"
 #include "Core/World/ChunkMesher.hpp"
 #include "Core/World/ITerrainGenerator.hpp"
+#include "Core/World/WorldMetadata.hpp"
 #include <vector>
 #include <array>
 #include <memory>
@@ -23,7 +24,7 @@ namespace kc {
 
     class World {
     public:
-        World(ITerrainGenerator& terrainGen, int chunkSize, int height);
+        World(ITerrainGenerator& terrainGen, int chunkSize, int height, const WorldMetadata& metadata);
         ~World();
 
         void unloadChunk(int gridX, int gridZ);
@@ -38,6 +39,8 @@ namespace kc {
 
         int getChunkSize() const { return chunkSize_; }
         int getHeight() const { return height_; }
+
+        uint64_t getWorldTime() const { return worldTime_; }
 
         const Chunk* getChunk(int gridX, int gridZ) const;
 
@@ -91,6 +94,15 @@ namespace kc {
         ITerrainGenerator& terrainGen_;
         int chunkSize_;
         int height_;
+        WorldMetadata metadata_;
+        // False when world.kcw failed to load (corrupt / future version): the
+        // unreadable file is left untouched on shutdown instead of overwritten.
+        bool persistMetadata_ = false;
+        // Set once the async world.kcw load has resolved (any result). The
+        // first World::tick waits for this, so an ultra-fast ENTER_WORLD click
+        // can never stream chunks or run physics on the unloaded defaults.
+        bool loadResolved_ = false;
+        uint64_t worldTime_ = 0;
         std::unordered_map<uint64_t, std::unique_ptr<Chunk>> chunks_;
         std::array<std::vector<std::unique_ptr<Chunk>>, CLEANUP_DELAY + 1> pendingCleanup_;
         uint64_t frameCount_ = 0;

@@ -100,6 +100,19 @@ namespace kc {
         }
     }
 
+    void PlayerController::setSpawn(const glm::vec3& spawn) {
+        spawnPos_ = spawn;
+    }
+
+    void PlayerController::restore(const glm::vec3& position, float yaw, float pitch, bool snapToSurface) {
+        bodyPos_ = position;
+        camera_.setPosition(bodyPos_ + glm::vec3(Attributes::PLAYER_WIDTH * 0.5f, Attributes::EYE_HEIGHT, Attributes::PLAYER_WIDTH * 0.5f));
+        camera_.setRotation(yaw, pitch);
+        // Only a fresh default spawn needs the surface snap; a persisted
+        // position keeps its exact Y (e.g. inside a dug-out room / box).
+        spawnPending_ = snapToSurface;
+    }
+
     void PlayerController::respawn() {
         bodyPos_ = spawnPos_;
         velocityY_ = 0.0f;

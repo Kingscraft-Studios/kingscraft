@@ -29,6 +29,11 @@ namespace kc {
         glm::vec3 getBodyPosition() const { return bodyPos_; }
         float getVelocityY() const { return velocityY_; }
         void setVelocityY(float v) { velocityY_ = v; }
+        glm::vec3 getSpawn() const { return spawnPos_; }
+        // Changes the respawn point without moving the player.
+        void setSpawn(const glm::vec3& spawn);
+        // Restores a saved player state (position + facing) on world load.
+        void restore(const glm::vec3& position, float yaw, float pitch, bool snapToSurface = false);
         bool isDead() const { return dead_; }
         void respawn();
         AABB getBodyAABB() const {

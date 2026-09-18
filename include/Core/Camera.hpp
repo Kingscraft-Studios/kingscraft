@@ -13,6 +13,9 @@ namespace kc {
 
         void setRotation(float yaw, float pitch) { yaw_ = yaw; pitch_ = pitch; updateVectors(); }
 
+        float getYaw() const { return yaw_; }
+        float getPitch() const { return pitch_; }
+
         void moveForward(float amount) {
             glm::vec3 dir = glm::normalize(glm::vec3(forward_.x, 0.0f, forward_.z));
             position_ += dir * amount;

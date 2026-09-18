@@ -3,6 +3,7 @@
 #include "Templates/ModelTemplate.hpp"
 #include "Templates/RegionTemplate.hpp"
 #include "Templates/TextureTemplate.hpp"
+#include "Templates/WorldMetadataTemplate.hpp"
 
 namespace kc {
     class IO;
@@ -11,10 +12,13 @@ namespace kc {
     class IOBuiltInTemplates {
     public:
         explicit IOBuiltInTemplates(IO& io) : chunkTemplate(io), regionTemplate(io, chunkTemplate),
+                                        worldMetadataTemplate(io),
                                         textureTemplate(io), modelTemplate(io, textureTemplate) {}
 
         ChunkTemplate& getChunkTemplate() { return chunkTemplate; }
         RegionTemplate& getRegionTemplate() { return regionTemplate; }
+
+        WorldMetadataTemplate& getWorldMetadataTemplate() { return worldMetadataTemplate; }
 
         ModelTemplate& getModelTemplate() { return modelTemplate; }
         TextureTemplate& getTextureTemplate() { return textureTemplate; }
@@ -22,6 +26,7 @@ namespace kc {
     private:
         ChunkTemplate chunkTemplate;
         RegionTemplate regionTemplate;
+        WorldMetadataTemplate worldMetadataTemplate;
 
         TextureTemplate textureTemplate;
         ModelTemplate modelTemplate;

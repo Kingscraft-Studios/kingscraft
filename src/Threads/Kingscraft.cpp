@@ -4,6 +4,7 @@
 #include "Core/Keys.hpp"
 #include "Core/World/WorldScreen.hpp"
 #include "Threads/Engine.hpp"
+#include "Threads/IO.hpp"
 #include "Util/TimeUtil.hpp"
 #include "Util/LogUtils.hpp"
 
@@ -16,6 +17,9 @@
 
 namespace kc {
     void Kingscraft::start() {
+        mailbox_ = std::make_shared<Mailbox>();
+        MessageBus::Get().subscribe(ThreadName::GameLogic, mailbox_);
+
         MessageBus::Get().request<DecodedTextureData>(ThreadName::Engine,[] {
             return IO::Get().getBuiltinTemplates().getTextureTemplate().loadDecoded("resources/textures/logo/Kingscraft-Logo.png");
         }, ThreadName::Input, [](DecodedTextureData tex) {
@@ -24,9 +28,15 @@ namespace kc {
         });
 
         prevTime_ = TimeUtil::uptimeSeconds();
-        mailbox_ = std::make_shared<Mailbox>();
-        MessageBus::Get().subscribe(ThreadName::GameLogic, mailbox_);
-        world = std::make_unique<World>(terrainGen, RendererSettings::get().chunkSize, RendererSettings::get().worldHeight);
+
+        // Fresh WorldMetadata defaults a brand-new world; World loads the real
+        // world.kcw async on the engine (IO) thread via MessageBus::request and
+        // applies it on this thread before the first tick (re-seeding terrain
+        // and restoring spawn/time through metadata_.settings / player state).
+        WorldMetadata fresh;
+        terrainGen = std::make_unique<DefaultTerrainGenerator>(fresh.settings);
+        world = std::make_unique<World>(*terrainGen, RendererSettings::get().chunkSize,
+                                        RendererSettings::get().worldHeight, fresh);
         registerAllKeys();
         registerUICallbacks();
         screenManager->setScreen<MainMenu>();

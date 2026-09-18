@@ -21,6 +21,7 @@ namespace kc {
 
     void IO::flushTemplates() {
         builtInTemplates.getRegionTemplate().flush();
+        builtInTemplates.getWorldMetadataTemplate().flush();
     }
 
     IO& IO::Get() {

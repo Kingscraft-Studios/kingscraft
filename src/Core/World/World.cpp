@@ -17,6 +17,7 @@
 #include "Threads/IO.hpp"
 #include "Threads/RenderThread.hpp"
 #include "Core/WorkerPool.hpp"
+#include "Util/LogUtils.hpp"
 
 namespace {
 
@@ -85,11 +86,36 @@ namespace {
 
 namespace kc {
 
-    World::World(ITerrainGenerator& terrainGen, int chunkSize, int height)
-        : terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height) {
+    World::World(ITerrainGenerator& terrainGen, int chunkSize, int height, const WorldMetadata& metadata)
+        : terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height), metadata_(metadata) {
+        persistMetadata_ = true;
         noiseDone_ = WorkerPool::get().startWorker([this]() { noiseThreadFunc(); });
         meshDone_ = WorkerPool::get().startWorker([this]() { meshThreadFunc(); });
         playerController_.init(Runtime::get().inputThread->getKeyBindHandler());
+
+        worldTime_ = metadata_.worldTime;
+        playerController_.setSpawn(metadata_.spawnPos);
+        playerController_.restore(metadata_.playerPos, metadata_.yaw, metadata_.pitch, true);
+
+        MessageBus::Get().request<WorldMetadataTemplate::LoadOutcome>(
+            ThreadName::Engine,
+            []() { return IO::Get().getBuiltinTemplates().getWorldMetadataTemplate().load(); },
+            ThreadName::GameLogic,
+            [this](WorldMetadataTemplate::LoadOutcome outcome) {
+                persistMetadata_ = outcome.result != WorldMetadataTemplate::LoadResult::Invalid;
+
+                loadResolved_ = true;
+
+                if (outcome.result != WorldMetadataTemplate::LoadResult::Ok) {
+                    return;
+                }
+
+                metadata_ = outcome.metadata;
+                terrainGen_.applySettings(metadata_.settings);
+                worldTime_ = metadata_.worldTime;
+                playerController_.setSpawn(metadata_.spawnPos);
+                playerController_.restore(metadata_.playerPos, metadata_.yaw, metadata_.pitch, false);
+            });
     }
 
     World::~World() {
@@ -99,6 +125,17 @@ namespace kc {
         meshCV_.notify_all();
         if (meshDone_.valid()) meshDone_.wait();
         if (noiseDone_.valid()) noiseDone_.wait();
+
+        if (persistMetadata_) {
+            metadata_.worldTime = worldTime_;
+            metadata_.spawnPos = playerController_.getSpawn();
+            metadata_.playerPos = playerController_.getBodyPosition();
+            metadata_.yaw = playerController_.getCamera().getYaw();
+            metadata_.pitch = playerController_.getCamera().getPitch();
+
+            // TODO: Using IO Sequentially isn't a great idea
+            IO::Get().getBuiltinTemplates().getWorldMetadataTemplate().stageSave(metadata_);
+        }
 
         // Save the overlay: only chunks whose blocks were edited this session.
         // Unedited chunks regenerate from the seed and need no disk copy. IO
@@ -713,7 +750,13 @@ namespace kc {
     }
 
     void World::tick(double dt) {
+        // The async world.kcw load must have resolved (any result) before the
+        // world is allowed to do anything: chunk streaming, gravity and the
+        // player must start from the persisted position, never the defaults.
+        if (!loadResolved_) return;
+
         remeshRequestsThisTick_ = 0;
+        ++worldTime_;
 
         float cameraX = playerController_.getCamera().getPosition().x;
         float cameraZ = playerController_.getCamera().getPosition().z;

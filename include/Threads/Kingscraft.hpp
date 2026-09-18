@@ -48,8 +48,9 @@ private:
     static constexpr double TICK_INTERVAL = 1.0 / TICK_RATE;
 
     std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
-    // TODO: Add a Enum Class to Differ Different TerrainGenerators!
-    DefaultTerrainGenerator terrainGen;
+    // Built from the fresh WorldMetadata's settings; World re-seeds it via
+    // ITerrainGenerator::applySettings once the loaded world.kcw resolves.
+    std::unique_ptr<DefaultTerrainGenerator> terrainGen;
     std::unique_ptr<World> world;
 };
 

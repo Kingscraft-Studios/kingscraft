@@ -10,19 +10,19 @@ namespace kc {
 
     class TerrainGenerator {
     public:
-        TerrainGenerator() {
-            auto& cfg = TerrainGenSettings::get();
-            noise_.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
-            noise_.SetFrequency(cfg.frequency);
-            noise_.SetFractalType(FastNoiseLite::FractalType_FBm);
-            noise_.SetFractalOctaves(cfg.octaves);
-            noise_.SetFractalLacunarity(cfg.lacunarity);
-            noise_.SetFractalGain(cfg.gain);
-            noise_.SetSeed(cfg.seed);
+        TerrainGenerator(const TerrainGenSettings& settings) : settings_(settings) {
+            applySettings(settings_);
+        }
+
+        // Re-seed and re-tune the underlying noise from an updated settings
+        // struct (e.g. a world.kcw load that resolves after construction).
+        void setSettings(const TerrainGenSettings& settings) {
+            settings_ = settings;
+            applySettings(settings_);
         }
 
         float getHeight(float x, float z) const {
-            return noise_.GetNoise(x, z) * TerrainGenSettings::get().amplitude;
+            return noise_.GetNoise(x, z) * settings_.amplitude;
         }
 
         static glm::vec3 getColor(float h) {
@@ -36,17 +36,34 @@ namespace kc {
         }
 
     private:
+        void applySettings(const TerrainGenSettings& settings) {
+            noise_.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
+            noise_.SetFrequency(settings.frequency);
+            noise_.SetFractalType(FastNoiseLite::FractalType_FBm);
+            noise_.SetFractalOctaves(settings.octaves);
+            noise_.SetFractalLacunarity(settings.lacunarity);
+            noise_.SetFractalGain(settings.gain);
+            noise_.SetSeed(settings.seed);
+        }
+
         FastNoiseLite noise_;
+        TerrainGenSettings settings_;
     };
 
     class DefaultTerrainGenerator : public ITerrainGenerator {
     public:
-        DefaultTerrainGenerator() : noise_() {}
+        DefaultTerrainGenerator(const TerrainGenSettings& settings) : noise_(settings), settings_(settings) {}
+
+        // Re-seed after an async world.kcw load resolves.
+        void applySettings(const TerrainGenSettings& settings) override {
+            noise_.setSettings(settings);
+            settings_ = settings;
+        }
 
         std::vector<uint64_t> generateBlocks(
             int gridX, int gridZ, int chunkSize, int height) override
         {
-            auto& cfg = TerrainGenSettings::get();
+            auto& cfg = settings_;
 
             std::vector<uint64_t> blockIds(static_cast<size_t>(chunkSize) * height * chunkSize, 0);
 
@@ -83,6 +100,7 @@ namespace kc {
 
     private:
         TerrainGenerator noise_;
+        TerrainGenSettings settings_;
     };
 
 } // namespace kc
