@@ -221,6 +221,7 @@ namespace kc {
             RegistryKey<Block>{currentEncoded,
                 Registry<Block>::getRegistry().getIdentifier(currentEncoded)});
 
+        mutationGen_.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
 
@@ -279,6 +280,7 @@ namespace kc {
             for (auto& [key, chunk] : chunks_)
                 chunk->markDirty();
         }
+        mutationGen_.fetch_add(1, std::memory_order_relaxed);
         remeshDirtyChunks();
     }
 
@@ -332,6 +334,7 @@ namespace kc {
 
         chunks_[makeChunkKey(gridX, gridZ)] = std::move(chunk);
         chunkCacheDirty_ = true;
+        mutationGen_.fetch_add(1, std::memory_order_relaxed);
 
         EventManager::get().callEvent<ChunkLoadedEvent>(gridX, gridZ);
     }
@@ -368,6 +371,7 @@ namespace kc {
             blockCache_.erase(key);
         }
         chunkCacheDirty_ = true;
+        mutationGen_.fetch_add(1, std::memory_order_relaxed);
 
         EventManager::get().callEvent<ChunkUnloadedEvent>(gridX, gridZ);
 

@@ -42,6 +42,11 @@ namespace kc {
 
         uint64_t getWorldTime() const { return worldTime_; }
 
+        // Incremented whenever block data that the occlusion heightmap reads
+        // could change (block edits, heightmap rebuilds). Consumers use this to
+        // invalidate cached per-frame results.
+        uint64_t getMutationGen() const { return mutationGen_.load(std::memory_order_relaxed); }
+
         const Chunk* getChunk(int gridX, int gridZ) const;
 
         bool setBlock(int worldX, int worldY, int worldZ, const Block& block);
@@ -150,6 +155,8 @@ namespace kc {
 
         mutable std::vector<Chunk*> chunkCache_;
         mutable bool chunkCacheDirty_ = false;
+
+        std::atomic<uint64_t> mutationGen_{0};
 
         PlayerController playerController_;
     };
