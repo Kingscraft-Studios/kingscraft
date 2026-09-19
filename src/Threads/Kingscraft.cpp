@@ -34,7 +34,8 @@ namespace kc {
         // applies it on this thread before the first tick (re-seeding terrain
         // and restoring spawn/time through metadata_.settings / player state).
         WorldMetadata fresh;
-        terrainGen = std::make_unique<DefaultTerrainGenerator>(fresh.settings);
+        biomeProvider = std::make_unique<DefaultBiomeProvider>();
+        terrainGen = std::make_unique<DefaultTerrainGenerator>(fresh.settings, *biomeProvider);
         world = std::make_unique<World>(*terrainGen, RendererSettings::get().chunkSize,
                                         RendererSettings::get().worldHeight, fresh);
         registerAllKeys();

@@ -23,13 +23,19 @@ namespace kc {
             .color1 = {1.0f, 1.0f, 1.0f, 0.8f},
         });
 
-        // Register icon styles: first 3 slots use block textures, rest are solid
+        // Register icon styles: first 6 slots use block textures, rest are solid
         Block* grass = Blocks::GRASS_BLOCK;
         Block* dirt = Blocks::DIRT;
         Block* stone = Blocks::STONE;
+        Block* sand = Blocks::SAND;
+        Block* sandstone = Blocks::SANDSTONE;
+        Block* gravel = Blocks::GRAVEL;
         slotBlocks_[0] = Blocks::GRASS_BLOCK;
         slotBlocks_[1] = Blocks::DIRT;
         slotBlocks_[2] = Blocks::STONE;
+        slotBlocks_[3] = Blocks::SAND;
+        slotBlocks_[4] = Blocks::SANDSTONE;
+        slotBlocks_[5] = Blocks::GRAVEL;
 
         auto iconLayer = [](Block* block) -> int {
             if (!block) return 0;
@@ -37,14 +43,17 @@ namespace kc {
             return block->getTextureBaseOffset() + (side ? side->tileIndex : 0);
         };
 
-        int layers[3] = {
+        int layers[6] = {
             iconLayer(grass),
             iconLayer(dirt),
             iconLayer(stone),
+            iconLayer(sand),
+            iconLayer(sandstone),
+            iconLayer(gravel),
         };
 
         for (int i = 0; i < SLOT_COUNT; ++i) {
-            if (i < 3) {
+            if (i < 6) {
                 iconStyles_[i] = ui.registerStyle(UiStyle{
                     .mode = RenderMode::Texture,
                     .color1 = {1.0f, 1.0f, 1.0f, 1.0f},
@@ -112,13 +121,16 @@ namespace kc {
             return block->getTextureBaseOffset() + (side ? side->tileIndex : 0);
         };
 
-        int layers[3] = {
+        int layers[6] = {
             iconLayer(Blocks::GRASS_BLOCK),
             iconLayer(Blocks::DIRT),
             iconLayer(Blocks::STONE),
+            iconLayer(Blocks::SAND),
+            iconLayer(Blocks::SANDSTONE),
+            iconLayer(Blocks::GRAVEL),
         };
 
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 6; ++i) {
             ui.updateStyle(iconStyles_[i], UiStyle{
                 .mode = RenderMode::Texture,
                 .color1 = {1.0f, 1.0f, 1.0f, 1.0f},

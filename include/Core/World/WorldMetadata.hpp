@@ -21,7 +21,7 @@ namespace kc {
     // world.kcw stores this as text directives; unknown directives are ignored
     // on read, so adding a field later only needs a new tag, not a format bump.
     struct WorldMetadata {
-        TerrainGenSettings settings;         // generator config: seed + noise params + layers
+        TerrainGenSettings settings;         // generator config: seed + noise params (height shaping now lives on Biomes)
         uint32_t generatorId = GENERATOR_ID;
         uint32_t generatorVersion = GENERATOR_VERSION;
         uint32_t blockRegistryVersion = BLOCK_REGISTRY_VERSION;

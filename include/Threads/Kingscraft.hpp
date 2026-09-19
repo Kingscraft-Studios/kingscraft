@@ -7,6 +7,7 @@
 #include "BaseThread.hpp"
 #include "Bus/Mailbox.hpp"
 #include "Core/ScreenManager.hpp"
+#include "Core/World/Biomes/BiomeProvider.hpp"
 #include "Core/World/TerrainGenerator.hpp"
 #include "Core/World/World.hpp"
 #include "Renderer/RendererSettings.hpp"
@@ -50,6 +51,9 @@ private:
     std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
     // Built from the fresh WorldMetadata's settings; World re-seeds it via
     // ITerrainGenerator::applySettings once the loaded world.kcw resolves.
+    // Providing the biome per position (declared first: provider outlives the
+    // generator, which holds it by reference).
+    std::unique_ptr<BiomeProvider> biomeProvider;
     std::unique_ptr<DefaultTerrainGenerator> terrainGen;
     std::unique_ptr<World> world;
 };

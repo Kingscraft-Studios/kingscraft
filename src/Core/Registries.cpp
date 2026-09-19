@@ -11,6 +11,8 @@
 #include <chrono>
 #include <stdexcept>
 
+#include "Core/World/Biomes/Biomes.hpp"
+
 namespace kc {
     std::atomic<bool> Registries::built_{false};
     std::mutex Registries::mutex_;
@@ -22,7 +24,10 @@ namespace kc {
         MessageBus::Get().subscribe(ThreadName::Registry, mailbox);
 
         int pending = 0;
+
+        // Register
         Blocks::registerBlocks(pending);
+        Biomes::registerBiomes();
 
         while (pending > 0) {
             Message msg;
@@ -56,7 +61,11 @@ namespace kc {
             LogUtils::info(ThreadName::Registry, "Registry reload starting...");
 
             try {
+                // Clear
+                Registry<Biome>::getRegistry().clear();
                 Registry<Block>::getRegistry().clear();
+
+                // Build Again
                 build();
 
                 EventManager::get().callEvent<RegistryReloadEvent>();

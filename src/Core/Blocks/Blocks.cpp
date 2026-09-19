@@ -4,6 +4,9 @@
 #include "Core/Blocks/GrassBlock.hpp"
 #include "Core/Blocks/StoneBlock.hpp"
 #include "Core/Blocks/DirtBlock.hpp"
+#include "Core/Blocks/SandBlock.hpp"
+#include "Core/Blocks/SandstoneBlock.hpp"
+#include "Core/Blocks/GravelBlock.hpp"
 #include "Threads/Logger.hpp"
 #include "Util/LogUtils.hpp"
 
@@ -34,6 +37,9 @@ namespace kc {
         loadBlock<GrassBlock>(GRASS_BLOCK, "resources/models/block/grass_block.json", pending, registry);
         loadBlock<StoneBlock>(STONE, "resources/models/block/stone_block.json", pending, registry);
         loadBlock<DirtBlock>(DIRT, "resources/models/block/dirt_block.json", pending, registry);
+        loadBlock<SandBlock>(SAND, "resources/models/block/sand_block.json", pending, registry);
+        loadBlock<SandstoneBlock>(SANDSTONE, "resources/models/block/sandstone_block.json", pending, registry);
+        loadBlock<GravelBlock>(GRAVEL, "resources/models/block/gravel_block.json", pending, registry);
     }
 
 } // namespace kc

@@ -19,8 +19,6 @@ namespace kc {
     //   #K <v>               worldFormatVersion (gate: refuse anything != 1)
     //   #S <seed>            generator seed
     //   #F <freq>            noise frequency
-    //   #A <amplitude>       noise amplitude
-    //   #H <height>          base height
     //   #O <octaves>         fractal octaves
     //   #L <lacunarity>      fractal lacunarity
     //   #N <gain>            fractal gain
@@ -31,6 +29,8 @@ namespace kc {
     //   #PL <x> <y> <z>      player position (body coords)
     //   #PY <yaw> <pitch>    player camera facing
     //
+    // Height shaping (amplitude / base height) moved onto Biomes and is no
+    // longer persisted in world.kcw; the old #A / #H tags are ignored on read.
     // Unknown directives are ignored and absent directives keep the defaults,
     // so future fields only need a new tag (no version bump) and a malformed or
     // future-version file is refused and must not be overwritten.
@@ -74,10 +74,6 @@ namespace kc {
                     if (!(iss >> outcome.metadata.settings.seed)) return fail();
                 } else if (tag == "#F") {
                     if (!(iss >> outcome.metadata.settings.frequency)) return fail();
-                } else if (tag == "#A") {
-                    if (!(iss >> outcome.metadata.settings.amplitude)) return fail();
-                } else if (tag == "#H") {
-                    if (!(iss >> outcome.metadata.settings.baseHeight)) return fail();
                 } else if (tag == "#O") {
                     if (!(iss >> outcome.metadata.settings.octaves)) return fail();
                 } else if (tag == "#L") {
@@ -118,8 +114,6 @@ namespace kc {
             out << "#K " << WORLD_FORMAT_VERSION << '\n';
             out << "#S " << metadata_.settings.seed << '\n';
             out << "#F " << writeFloat(metadata_.settings.frequency) << '\n';
-            out << "#A " << writeFloat(metadata_.settings.amplitude) << '\n';
-            out << "#H " << writeFloat(metadata_.settings.baseHeight) << '\n';
             out << "#O " << metadata_.settings.octaves << '\n';
             out << "#L " << writeFloat(metadata_.settings.lacunarity) << '\n';
             out << "#N " << writeFloat(metadata_.settings.gain) << '\n';
