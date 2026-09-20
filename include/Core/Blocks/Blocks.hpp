@@ -13,6 +13,7 @@ class Blocks {
 public:
     inline static const RegistryKey<Block> AIR = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("air"));
     inline static const RegistryKey<Block> GRASS_BLOCK = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("grass_block"));
+    inline static const RegistryKey<Block> FOREST_GRASS = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("forest_grass"));
     inline static const RegistryKey<Block> STONE = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("stone"));
     inline static const RegistryKey<Block> DIRT = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("dirt"));
     inline static const RegistryKey<Block> SAND = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("sand"));

@@ -13,6 +13,10 @@ namespace kc {
         float lacunarity = 2.0f;
         float gain = 0.5f;
         int seedOffset = 0; // varies the shared world seed per biome
+        // FBM Perlin clusters near zero (measured std ~0.19), so amplitude alone
+        // produces almost no relief. Multiply the raw noise by this before the
+        // amplitude so amplitude actually drives the terrain height.
+        float noiseScale = 3.0f;
     };
 
     struct BiomeTerrainSettings {

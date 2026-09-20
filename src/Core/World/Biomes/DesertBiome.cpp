@@ -4,8 +4,8 @@
 
 namespace kc {
     DesertBiome::DesertBiome() {
-        terrainSettings.baseHeight = 7.0f;
-        terrainSettings.amplitude = 4.0f;
+        terrainSettings.baseHeight = 33.0f;
+        terrainSettings.amplitude = 6.0f;
         terrainSettings.noise.frequency = 0.015f;
         terrainSettings.noise.octaves = 3;
         terrainSettings.noise.gain = 0.35f;

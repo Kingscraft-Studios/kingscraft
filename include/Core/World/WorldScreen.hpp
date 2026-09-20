@@ -3,7 +3,7 @@
 #include "Core/Screen.hpp"
 #include "Core/World/TerrainRenderer.hpp"
 #include "Core/World/World.hpp"
-#include "UI/Overlay/UiFpsCounterOverlay.hpp"
+#include "UI/Overlay/UiDebugOverlay.hpp"
 #include "UI/Overlay/UiHotbarOverlay.hpp"
 #include "UI/Overlay/UiDeathScreenOverlay.hpp"
 #include "UI/Elements/UiRect.hpp"
@@ -35,7 +35,7 @@ namespace kc {
         VkExtent2D extent_{};
 
         TerrainRenderer terrainRenderer_;
-        UiFpsCounterOverlay fpsCounter_;
+        UiDebugOverlay debugOverlay_;
         bool wasDebugOn_ = false;
         UiHotbarOverlay hotbar_;
         UiDeathScreenOverlay deathScreen_;

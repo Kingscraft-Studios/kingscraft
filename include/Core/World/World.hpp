@@ -61,6 +61,11 @@ namespace kc {
 
         PlayerController& getPlayerController() { return playerController_; }
 
+        // Debug switch: when false only edited chunks are saved to regions;
+        // when true every loaded chunk is serialized. Toggled at runtime (F5).
+        bool getSaveAllChunks() const { return saveAllChunks_.load(std::memory_order_relaxed); }
+        void setSaveAllChunks(bool on) { saveAllChunks_.store(on, std::memory_order_relaxed); }
+
     private:
         struct ChunkGenResult {
             int gx;
@@ -150,8 +155,10 @@ namespace kc {
 
         // Chunks edited since load (setBlock). Only these are serialized and staged
         // for the region overlay; unedited chunks regenerate from the seed and
-        // are never written to disk.
+        // are never written to disk. When saveAllChunks_ is on, every loaded
+        // chunk gets staged instead.
         std::unordered_set<uint64_t> unsavedChunks_;
+        std::atomic<bool> saveAllChunks_{false};
 
         mutable std::vector<Chunk*> chunkCache_;
         mutable bool chunkCacheDirty_ = false;

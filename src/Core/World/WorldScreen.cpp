@@ -50,7 +50,7 @@ namespace kc {
         MessageBus::Get().send(ThreadName::Input, []() {
             Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
         });
-        fpsCounter_.init(Runtime::get().renderThread->getUI(),
+        debugOverlay_.init(Runtime::get().renderThread->getUI(),
             static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         hotbar_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         deathScreen_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
@@ -199,7 +199,7 @@ void WorldScreen::render(FrameScene& scene) {
     void WorldScreen::cleanup() {
         Runtime::get().renderThread->getUI().setScrollCallback(nullptr);
         hotbar_.cleanup(Runtime::get().renderThread->getUI());
-        fpsCounter_.cleanup(Runtime::get().renderThread->getUI());
+        debugOverlay_.cleanup(Runtime::get().renderThread->getUI());
         deathScreen_.cleanup(Runtime::get().renderThread->getUI());
         Runtime::get().renderThread->getUI().removeElement(&crosshairH_);
         Runtime::get().renderThread->getUI().removeElement(&crosshairV_);

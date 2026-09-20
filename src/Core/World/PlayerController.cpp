@@ -9,6 +9,8 @@
 #include "Threads/InputThread.hpp"
 #include "Vulkan/GLFWWindow.hpp"
 #include <cmath>
+#include <vector>
+#include "Util/TimeUtil.hpp"
 #include "Core/Runtime.hpp"
 
 namespace kc {
@@ -28,7 +30,7 @@ namespace kc {
         camera_.setRotation(0.0f, -35.0f);
 
         keybinds_->onPress(BindLayer::Screen, {Keys::SPACE}, [this]() {
-            if (cursorCaptured_) jumpRequested_ = true;
+            if (cursorCaptured_) jumpPresses_.push_back(TimeUtil::uptimeSeconds());
         });
     }
 
@@ -57,20 +59,53 @@ namespace kc {
             glm::vec3(Attributes::PLAYER_WIDTH, Attributes::PLAYER_HEIGHT, Attributes::PLAYER_WIDTH));
         if (respawnGrace_ > 0.0f) {
             respawnGrace_ -= dtf;
-            jumpRequested_ = false;
+            jumpPresses_.clear();
+        } else if (flyMode_) {
+            // Consume the press log: a double-tap mid-air restores gravity.
+            for (double ts : jumpPresses_) {
+                if (ts - lastFlyTap_ < FLY_TOGGLE_WINDOW) {
+                    flyMode_ = false;
+                    jumpedThisAirTime_ = false;
+                    lastFlyTap_ = -1.0e9;
+                } else {
+                    lastFlyTap_ = ts;
+                }
+            }
+            jumpPresses_.clear();
+
+            // Gravity is suppressed by World.cpp while flying; pilot vertical.
+            if (keybinds_->isDown(Keys::W)) velocity += forwardH * Attributes::FLY_SPEED;
+            if (keybinds_->isDown(Keys::S)) velocity -= forwardH * Attributes::FLY_SPEED;
+            if (keybinds_->isDown(Keys::A)) velocity -= rightH * Attributes::FLY_SPEED;
+            if (keybinds_->isDown(Keys::D)) velocity += rightH * Attributes::FLY_SPEED;
+            if (keybinds_->isDown(Keys::SPACE)) {
+                velocityY_ = Attributes::FLY_CLIMB_SPEED;
+            } else if (keybinds_->isDown(Keys::LEFT_SHIFT) || keybinds_->isDown(Keys::RIGHT_SHIFT)) {
+                velocityY_ = -Attributes::FLY_DESCEND_SPEED;
+            } else {
+                velocityY_ = 0.0f;
+            }
         } else {
             if (keybinds_->isDown(Keys::W)) velocity += forwardH * Attributes::WALK_SPEED;
             if (keybinds_->isDown(Keys::S)) velocity -= forwardH * Attributes::WALK_SPEED;
             if (keybinds_->isDown(Keys::A)) velocity -= rightH * Attributes::WALK_SPEED;
             if (keybinds_->isDown(Keys::D)) velocity += rightH * Attributes::WALK_SPEED;
 
-            if (CollisionSystem::aabbCollides(world, box.translate(glm::vec3(0.0f, -0.05f, 0.0f)))) {
+            bool grounded = CollisionSystem::aabbCollides(world, box.translate(glm::vec3(0.0f, -0.05f, 0.0f)));
+            if (grounded) {
                 velocityY_ = 0.0f;
-                if (jumpRequested_) {
-                    jumpRequested_ = false;
+                jumpedThisAirTime_ = false;
+                if (!jumpPresses_.empty()) {
                     velocityY_ = Attributes::JUMP_STRENGTH;
+                    jumpedThisAirTime_ = true;
                 }
+            } else if (!jumpPresses_.empty() && jumpedThisAirTime_) {
+                // DOUBLE JUMP: in the air after a real jump -> gravity OFF.
+                flyMode_ = true;
+                jumpedThisAirTime_ = false;
+                velocityY_ = Attributes::FLY_CLIMB_SPEED;
             }
+            jumpPresses_.clear();
         }
         velocity.y = velocityY_;
 
@@ -81,7 +116,9 @@ namespace kc {
         if (bodyPos_.y < VOID_KILL_Y) {
             dead_ = true;
             velocityY_ = 0.0f;
-            jumpRequested_ = false;
+            flyMode_ = false;
+            jumpedThisAirTime_ = false;
+            jumpPresses_.clear();
             EventManager::get().callEvent<PlayerDeathEvent>(DeathCause::Void);
             return;
         }
@@ -111,6 +148,10 @@ namespace kc {
         // Only a fresh default spawn needs the surface snap; a persisted
         // position keeps its exact Y (e.g. inside a dug-out room / box).
         spawnPending_ = snapToSurface;
+        flyMode_ = false;
+        jumpedThisAirTime_ = false;
+        jumpPresses_.clear();
+        lastFlyTap_ = -1.0e9;
     }
 
     void PlayerController::respawn() {
@@ -119,6 +160,10 @@ namespace kc {
         respawnGrace_ = 0.4f;
         spawnPending_ = true;
         dead_ = false;
+        flyMode_ = false;
+        jumpedThisAirTime_ = false;
+        jumpPresses_.clear();
+        lastFlyTap_ = -1.0e9;
         EventManager::get().callEvent<PlayerRespawnEvent>();
     }
 

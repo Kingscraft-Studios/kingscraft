@@ -33,6 +33,13 @@ public:
 
     double getDelta() { return dt_; }
 
+    // Biome encoding at the player's feet, updated each tick on this thread,
+    // read atomically from the renderer thread (UiDebugOverlay).
+    uint64_t getCurrentBiome() { return currentBiomeEncoded_.load(std::memory_order_relaxed); }
+
+    // FLY state for the debug overlay (double-jump fly mode).
+    bool isPlayerFlying() { return playerFlying_.load(std::memory_order_relaxed); }
+
 private:
     void tick();
     void registerAllKeys();
@@ -56,6 +63,9 @@ private:
     std::unique_ptr<BiomeProvider> biomeProvider;
     std::unique_ptr<DefaultTerrainGenerator> terrainGen;
     std::unique_ptr<World> world;
+
+    std::atomic<uint64_t> currentBiomeEncoded_{0};
+    std::atomic<bool> playerFlying_{false};
 };
 
 }

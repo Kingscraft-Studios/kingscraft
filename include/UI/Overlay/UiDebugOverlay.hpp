@@ -6,11 +6,14 @@
 #include "Util/TimeUtil.hpp"
 #include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
 
+#include <atomic>
+#include <memory>
+
 namespace kc {
 
     class UiWrapper;
 
-    class UiFpsCounterOverlay : public UiOverlay {
+    class UiDebugOverlay : public UiOverlay {
     public:
         void init(UiWrapper& ui, float screenW, float screenH) override;
         void update(UiWrapper& ui);
@@ -18,10 +21,17 @@ namespace kc {
         void cleanup(UiWrapper& ui) override;
 
     private:
+        // Shared-alive token for the render-thread diagnostics dispatcher. The
+        // dispatcher lambda captures a copy of this shared_ptr; cleanup() flips
+        // it to false BEFORE freeing the overlay so a queued/in-flight callback
+        // becomes a no-op instead of touching a destroyed overlay at shutdown.
+        std::shared_ptr<std::atomic<bool>> alive_;
+
         UiGroup group_;
         UiTextBlock line1_;
         UiTextBlock line2_;
         UiTextBlock line3_;
+        UiTextBlock line4_;
         uint32_t styleIndex_ = 0;
         double lastTime_ = 0.0;
         double elapsed_ = 0.0;

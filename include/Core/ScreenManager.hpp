@@ -8,6 +8,11 @@ namespace kc {
     class ScreenManager {
     public:
         ScreenManager() = default;
+        // Screens own raw pointers registered in UiWrapper::elements_; destroying
+        // a screen without cleanup() leaves dangling pointers that the render
+        // thread's final tick happily dereferences (startup/shutdown race). Always
+        // tear the active screen down before it is freed.
+        ~ScreenManager() { cleanup(); }
 
         template<typename T, typename... Args>
         void setScreen(Args&&... args) {

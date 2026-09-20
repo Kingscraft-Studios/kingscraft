@@ -6,6 +6,8 @@
 
 #include "Core/Attributes.hpp"
 
+#include <vector>
+
 namespace kc {
 
     class KeyBindHandler;
@@ -29,6 +31,10 @@ namespace kc {
         glm::vec3 getBodyPosition() const { return bodyPos_; }
         float getVelocityY() const { return velocityY_; }
         void setVelocityY(float v) { velocityY_ = v; }
+        // Double-jump fly mode: gravity is suppressed (World.cpp) and vertical
+        // movement is driven by SPACE (climb) / Shift (descend). PRESS while
+        // flying toggles it back off. Runtime-only, reset on respawn/load.
+        bool isFlying() const { return flyMode_; }
         glm::vec3 getSpawn() const { return spawnPos_; }
         // Changes the respawn point without moving the player.
         void setSpawn(const glm::vec3& spawn);
@@ -51,9 +57,15 @@ namespace kc {
         glm::vec3 spawnPos_{67.5f, 15.0f - Attributes::EYE_HEIGHT, 67.5f};
         float velocityY_ = 0.0f;
         float respawnGrace_ = 0.0f;
-        bool jumpRequested_ = false;
         bool spawnPending_ = true;
         bool dead_ = false;
+
+        // Fly mode (double-jump toggles gravity off, SPACE/Shift pilot vertically).
+        static constexpr double FLY_TOGGLE_WINDOW = 0.35;   // seconds between taps
+        std::vector<double> jumpPresses_;
+        double lastFlyTap_ = -1.0e9;
+        bool flyMode_ = false;
+        bool jumpedThisAirTime_ = false;
     };
 
 } // namespace kc

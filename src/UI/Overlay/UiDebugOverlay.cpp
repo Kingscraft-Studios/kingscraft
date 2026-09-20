@@ -1,11 +1,14 @@
-#include "UI/Overlay/UiFpsCounterOverlay.hpp"
+#include "UI/Overlay/UiDebugOverlay.hpp"
 #include "UI/UiWrapper.hpp"
 #include "UI/Engine/UiStyle.hpp"
 #include "Threads/Engine.hpp"
+#include "Threads/Kingscraft.hpp"
+#include "Core/Runtime.hpp"
+#include "Core/Registry.hpp"
 
 namespace kc {
 
-    void UiFpsCounterOverlay::init(UiWrapper& ui, float screenW, float screenH) {
+    void UiDebugOverlay::init(UiWrapper& ui, float screenW, float screenH) {
         (void)screenW;
         (void)screenH;
 
@@ -21,7 +24,7 @@ namespace kc {
         line1_.setFont("default");
         line1_.setColor({1.0f, 1.0f, 1.0f, 1.0f});
         line1_.setStyleIndex(styleIndex_);
-        line1_.setName("FpsLine1");
+        line1_.setName("DebugLine1");
         group_.add(&line1_);
 
         line2_.setAnchor({0.0f, 0.03f}, {10.0f, 10.0f});
@@ -31,7 +34,7 @@ namespace kc {
         line2_.setFont("default");
         line2_.setColor({0.6f, 1.0f, 0.6f, 1.0f});
         line2_.setStyleIndex(styleIndex_);
-        line2_.setName("FpsLine2");
+        line2_.setName("DebugLine2");
         group_.add(&line2_);
 
         line3_.setAnchor({0.0f, 0.055f}, {10.0f, 10.0f});
@@ -41,23 +44,37 @@ namespace kc {
         line3_.setFont("default");
         line3_.setColor({0.7f, 0.7f, 1.0f, 1.0f});
         line3_.setStyleIndex(styleIndex_);
-        line3_.setName("FpsLine3");
+        line3_.setName("DebugLine3");
         group_.add(&line3_);
+
+        line4_.setAnchor({0.0f, 0.08f}, {10.0f, 10.0f});
+        line4_.setNormalizedSize({0.65f, 0.035f});
+        line4_.setFontSize(18.0f);
+        line4_.setText("Biome: --");
+        line4_.setFont("default");
+        line4_.setColor({0.6f, 1.0f, 1.0f, 1.0f});
+        line4_.setStyleIndex(styleIndex_);
+        line4_.setName("DebugLine4");
+        group_.add(&line4_);
 
         group_.addToWrapper(ui);
 
         lastTime_ = TimeUtil::uptimeSeconds();
 
         // Per-frame metrics feed (Renderer thread). Stays registered for the
-        // lifetime of this overlay and is released in cleanup().
+        // lifetime of this overlay and is released in cleanup(). The lambda
+        // captures the shared-alive token so a callback already queued in the
+        // renderer mailbox cannot touch the overlay after it is torn down.
+        alive_ = std::make_shared<std::atomic<bool>>(true);
         Engine::Get().getDiagnostics().setDispatcher(ThreadName::Renderer, 4.0,
-            [this, &ui](const FrameMetrics& frame) {
+            [this, &ui, alive = alive_](const FrameMetrics& frame) {
+                if (!alive->load(std::memory_order_acquire)) return;
                 setFrame(frame);
                 update(ui);
             });
     }
 
-    void UiFpsCounterOverlay::update(UiWrapper& ui) {
+    void UiDebugOverlay::update(UiWrapper& ui) {
         UiGuard guard(ui);
         double now = TimeUtil::uptimeSeconds();
         double dt = now - lastTime_;
@@ -98,12 +115,23 @@ namespace kc {
                 latestCIdle_, latestOcclusionRemoved_, latestOcclusionTested_);
             line3_.setText(std::string(buf3, n3));
 
+            // Current biome under the player (published by the GameLogic thread).
+            uint64_t enc = Runtime::get().kingscraft->getCurrentBiome();
+            std::string biomeName;
+            if (enc) biomeName = Registry<Biome>::getRegistry().getIdentifier(enc);
+            auto sep = biomeName.find(':');
+            if (sep != std::string::npos) biomeName = biomeName.substr(sep + 1);
+            if (biomeName.empty()) biomeName = "--";
+            std::string line4 = "Biome: " + biomeName;
+            if (Runtime::get().kingscraft->isPlayerFlying()) line4 += "  [FLY]";
+            line4_.setText(line4);
+
             elapsed_ = 0.0;
             frameCount_ = 0;
         }
     }
 
-    void UiFpsCounterOverlay::setFrame(const FrameMetrics& frame) {
+    void UiDebugOverlay::setFrame(const FrameMetrics& frame) {
         latestCpuMs_ = frame.gpu.cpuFrameMs;
         latestGpuMs_ = frame.gpu.gpuFrameMs;
         latestWorldGpuMs_ = frame.gpu.worldGpuMs;
@@ -128,7 +156,11 @@ namespace kc {
         latestCIdle_ = frame.gpu.cIdle;
     }
 
-    void UiFpsCounterOverlay::cleanup(UiWrapper& ui) {
+    void UiDebugOverlay::cleanup(UiWrapper& ui) {
+        // Invalidate the render-thread dispatch token FIRST so any callback
+        // already queued in the renderer mailbox becomes a no-op before this
+        // overlay (and its elements) are freed.
+        if (alive_) alive_->store(false, std::memory_order_release);
         Engine::Get().getDiagnostics().clearDispatcher(ThreadName::Renderer);
         group_.removeFromWrapper(ui);
     }

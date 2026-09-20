@@ -137,18 +137,20 @@ namespace kc {
             IO::Get().getBuiltinTemplates().getWorldMetadataTemplate().stageSave(metadata_);
         }
 
-        // Save the overlay: only chunks whose blocks were edited this session.
-        // Unedited chunks regenerate from the seed and need no disk copy. IO
+        // Save the overlay: by default only chunks whose blocks were edited
+        // this session. Unedited chunks regenerate from the seed and need no
+        // disk copy. With the debug switch on, every loaded chunk is saved so
+        // the explored area can be dumped for offline terrain analysis. IO
         // flushes each changed region file once.
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             auto& regions = IO::Get().getBuiltinTemplates().getRegionTemplate();
-            for (uint64_t key : unsavedChunks_) {
-                auto cacheIt = blockCache_.find(key);
-                if (cacheIt == blockCache_.end()) continue;
+            bool saveAll = saveAllChunks_.load(std::memory_order_relaxed);
+            for (const auto& [key, data] : blockCache_) {
+                if (!saveAll && !unsavedChunks_.count(key)) continue;
                 int gx = static_cast<int>(key >> 32);
                 int gz = static_cast<int>(key & 0xFFFFFFFF);
-                regions.queueSave(gx, gz, *cacheIt->second);
+                regions.queueSave(gx, gz, *data);
             }
         }
 
@@ -342,13 +344,15 @@ namespace kc {
     void World::unloadChunk(int gridX, int gridZ) {
         uint64_t key = makeChunkKey(gridX, gridZ);  // compute once
 
-        // Stage the chunk for saving ONLY if its blocks were edited since load.
-        // Unedited chunks regenerate from the seed and never touch disk, so a
-        // chunk present in a region file always means "differs from seed".
+        // Stage the chunk for saving ONLY if its blocks were edited since load,
+        // or every loaded chunk while the debug switch is on. Unedited chunks
+        // regenerate from the seed and never touch disk, so a chunk present in
+        // a region file always means "differs from seed" (or "debug dump").
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             auto cacheIt = blockCache_.find(key);
-            if (cacheIt != blockCache_.end() && unsavedChunks_.count(key)) {
+            bool saveAll = saveAllChunks_.load(std::memory_order_relaxed);
+            if (cacheIt != blockCache_.end() && (saveAll || unsavedChunks_.count(key))) {
                 IO::Get().getBuiltinTemplates().getRegionTemplate().queueSave(gridX, gridZ, *cacheIt->second);
             }
             unsavedChunks_.erase(key);
@@ -970,7 +974,10 @@ namespace kc {
         processEditResults();
 
         if (playerController_.isCursorCaptured()) {
-            playerController_.setVelocityY(Gravity::apply(playerController_.getVelocityY(), static_cast<float>(dt)));
+            // Flying suppresses gravity: PlayerController pilots velocityY_.
+            if (!playerController_.isFlying()) {
+                playerController_.setVelocityY(Gravity::apply(playerController_.getVelocityY(), static_cast<float>(dt)));
+            }
             playerController_.tick(*this, dt);
         }
     }

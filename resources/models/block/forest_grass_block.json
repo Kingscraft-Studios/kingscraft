@@ -1,0 +1,21 @@
+{
+    "textures": {
+        "top":    "resources/textures/blocks/forest_grass.png",
+        "side":   "resources/textures/blocks/forest_grass_side.png",
+        "bottom": "resources/textures/blocks/dirt.png"
+    },
+    "elements": [
+        {
+            "from": [0, 0, 0],
+            "to": [16, 16, 16],
+            "faces": {
+                "pos_y":  { "uv": [0, 0, 64, 64], "texture": "#top" },
+                "neg_y":  { "uv": [0, 0, 64, 64], "texture": "#bottom" },
+                "pos_z":  { "uv": [0, 0, 64, 64], "texture": "#side" },
+                "neg_z":  { "uv": [0, 0, 64, 64], "texture": "#side" },
+                "pos_x":  { "uv": [0, 0, 64, 64], "texture": "#side" },
+                "neg_x":  { "uv": [0, 0, 64, 64], "texture": "#side" }
+            }
+        }
+    ]
+}

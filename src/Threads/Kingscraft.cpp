@@ -9,6 +9,7 @@
 #include "Util/LogUtils.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <thread>
 
 #include "Core/MainMenu.hpp"
@@ -77,6 +78,17 @@ namespace kc {
         dt_ = currentTime - prevTime_;
         prevTime_ = currentTime;
         if (dt_ > 0.25) dt_ = 0.25;
+
+        // Publish the biome under the player for the debug overlay (read-only
+        // on the renderer thread via an atomic).
+        if (biomeProvider && world) {
+            glm::vec3 body = world->getPlayerController().getBodyPosition();
+            currentBiomeEncoded_.store(
+                biomeProvider->getBiome(static_cast<int>(std::floor(body.x)),
+                                        static_cast<int>(std::floor(body.z))).getEncoded(),
+                std::memory_order_relaxed);
+            playerFlying_.store(world->getPlayerController().isFlying(), std::memory_order_relaxed);
+        }
 
         tickAccumulator_ += dt_;
         double tickStart = TimeUtil::uptimeSeconds();
@@ -147,6 +159,24 @@ namespace kc {
         MessageBus::Get().send(ThreadName::Input, []() {
             Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F10}, []() {
                 Registries::reload();
+            });
+        });
+        MessageBus::Get().send(ThreadName::Input, []() {
+            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F5}, []() {
+                // Toggle the region-dump debug switch. ON starts recording every
+                // loaded chunk; a second press stops recording and flushes the
+                // staged regions to disk immediately.
+                MessageBus::Get().send(ThreadName::GameLogic, []() {
+                    auto& world = Runtime::get().kingscraft->getWorld();
+                    if (world.getSaveAllChunks()) {
+                        world.setSaveAllChunks(false);
+                        IO::Get().getBuiltinTemplates().getRegionTemplate().flush();
+                        LogUtils::info(ThreadName::GameLogic, "SaveAllChunks: OFF (region dump flushed to disk)");
+                    } else {
+                        world.setSaveAllChunks(true);
+                        LogUtils::info(ThreadName::GameLogic, "SaveAllChunks: ON (recording every loaded chunk)");
+                    }
+                });
             });
         });
         MessageBus::Get().send(ThreadName::Input, []() {
