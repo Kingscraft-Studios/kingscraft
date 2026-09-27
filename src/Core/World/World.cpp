@@ -79,7 +79,46 @@ namespace {
         dst.vertices = std::move(keep);
         dst.vertices.insert(dst.vertices.end(), slab.vertices.begin(), slab.vertices.end());
         dst.indices = std::move(indices);
+
+        // The transparent stream (water/glass) gets the same gate treatment:
+        // drop faces pointing through the changed border, then re-append the
+        // freshly emitted transparent gate faces.
+        auto spliceStream = [&](std::vector<kc::ChunkVertex>& dstVerts,
+                                std::vector<uint16_t>& dstInds,
+                                const std::vector<kc::ChunkVertex>& slabVerts,
+                                const std::vector<uint16_t>& slabInds)
+        {
+            std::vector<uint32_t> rmap(dstVerts.size());
+            std::vector<kc::ChunkVertex> k;
+            k.reserve(dstVerts.size());
+
+            uint32_t nxt = 0;
+            for (size_t i = 0; i < dstVerts.size(); ++i) {
+                if (isGateFace(dstVerts[i])) continue;
+                rmap[i] = nxt++;
+                k.push_back(dstVerts[i]);
+            }
+
+            std::vector<uint16_t> inds;
+            inds.reserve(dstInds.size() + slabInds.size());
+            for (uint16_t idx : dstInds) {
+                if (isGateFace(dstVerts[idx])) continue;
+                inds.push_back(static_cast<uint16_t>(rmap[idx]));
+            }
+            uint32_t b2 = nxt;
+            for (uint16_t idx : slabInds)
+                inds.push_back(static_cast<uint16_t>(b2 + idx));
+
+            dstVerts = std::move(k);
+            dstVerts.insert(dstVerts.end(), slabVerts.begin(), slabVerts.end());
+            dstInds = std::move(inds);
+        };
+
+        spliceStream(dst.transparentVertices, dst.transparentIndices,
+                     slab.transparentVertices, slab.transparentIndices);
+
         dst.indexCount = static_cast<uint32_t>(dst.indices.size());
+        dst.transparentIndexCount = static_cast<uint32_t>(dst.transparentIndices.size());
     }
 
 } // namespace

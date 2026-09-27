@@ -4,6 +4,7 @@
 #include "Core/Resources/BlockModel.hpp"
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <unordered_map>
 
 namespace kc {
 
@@ -41,6 +42,83 @@ namespace {
         false,  // dir 4 (PosX): cross(Z, Y) = -X, outward = +X, dot < 0 → CW → keep
         true    // dir 5 (NegX): cross(Z, Y) = -X, outward = -X, dot > 0 → CCW → flip
     };
+
+    // Cheap per-block-id transparency query, rebuilt once per mesh call from
+    // the registry (a small, fixed set of registered blocks). Lets the cull
+    // predicate decide visibility from ids alone in the inner loop, so the
+    // comparatively expensive shared-ptr registry lookup only runs for faces
+    // that actually emit.
+    class BlockTransparencyTable {
+    public:
+        void build() {
+            flags_.clear();
+            Registry<Block>::getRegistry().forEach([this](uint64_t encoded, const Block& block) {
+                flags_.emplace(encoded, block.isTransparent());
+            });
+        }
+        bool isTransparent(uint64_t encoded) const {
+            auto it = flags_.find(encoded);
+            return it != flags_.end() && it->second;
+        }
+
+    private:
+        std::unordered_map<uint64_t, bool> flags_;
+    };
+
+    // Appends one merged quad (4 vertices + 6 indices) to the requested stream.
+    // Opaque blocks land in subChunk.vertices/indices, transparent blocks in
+    // subChunk.transparentVertices/transparentIndices; the GPU keeps two buffer
+    // pairs so the transparent pass can blend at 60% with depth writes off.
+    void appendQuad(
+        SubChunk& subChunk,
+        bool isTransparent,
+        int dir,
+        const glm::vec3& baseLocal,
+        const glm::vec3& du,
+        const glm::vec3& dv,
+        const int8_t uvs[4][2],
+        uint16_t cellTex)
+    {
+        auto& vertices = isTransparent ? subChunk.transparentVertices : subChunk.vertices;
+        auto& indices  = isTransparent ? subChunk.transparentIndices  : subChunk.indices;
+
+        glm::vec3 localCorners[4] = {
+            baseLocal,
+            baseLocal + du,
+            baseLocal + du + dv,
+            baseLocal + dv
+        };
+
+        int baseVertex = static_cast<int>(vertices.size());
+
+        for (int vi = 0; vi < 4; ++vi) {
+            vertices.push_back({
+                static_cast<uint8_t>(localCorners[vi].x),
+                static_cast<uint8_t>(localCorners[vi].y),
+                static_cast<uint8_t>(localCorners[vi].z),
+                static_cast<uint8_t>(dir),
+                uvs[vi][0],
+                uvs[vi][1],
+                cellTex
+            });
+        }
+
+        if (reverseWinding[dir]) {
+            indices.push_back(static_cast<uint16_t>(baseVertex));
+            indices.push_back(static_cast<uint16_t>(baseVertex + 2));
+            indices.push_back(static_cast<uint16_t>(baseVertex + 1));
+            indices.push_back(static_cast<uint16_t>(baseVertex));
+            indices.push_back(static_cast<uint16_t>(baseVertex + 3));
+            indices.push_back(static_cast<uint16_t>(baseVertex + 2));
+        } else {
+            indices.push_back(static_cast<uint16_t>(baseVertex));
+            indices.push_back(static_cast<uint16_t>(baseVertex + 1));
+            indices.push_back(static_cast<uint16_t>(baseVertex + 2));
+            indices.push_back(static_cast<uint16_t>(baseVertex));
+            indices.push_back(static_cast<uint16_t>(baseVertex + 2));
+            indices.push_back(static_cast<uint16_t>(baseVertex + 3));
+        }
+    }
 }
 
 void ChunkMesher::generateSubChunk(
@@ -55,14 +133,22 @@ void ChunkMesher::generateSubChunk(
 {
     auto& vertices = subChunk.vertices;
     auto& indices = subChunk.indices;
+    auto& transparentVertices = subChunk.transparentVertices;
+    auto& transparentIndices = subChunk.transparentIndices;
     vertices.clear();
     indices.clear();
+    transparentVertices.clear();
+    transparentIndices.clear();
     subChunk.indexCount = 0;
+    subChunk.transparentIndexCount = 0;
 
     int yEnd = std::min(yBase + static_cast<int>(SUBCHUNK_H), height);
     if (yBase >= height) return;
 
     auto& registry = Registry<Block>::getRegistry();
+
+    BlockTransparencyTable transparency;
+    transparency.build();
 
     auto getBlock = [&](int x, int y, int z) -> uint64_t {
         if (y < 0 || y >= height)
@@ -100,6 +186,7 @@ void ChunkMesher::generateSubChunk(
         for (int depth = depthStart; depth < depthEnd; ++depth) {
             size_t sliceSize = static_cast<size_t>(uDim) * vDim;
             std::vector<bool> mask(sliceSize, false);
+            std::vector<bool> transMask(sliceSize, false);
             std::vector<uint16_t> texIdx(sliceSize, 0);
 
             for (int v = 0; v < vDim; ++v) {
@@ -112,12 +199,22 @@ void ChunkMesher::generateSubChunk(
                     if (ua == 1) coords[1] += yBase;
                     if (va == 1) coords[1] += yBase;
 
-uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
+                    uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
                     if (blockId == 0) continue;
 
-                    {
-                        int nc[3] = {coords[0] + nx[dir], coords[1] + ny[dir], coords[2] + nz[dir]};
-                        if (getBlock(nc[0], nc[1], nc[2]) != 0) continue;
+                    // General opaque/transparent culling. An opaque block emits
+                    // its face unless the neighbor is opaque (unknown blocks
+                    // count as opaque), so lakebeds and banks stay visible
+                    // through water. A transparent block only emits against air,
+                    // so interior water–water and water–solid faces are removed.
+                    // Both tests use the cheap id→transparency table so no
+                    // registry lookup happens for culled faces.
+                    bool selfTrans = transparency.isTransparent(blockId);
+                    uint64_t neighbor = getBlock(coords[0] + nx[dir], coords[1] + ny[dir], coords[2] + nz[dir]);
+                    if (selfTrans) {
+                        if (neighbor != 0) continue;
+                    } else {
+                        if (neighbor != 0 && !transparency.isTransparent(neighbor)) continue;
                     }
 
                     auto block = registry.getShared(blockId);
@@ -129,6 +226,7 @@ uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
                     uint16_t gti = static_cast<uint16_t>(block->getTextureBaseOffset() + quad->tileIndex);
                     int idx = v * uDim + u;
                     mask[idx] = true;
+                    transMask[idx] = selfTrans;
                     texIdx[idx] = gti;
                 }
             }
@@ -141,11 +239,12 @@ uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
                     if (!mask[idx] || visited[idx]) continue;
 
                     uint16_t cellTex = texIdx[idx];
+                    bool cellTrans = transMask[idx];
 
                     int rectW = 1;
                     while (u + rectW < uDim) {
                         int ri = v * uDim + (u + rectW);
-                        if (!mask[ri] || visited[ri] || texIdx[ri] != cellTex) break;
+                        if (!mask[ri] || visited[ri] || texIdx[ri] != cellTex || transMask[ri] != cellTrans) break;
                         rectW++;
                     }
 
@@ -154,7 +253,7 @@ uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
                     while (v + rectH < vDim && canExpand) {
                         for (int u2 = u; u2 < u + rectW; ++u2) {
                             int ri = (v + rectH) * uDim + u2;
-                            if (!mask[ri] || visited[ri] || texIdx[ri] != cellTex) {
+                            if (!mask[ri] || visited[ri] || texIdx[ri] != cellTex || transMask[ri] != cellTrans) {
                                 canExpand = false;
                                 break;
                             }
@@ -184,13 +283,6 @@ uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
                     glm::vec3 du = axisVec[ua] * static_cast<float>(rectW);
                     glm::vec3 dv = axisVec[va] * static_cast<float>(rectH);
 
-                    glm::vec3 localCorners[4] = {
-                        baseLocal,
-                        baseLocal + du,
-                        baseLocal + du + dv,
-                        baseLocal + dv
-                    };
-
                     int8_t uvs[4][2] = {
                         {0, static_cast<int8_t>(rectH)},
                         {static_cast<int8_t>(rectW), static_cast<int8_t>(rectH)},
@@ -198,41 +290,14 @@ uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
                         {0, 0}
                     };
 
-                    int baseVertex = static_cast<int>(vertices.size());
-
-                    for (int vi = 0; vi < 4; ++vi) {
-                        vertices.push_back({
-                            static_cast<uint8_t>(localCorners[vi].x),
-                            static_cast<uint8_t>(localCorners[vi].y),
-                            static_cast<uint8_t>(localCorners[vi].z),
-                            static_cast<uint8_t>(dir),
-                            uvs[vi][0],
-                            uvs[vi][1],
-                            cellTex
-                        });
-                    }
-
-                    if (reverseWinding[dir]) {
-                        indices.push_back(static_cast<uint16_t>(baseVertex));
-                        indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-                        indices.push_back(static_cast<uint16_t>(baseVertex + 1));
-                        indices.push_back(static_cast<uint16_t>(baseVertex));
-                        indices.push_back(static_cast<uint16_t>(baseVertex + 3));
-                        indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-                    } else {
-                        indices.push_back(static_cast<uint16_t>(baseVertex));
-                        indices.push_back(static_cast<uint16_t>(baseVertex + 1));
-                        indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-                        indices.push_back(static_cast<uint16_t>(baseVertex));
-                        indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-                        indices.push_back(static_cast<uint16_t>(baseVertex + 3));
-                    }
+                    appendQuad(subChunk, cellTrans, dir, baseLocal, du, dv, uvs, cellTex);
                 }
             }
         }
     }
 
     subChunk.indexCount = static_cast<uint32_t>(indices.size());
+    subChunk.transparentIndexCount = static_cast<uint32_t>(transparentIndices.size());
 }
 
 void ChunkMesher::emitGateFaces(
@@ -248,13 +313,13 @@ void ChunkMesher::emitGateFaces(
 {
     if (gate < 2 || gate > 5) return;
 
-    auto& vertices = subChunk.vertices;
-    auto& indices = subChunk.indices;
-
     int yEnd = std::min(yBase + static_cast<int>(SUBCHUNK_H), height);
     if (yBase >= height) return;
 
     auto& registry = Registry<Block>::getRegistry();
+
+    BlockTransparencyTable transparency;
+    transparency.build();
 
     auto getBlock = [&](int x, int y, int z) -> uint64_t {
         if (y < 0 || y >= height)
@@ -289,6 +354,7 @@ void ChunkMesher::emitGateFaces(
 
     size_t sliceSize = static_cast<size_t>(uDim) * vDim;
     std::vector<bool> mask(sliceSize, false);
+    std::vector<bool> transMask(sliceSize, false);
     std::vector<uint16_t> texIdx(sliceSize, 0);
 
     for (int v = 0; v < vDim; ++v) {
@@ -304,9 +370,13 @@ void ChunkMesher::emitGateFaces(
             uint64_t blockId = getBlock(coords[0], coords[1], coords[2]);
             if (blockId == 0) continue;
 
-            {
-                int nc[3] = {coords[0] + nx[gate], coords[1] + ny[gate], coords[2] + nz[gate]};
-                if (getBlock(nc[0], nc[1], nc[2]) != 0) continue;
+            // Same general culling predicate as generateSubChunk (see there).
+            bool selfTrans = transparency.isTransparent(blockId);
+            uint64_t neighbor = getBlock(coords[0] + nx[gate], coords[1] + ny[gate], coords[2] + nz[gate]);
+            if (selfTrans) {
+                if (neighbor != 0) continue;
+            } else {
+                if (neighbor != 0 && !transparency.isTransparent(neighbor)) continue;
             }
 
             auto block = registry.getShared(blockId);
@@ -317,6 +387,7 @@ void ChunkMesher::emitGateFaces(
 
             int idx = v * uDim + u;
             mask[idx] = true;
+            transMask[idx] = selfTrans;
             texIdx[idx] = static_cast<uint16_t>(block->getTextureBaseOffset() + quad->tileIndex);
         }
     }
@@ -329,11 +400,12 @@ void ChunkMesher::emitGateFaces(
             if (!mask[idx] || visited[idx]) continue;
 
             uint16_t cellTex = texIdx[idx];
+            bool cellTrans = transMask[idx];
 
             int rectW = 1;
             while (u + rectW < uDim) {
                 int ri = v * uDim + (u + rectW);
-                if (!mask[ri] || visited[ri] || texIdx[ri] != cellTex) break;
+                if (!mask[ri] || visited[ri] || texIdx[ri] != cellTex || transMask[ri] != cellTrans) break;
                 rectW++;
             }
 
@@ -342,7 +414,7 @@ void ChunkMesher::emitGateFaces(
             while (v + rectH < vDim && canExpand) {
                 for (int u2 = u; u2 < u + rectW; ++u2) {
                     int ri = (v + rectH) * uDim + u2;
-                    if (!mask[ri] || visited[ri] || texIdx[ri] != cellTex) {
+                    if (!mask[ri] || visited[ri] || texIdx[ri] != cellTex || transMask[ri] != cellTrans) {
                         canExpand = false;
                         break;
                     }
@@ -372,13 +444,6 @@ void ChunkMesher::emitGateFaces(
             glm::vec3 du = axisVec[ua] * static_cast<float>(rectW);
             glm::vec3 dv = axisVec[va] * static_cast<float>(rectH);
 
-            glm::vec3 localCorners[4] = {
-                baseLocal,
-                baseLocal + du,
-                baseLocal + du + dv,
-                baseLocal + dv
-            };
-
             int8_t uvs[4][2] = {
                 {0, static_cast<int8_t>(rectH)},
                 {static_cast<int8_t>(rectW), static_cast<int8_t>(rectH)},
@@ -386,39 +451,12 @@ void ChunkMesher::emitGateFaces(
                 {0, 0}
             };
 
-            int baseVertex = static_cast<int>(vertices.size());
-
-            for (int vi = 0; vi < 4; ++vi) {
-                vertices.push_back({
-                    static_cast<uint8_t>(localCorners[vi].x),
-                    static_cast<uint8_t>(localCorners[vi].y),
-                    static_cast<uint8_t>(localCorners[vi].z),
-                    static_cast<uint8_t>(gate),
-                    uvs[vi][0],
-                    uvs[vi][1],
-                    cellTex
-                });
-            }
-
-            if (reverseWinding[gate]) {
-                indices.push_back(static_cast<uint16_t>(baseVertex));
-                indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-                indices.push_back(static_cast<uint16_t>(baseVertex + 1));
-                indices.push_back(static_cast<uint16_t>(baseVertex));
-                indices.push_back(static_cast<uint16_t>(baseVertex + 3));
-                indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-            } else {
-                indices.push_back(static_cast<uint16_t>(baseVertex));
-                indices.push_back(static_cast<uint16_t>(baseVertex + 1));
-                indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-                indices.push_back(static_cast<uint16_t>(baseVertex));
-                indices.push_back(static_cast<uint16_t>(baseVertex + 2));
-                indices.push_back(static_cast<uint16_t>(baseVertex + 3));
-            }
+            appendQuad(subChunk, cellTrans, gate, baseLocal, du, dv, uvs, cellTex);
         }
     }
 
-    subChunk.indexCount = static_cast<uint32_t>(indices.size());
+    subChunk.indexCount = static_cast<uint32_t>(subChunk.indices.size());
+    subChunk.transparentIndexCount = static_cast<uint32_t>(subChunk.transparentIndices.size());
 }
 
 } // namespace kc

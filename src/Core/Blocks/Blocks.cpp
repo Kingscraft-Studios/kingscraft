@@ -7,6 +7,7 @@
 #include "Core/Blocks/SandBlock.hpp"
 #include "Core/Blocks/SandstoneBlock.hpp"
 #include "Core/Blocks/GravelBlock.hpp"
+#include "Core/Blocks/WaterBlock.hpp"
 #include "Threads/Logger.hpp"
 #include "Util/LogUtils.hpp"
 
@@ -41,6 +42,7 @@ namespace kc {
         loadBlock<SandBlock>(SAND, "resources/models/block/sand_block.json", pending, registry);
         loadBlock<SandstoneBlock>(SANDSTONE, "resources/models/block/sandstone_block.json", pending, registry);
         loadBlock<GravelBlock>(GRAVEL, "resources/models/block/gravel_block.json", pending, registry);
+        loadBlock<WaterBlock>(WATER, "resources/models/block/water_block.json", pending, registry);
     }
 
 } // namespace kc

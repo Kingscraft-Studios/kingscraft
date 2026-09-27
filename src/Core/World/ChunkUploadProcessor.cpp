@@ -17,6 +17,8 @@ namespace kc {
         uploadFence.reset();
         vertexBuffer.reset();
         indexBuffer.reset();
+        transparentVertexBuffer.reset();
+        transparentIndexBuffer.reset();
     }
 
     void ChunkUploadProcessor::cleanup() {
@@ -44,34 +46,77 @@ namespace kc {
             gpuChunks.erase(it);
         }
 
-        if (data.vertices.empty() || data.indices.empty())
+        if (data.vertices.empty() && data.indices.empty() &&
+            data.transparentVertices.empty() && data.transparentIndices.empty())
             return;
 
         GpuChunkData gpuChunk{};
 
         VkDeviceSize vertexSize = data.vertices.size() * sizeof(ChunkVertex);
         VkDeviceSize indexSize = data.indices.size() * sizeof(uint16_t);
+        VkDeviceSize transVertexSize = data.transparentVertices.size() * sizeof(ChunkVertex);
+        VkDeviceSize transIndexSize = data.transparentIndices.size() * sizeof(uint16_t);
 
-        gpuChunk.vertexBuffer = std::make_unique<Buffer>(
-            device,
-            vertexSize,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
+        if (vertexSize > 0) {
+            gpuChunk.vertexBuffer = std::make_unique<Buffer>(
+                device,
+                vertexSize,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            );
+        }
 
-        gpuChunk.indexBuffer = std::make_unique<Buffer>(
-            device,
-            indexSize,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
+        if (indexSize > 0) {
+            gpuChunk.indexBuffer = std::make_unique<Buffer>(
+                device,
+                indexSize,
+                VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            );
+        }
 
-        StagingAllocation staging = device.getStagingArena().alloc(vertexSize + indexSize);
+        if (transVertexSize > 0) {
+            gpuChunk.transparentVertexBuffer = std::make_unique<Buffer>(
+                device,
+                transVertexSize,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            );
+        }
 
-        std::memcpy(staging.data, data.vertices.data(), vertexSize);
-        std::memcpy(static_cast<char*>(staging.data) + vertexSize, data.indices.data(), indexSize);
+        if (transIndexSize > 0) {
+            gpuChunk.transparentIndexBuffer = std::make_unique<Buffer>(
+                device,
+                transIndexSize,
+                VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            );
+        }
+
+        VkDeviceSize totalSize = vertexSize + indexSize + transVertexSize + transIndexSize;
+        StagingAllocation staging = device.getStagingArena().alloc(totalSize);
+
+        VkDeviceSize offset = 0;
+        if (vertexSize > 0) {
+            std::memcpy(static_cast<char*>(staging.data) + offset, data.vertices.data(), vertexSize);
+            offset += vertexSize;
+        }
+        if (indexSize > 0) {
+            std::memcpy(static_cast<char*>(staging.data) + offset, data.indices.data(), indexSize);
+            offset += indexSize;
+        }
+        if (transVertexSize > 0) {
+            std::memcpy(static_cast<char*>(staging.data) + offset, data.transparentVertices.data(), transVertexSize);
+            offset += transVertexSize;
+        }
+        if (transIndexSize > 0) {
+            std::memcpy(static_cast<char*>(staging.data) + offset, data.transparentIndices.data(), transIndexSize);
+            offset += transIndexSize;
+        }
 
         VkFenceCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -79,22 +124,40 @@ namespace kc {
 
         VkCommandBuffer cmd = device.beginSingleTimeCommands();
         gpuChunk.uploadCmd = cmd;
-        {
+        offset = 0;
+        if (vertexSize > 0) {
             VkBufferCopy copy{};
-            copy.srcOffset = staging.offset;
+            copy.srcOffset = staging.offset + offset;
             copy.size = vertexSize;
             vkCmdCopyBuffer(cmd, staging.buffer, gpuChunk.vertexBuffer->getHandle(), 1, &copy);
+            offset += vertexSize;
         }
-        {
+        if (indexSize > 0) {
             VkBufferCopy copy{};
-            copy.srcOffset = staging.offset + vertexSize;
+            copy.srcOffset = staging.offset + offset;
             copy.size = indexSize;
             vkCmdCopyBuffer(cmd, staging.buffer, gpuChunk.indexBuffer->getHandle(), 1, &copy);
+            offset += indexSize;
+        }
+        if (transVertexSize > 0) {
+            VkBufferCopy copy{};
+            copy.srcOffset = staging.offset + offset;
+            copy.size = transVertexSize;
+            vkCmdCopyBuffer(cmd, staging.buffer, gpuChunk.transparentVertexBuffer->getHandle(), 1, &copy);
+            offset += transVertexSize;
+        }
+        if (transIndexSize > 0) {
+            VkBufferCopy copy{};
+            copy.srcOffset = staging.offset + offset;
+            copy.size = transIndexSize;
+            vkCmdCopyBuffer(cmd, staging.buffer, gpuChunk.transparentIndexBuffer->getHandle(), 1, &copy);
+            offset += transIndexSize;
         }
 
         device.submitAsync(cmd, gpuChunk.uploadFence->getHandle());
 
         gpuChunk.indexCount = static_cast<uint32_t>(data.indices.size());
+        gpuChunk.transparentIndexCount = static_cast<uint32_t>(data.transparentIndices.size());
 
         gpuChunks[data.chunkKey] = std::move(gpuChunk);
     }

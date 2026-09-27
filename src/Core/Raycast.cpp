@@ -1,4 +1,6 @@
 #include "Core/Raycast.hpp"
+#include "Core/Blocks/Block.hpp"
+#include "Core/Registry.hpp"
 #include "Core/World/World.hpp"
 #include <algorithm>
 #include <cmath>
@@ -44,12 +46,18 @@ namespace kc {
         for (int i = 0; i < maxSteps; ++i) {
             uint64_t block = world.getBlock(curX, curY, curZ);
             if (block != 0) {
-                result.x = curX;
-                result.y = curY;
-                result.z = curZ;
-                result.face = face;
-                result.hit = true;
-                return result;
+                // Liquid cells (static water) are non-targetable: keep marching
+                // so the highlight/break can never select water, letting it act
+                // as pure see-through scenery until physics arrives.
+                auto blk = Registry<Block>::getRegistry().getShared(block);
+                if (!blk || !blk->isLiquid()) {
+                    result.x = curX;
+                    result.y = curY;
+                    result.z = curZ;
+                    result.face = face;
+                    result.hit = true;
+                    return result;
+                }
             }
 
             if (tMaxX < tMaxY) {

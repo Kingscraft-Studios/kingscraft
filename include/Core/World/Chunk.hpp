@@ -53,6 +53,9 @@ namespace kc {
         std::vector<ChunkVertex> vertices;
         std::vector<uint16_t> indices;
         uint32_t indexCount = 0;
+        std::vector<ChunkVertex> transparentVertices;
+        std::vector<uint16_t> transparentIndices;
+        uint32_t transparentIndexCount = 0;
         bool meshNeeded = true;
     };
 

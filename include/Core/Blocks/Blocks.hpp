@@ -19,6 +19,7 @@ public:
     inline static const RegistryKey<Block> SAND = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("sand"));
     inline static const RegistryKey<Block> SANDSTONE = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("sandstone"));
     inline static const RegistryKey<Block> GRAVEL = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("gravel"));
+    inline static const RegistryKey<Block> WATER = Registry<Block>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("water"));
 
     static void registerBlocks(int& pending);
 

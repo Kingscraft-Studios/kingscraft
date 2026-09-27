@@ -32,12 +32,14 @@ namespace kc {
         renderPass_ = renderPass;
         createPipelineLayout();
         createPipeline(RendererSettings::get().disableTextures);
+        createTransparentPipeline(RendererSettings::get().disableTextures);
         createHighlightPipeline();
     }
 
     void WorldRenderer::cleanup() {
         highlightPipeline_.reset();
         highlightVertexBuffer_.reset();
+        transparentPipeline_.reset();
         pipeline_.reset();
         pipelineLayout_.reset();
     }
@@ -121,6 +123,47 @@ namespace kc {
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     }
 
+    void WorldRenderer::createTransparentPipeline(bool disableTextures) {
+        auto& vertShaderCode = Bootstrapper::Get().getShader("resources/shaders/terrain.vert.spv");
+        auto& fragShaderCode = Bootstrapper::Get().getShader("resources/shaders/transparent.frag.spv");
+
+        PipelineConfigInfo configInfo{};
+        Pipeline::defaultPipelineConfigInfo(configInfo);
+        configInfo.rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+
+        // Transparent pass: alpha-blended (60% from transparent.frag), depth
+        // test on, depth write off so water/glass composite over the opaque
+        // pass instead of occluding it.
+        configInfo.blendAttachmentState.blendEnable = VK_TRUE;
+        configInfo.blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        configInfo.blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        configInfo.blendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
+        configInfo.blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        configInfo.blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        configInfo.blendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
+        configInfo.depthStencilInfo.depthTestEnable = VK_TRUE;
+        configInfo.depthStencilInfo.depthWriteEnable = VK_FALSE;
+        configInfo.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
+
+        VkSpecializationMapEntry entry{};
+        entry.constantID = 0;
+        entry.offset = 0;
+        entry.size = sizeof(uint32_t);
+        configInfo.specMapEntries = {entry};
+        uint32_t specValue = disableTextures ? 1 : 0;
+        configInfo.specData = {specValue};
+
+        auto bindingDesc = ChunkVertex::getBindingDescription();
+        auto attributeDescs = ChunkVertex::getAttributeDescriptions();
+        configInfo.bindingDescriptions = {bindingDesc};
+        configInfo.attributeDescriptions = {attributeDescs.begin(), attributeDescs.end()};
+
+        configInfo.renderPass = renderPass_;
+        configInfo.pipelineLayout = pipelineLayout_->getHandle();
+
+        transparentPipeline_ = std::make_unique<Pipeline>(*device_, vertShaderCode, fragShaderCode, configInfo);
+    }
+
     void WorldRenderer::render(VkCommandBuffer cmd, const glm::mat4 &viewProj, const FrameScene& scene) {
         if (!pipeline_) return;
 
@@ -129,6 +172,8 @@ namespace kc {
             lastDisableTextures_ = currentDisableTextures;
             pipeline_.reset();
             createPipeline(currentDisableTextures);
+            transparentPipeline_.reset();
+            createTransparentPipeline(currentDisableTextures);
         }
 
         pipeline_->bind(cmd);
@@ -149,7 +194,46 @@ namespace kc {
             drawChunk(cmd, draw.chunkKey);
         }
 
+        // Opaque pass is fully drawn. Now the transparent pass (water/glass):
+        // farthest-first for correct back-to-front alpha blending. The draw
+        // list is sorted nearest-first, so iterate it in reverse.
+        if (transparentPipeline_) {
+            transparentPipeline_->bind(cmd);
+            if (textureCache_) {
+                VkDescriptorSet texSet = textureCache_->getDescriptorSet();
+                if (texSet != VK_NULL_HANDLE) {
+                    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                            pipelineLayout_->getHandle(), 0, 1, &texSet, 0, nullptr);
+                }
+            }
+            for (auto it = scene.terrain.draws.rbegin(); it != scene.terrain.draws.rend(); ++it) {
+                pc.chunkOrigin = glm::vec4(it->worldOrigin, 0.0f);
+                vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(TerrainPushConstants), &pc);
+                drawTransparentChunk(cmd, it->chunkKey);
+            }
+        }
+
         drawHighlight(cmd, viewProj, scene);
+    }
+
+    void WorldRenderer::drawTransparentChunk(VkCommandBuffer cmd, uint64_t chunkKey) {
+        const GpuChunkData* data = Runtime::get().renderThread->getUploader().getChunkData(chunkKey);
+
+        if (!data || !data->transparentVertexBuffer || !data->transparentIndexBuffer) return;
+        if (data->uploadFence && data->uploadFence->status() != VK_SUCCESS)
+            return;
+
+        VkBuffer vb = data->transparentVertexBuffer->getHandle();
+        VkBuffer ib = data->transparentIndexBuffer->getHandle();
+        uint32_t count = data->transparentIndexCount;
+
+        VkBuffer bufs[] = {vb};
+        VkDeviceSize offset[] = {0};
+
+        vkCmdBindVertexBuffers(cmd, 0, 1, bufs, offset);
+        vkCmdBindIndexBuffer(cmd, ib, 0, VK_INDEX_TYPE_UINT16);
+
+        vkCmdDrawIndexed(cmd, count, 1, 0, 0, 0);
     }
 
     void WorldRenderer::drawChunk(VkCommandBuffer cmd, uint64_t chunkKey) {
@@ -229,6 +313,8 @@ namespace kc {
         renderPass_ = renderPass;
         pipeline_.reset();
         createPipeline(RendererSettings::get().disableTextures);
+        transparentPipeline_.reset();
+        createTransparentPipeline(RendererSettings::get().disableTextures);
         highlightPipeline_.reset();
         createHighlightPipeline();
     }

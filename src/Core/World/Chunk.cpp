@@ -156,15 +156,23 @@ namespace kc {
 
     void Chunk::upload() {
         // Pass 1: count total geometry across all sub-chunks with geometry
-        size_t totakcrts = 0;
+        size_t totalVerts = 0;
         size_t totalIndices = 0;
+        size_t totalTransparentVerts = 0;
+        size_t totalTransparentIndices = 0;
         for (auto& sub : subChunks_) {
-            if (sub.indexCount == 0) continue;
-            totakcrts += sub.vertices.size();
-            totalIndices += sub.indices.size();
+            if (sub.indexCount > 0) {
+                totalVerts += sub.vertices.size();
+                totalIndices += sub.indices.size();
+            }
+            if (sub.transparentIndexCount > 0) {
+                totalTransparentVerts += sub.transparentVertices.size();
+                totalTransparentIndices += sub.transparentIndices.size();
+            }
         }
 
-        if (totakcrts == 0 || totalIndices == 0) {
+        if (totalVerts == 0 && totalIndices == 0 &&
+            totalTransparentVerts == 0 && totalTransparentIndices == 0) {
             for (auto& sub : subChunks_)
                 sub.meshNeeded = false;
 
@@ -183,20 +191,36 @@ namespace kc {
             return;
         }
 
-        // Merge all sub-chunks with geometry into combined CPU buffers
+        // Merge all sub-chunks with geometry into combined CPU buffers. The
+        // transparent stream (water/glass) stays in its own buffer pair so the
+        // renderer can draw it after the opaque pass with blending enabled.
         std::vector<ChunkVertex> combinedVerts;
         std::vector<uint16_t> combinedIndices;
-        combinedVerts.reserve(totakcrts);
+        combinedVerts.reserve(totalVerts);
         combinedIndices.reserve(totalIndices);
 
+        std::vector<ChunkVertex> combinedTransparentVerts;
+        std::vector<uint16_t> combinedTransparentIndices;
+        combinedTransparentVerts.reserve(totalTransparentVerts);
+        combinedTransparentIndices.reserve(totalTransparentIndices);
+
         uint32_t baseVertex = 0;
+        uint32_t baseTransparentVertex = 0;
         for (auto& sub : subChunks_) {
-            if (sub.indexCount == 0) continue;
-            combinedVerts.insert(combinedVerts.end(),
-                                 sub.vertices.begin(), sub.vertices.end());
-            for (auto idx : sub.indices)
-                combinedIndices.push_back(idx + baseVertex);
-            baseVertex += static_cast<uint32_t>(sub.vertices.size());
+            if (sub.indexCount > 0) {
+                combinedVerts.insert(combinedVerts.end(),
+                                     sub.vertices.begin(), sub.vertices.end());
+                for (auto idx : sub.indices)
+                    combinedIndices.push_back(idx + baseVertex);
+                baseVertex += static_cast<uint32_t>(sub.vertices.size());
+            }
+            if (sub.transparentIndexCount > 0) {
+                combinedTransparentVerts.insert(combinedTransparentVerts.end(),
+                                                sub.transparentVertices.begin(), sub.transparentVertices.end());
+                for (auto idx : sub.transparentIndices)
+                    combinedTransparentIndices.push_back(idx + baseTransparentVertex);
+                baseTransparentVertex += static_cast<uint32_t>(sub.transparentVertices.size());
+            }
         }
 
         // Skip re-upload when the merged geometry is unchanged
@@ -205,6 +229,10 @@ namespace kc {
             combinedVerts.size() * sizeof(ChunkVertex));
         hash = hashBytes(reinterpret_cast<const uint8_t*>(combinedIndices.data()),
                          combinedIndices.size() * sizeof(uint16_t)) ^ hash;
+        hash = hashBytes(reinterpret_cast<const uint8_t*>(combinedTransparentVerts.data()),
+                         combinedTransparentVerts.size() * sizeof(ChunkVertex)) ^ hash;
+        hash = hashBytes(reinterpret_cast<const uint8_t*>(combinedTransparentIndices.data()),
+                         combinedTransparentIndices.size() * sizeof(uint16_t)) ^ hash;
 
         if (hasUploaded_ && hash == lastMeshHash_) {
             for (auto& sub : subChunks_)
@@ -216,6 +244,8 @@ namespace kc {
         uploadData.chunkKey = makeChunkKey(gridPos_.x, gridPos_.y);
         uploadData.vertices = std::move(combinedVerts);
         uploadData.indices = std::move(combinedIndices);
+        uploadData.transparentVertices = std::move(combinedTransparentVerts);
+        uploadData.transparentIndices = std::move(combinedTransparentIndices);
 
         MessageBus::Get().send(ThreadName::Renderer, [uploadData = std::move(uploadData)]() {
             Runtime::get().renderThread->getUploader().upload(uploadData);

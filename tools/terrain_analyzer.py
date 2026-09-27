@@ -36,7 +36,7 @@ def fnv1a(s):
 
 
 BLOCK_NAMES = [
-    "air", "grass_block", "forest_grass", "stone", "dirt", "sand", "sandstone", "gravel",
+    "air", "grass_block", "forest_grass", "stone", "dirt", "sand", "sandstone", "gravel", "water",
 ]
 HASH_TO_NAME = {fnv1a("kingscraft:" + n): n for n in BLOCK_NAMES}
 AIR = fnv1a("kingscraft:air")
@@ -47,6 +47,13 @@ BIOME_NAMES = {"D": "Desert", "G": "Grasslands", "F": "Forest", "M": "Mountains"
 
 def biome_code(top_id, below_id):
     top = HASH_TO_NAME.get(int(top_id), "?")
+    if top == "water":
+        # Lake cells: classify by the terrain they cover. One-level fallback to
+        # the block below the probe (deep lakes are resolved in store_chunk).
+        below = HASH_TO_NAME.get(int(below_id), "?")
+        if below in ("water", "?"):
+            return ord("?")
+        return biome_code(below_id, below_id)
     if top == "sand" or top == "sandstone":
         return ord("D")
     if top in ("grass_block", "forest_grass"):
@@ -124,10 +131,30 @@ def store_chunk(chunks, gx, gz, rows, chunk_size, world_height):
     valid = flipped.any(axis=0)
     top = np.where(valid, world_height - 1 - first, 0)
     tt = np.where(valid, top, 0)
-    top_id = np.take_along_axis(grid, tt[np.newaxis, :, :], axis=0)[0]
-    below_id = np.take_along_axis(grid, np.maximum(tt - 1, 0)[np.newaxis, :, :], axis=0)[0]
+
+    def row_at(idx):
+        idx = np.clip(idx, 0, world_height - 1).astype(np.int64)
+        return np.take_along_axis(grid, idx[np.newaxis, :, :], axis=0)[0]
+
+    # Column tops: for biome proxying, water columns are classified by the first
+    # non-water block below the surface; heights stay at the water level.
+    water_hash = fnv1a("kingscraft:water")
+    biome_src = row_at(tt)
+    biome_below = row_at(tt - 1)
+    still_water = (biome_src == water_hash) & valid
+    k = 1
+    while still_water.any() and k < 16:
+        cur = row_at(tt - k)
+        found = still_water & (cur != water_hash)
+        biome_src = np.where(found, cur, biome_src)
+        biome_below = np.where(found, row_at(tt - k - 1), biome_below)
+        still_water = still_water & (cur == water_hash)
+        k += 1
+
+    top_id = row_at(tt)
+    below_id = row_at(tt - 1)
     h = np.where(valid, top, -1).astype(np.int16)
-    biome = np.vectorize(biome_code)(top_id, below_id).astype(np.uint8)
+    biome = np.vectorize(biome_code)(biome_src, biome_below).astype(np.uint8)
     chunks[(gx, gz)] = (h, biome, valid)
 
 

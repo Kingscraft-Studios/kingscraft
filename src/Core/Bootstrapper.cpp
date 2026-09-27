@@ -34,6 +34,7 @@ namespace kc {
         // Shaders
         loadShaderFile("resources/shaders/terrain.vert.spv");
         loadShaderFile("resources/shaders/terrain.frag.spv");
+        loadShaderFile("resources/shaders/transparent.frag.spv");
         loadShaderFile("resources/shaders/ui.vert.spv");
         loadShaderFile("resources/shaders/ui.frag.spv");
         loadShaderFile("resources/shaders/composite.vert.spv");
