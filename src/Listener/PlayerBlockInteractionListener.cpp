@@ -19,7 +19,7 @@ namespace kc {
         const int x = event.getX();
         const int y = event.getY();
         const int z = event.getZ();
-        if (y < 0 || y >= world.getHeight()) return;
+        if (y < world.getMinY() || y > world.getMaxY()) return;
 
         const RegistryKey<Block>& key = event.getBlock();
         if (!key) return;

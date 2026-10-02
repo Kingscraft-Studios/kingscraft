@@ -69,6 +69,7 @@ namespace kc {
 
     void MainMenu::render(FrameScene &scene) {
         scene.terrain.renderTerrain = false;
+        scene.background = WorldBackground::MenuDim;
         scene.ui.enabled = true;
     }
 

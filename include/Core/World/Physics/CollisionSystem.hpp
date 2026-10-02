@@ -17,7 +17,16 @@ namespace kc {
         static AABB blockAABBAt(const Block& block, int x, int y, int z);
         static std::optional<AABB> getWorldBlockAABB(const World& world, int x, int y, int z);
         static bool aabbCollides(const World& world, const AABB& box);
-        static void moveEntity(const World& world, AABB& box, glm::vec3& velocity, float dt);
+
+        // Moves `box` by `velocity * dt`, resolving each axis in turn and then
+        // depenetrating.
+        //
+        // Returns false when the box still overlaps solid ground when it is done,
+        // which happens when the entity is wedged with no free cell above it and
+        // every horizontal escape blocked. Callers used to ignore this and the
+        // entity was then simply frozen inside terrain with no way out, so the
+        // return value is the caller's cue to recover.
+        static bool moveEntity(const World& world, AABB& box, glm::vec3& velocity, float dt);
     };
 
 } // namespace kc

@@ -4,7 +4,7 @@
 #include <string>
 #include <cstdint>
 
-#include "../Engine/UiLabel.hpp"
+#include "UI/Engine/UiLabel.hpp"
 
 namespace kc {
 

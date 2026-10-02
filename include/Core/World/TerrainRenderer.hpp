@@ -17,7 +17,7 @@ namespace kc {
         TerrainRenderer() = default;
 
         void render(FrameScene& scene, const std::vector<Chunk*>& chunks, const glm::mat4& viewProj, const glm::vec3& cameraPos,
-                    bool enableFrustumCulling, float worldHeight,
+                    bool enableFrustumCulling,
                     ChunkLookupFn lookupFn = nullptr,
                     void* lookupContext = nullptr,
                     double* outFrustumMs = nullptr,

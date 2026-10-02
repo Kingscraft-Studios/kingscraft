@@ -48,6 +48,22 @@ namespace kc {
         }
 
     private:
+        // Places the player on dry ground near spawnPos_. Runs a slice of work
+        // per tick and returns true as soon as a spot is committed; returns false
+        // while chunks are still streaming in.
+        bool tryResolveSpawn(World& world);
+        void placeOnSurface(World& world, int x, int surface, int z);
+        void resetSpawnSearch();
+
+        // True when every block under the player's footprint is loaded and solid.
+        bool hasSolidFloor(const World& world) const;
+
+        // Last-resort rescue for a player the collision pass could not free: lifts
+        // them to the first position above where they are stuck that both fits
+        // their body and has a floor under it. Returns false when no such
+        // position exists, which means the surrounding chunks are not in yet.
+        bool recoverFromStuck(World& world);
+
         Camera camera_;
         KeyBindHandler* keybinds_ = nullptr;
         double lastMouseX_ = 0.0;
@@ -59,6 +75,31 @@ namespace kc {
         float respawnGrace_ = 0.0f;
         bool spawnPending_ = true;
         bool dead_ = false;
+
+        // Watchdog for the player being wedged with no way out. `stuckSeconds_`
+        // counts consecutive stationary frames that also fail a "could I move?"
+        // test, so standing still on flat ground never accumulates; only being
+        // unable to make progress does. See tick() for exactly what counts.
+        glm::vec3 lastBodyPos_{0.0f};
+        float stuckSeconds_ = 0.0f;
+        bool stuckLogged_ = false;
+
+        // Cursor for the chunk-by-chunk spawn sweep, so no single tick ever has
+        // to walk the whole search area. The sweep resumes where it left off.
+        int spawnSearchRing_ = 0;
+        int spawnSearchStep_ = 0;
+        // Loaded, non-empty chunks looked at so far this sweep. The sweep is only
+        // allowed to give up on finding land once this is high enough to prove
+        // the surrounding terrain has actually streamed in; otherwise it would
+        // settle for the seabed just because it looked while the world was still
+        // loading.
+        int spawnChunksInspected_ = 0;
+        // Shallowest column seen so far, used when the whole swept area turns out
+        // to be water: better the top of a sandbar than the bottom of the sea.
+        int spawnBestSurface_ = 0;
+        int spawnBestX_ = 0;
+        int spawnBestZ_ = 0;
+        bool spawnHaveBest_ = false;
 
         // Fly mode (double-jump toggles gravity off, SPACE/Shift pilot vertically).
         static constexpr double FLY_TOGGLE_WINDOW = 0.35;   // seconds between taps

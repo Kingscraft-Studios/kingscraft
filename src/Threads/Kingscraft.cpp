@@ -35,8 +35,42 @@ namespace kc {
         // applies it on this thread before the first tick (re-seeding terrain
         // and restoring spawn/time through metadata_.settings / player state).
         WorldMetadata fresh;
-        biomeProvider = std::make_unique<DefaultBiomeProvider>();
-        terrainGen = std::make_unique<DefaultTerrainGenerator>(fresh.settings, *biomeProvider);
+        terrainGen = std::make_unique<DefaultTerrainGenerator>(fresh.settings);
+
+        // How far the spawn scan is allowed to travel for dry land, in blocks.
+        // Wider than the render distance on purpose, so the player can start on
+        // land even when the middle of the map is open ocean.
+        constexpr int kNewWorldSpawnRadius = 1536;
+
+        // A brand new world starts on dry land near the origin instead of at the
+        // hardcoded (67, 67), which for many seeds sits far out at sea. This runs
+        // against the terrain generator directly, so it costs no chunk generation.
+        {
+            const int originX = static_cast<int>(std::floor(fresh.spawnPos.x));
+            const int originZ = static_cast<int>(std::floor(fresh.spawnPos.z));
+            int landX = 0;
+            int landY = 0;
+            int landZ = 0;
+            if (terrainGen->findSpawnColumn(originX, originZ, kNewWorldSpawnRadius,
+                                            landX, landY, landZ)) {
+                // Eye height is added back because metadata stores eye position,
+                // not feet position.
+                const glm::vec3 onLand(static_cast<float>(landX) + 0.5f,
+                                       static_cast<float>(landY) + Attributes::EYE_HEIGHT,
+                                       static_cast<float>(landZ) + 0.5f);
+                fresh.spawnPos = onLand;
+                fresh.playerPos = onLand;
+                LogUtils::info(ThreadName::GameLogic,
+                    "world: new spawn placed on land at (" + std::to_string(landX) + ", "
+                    + std::to_string(landY) + ", " + std::to_string(landZ) + ")");
+            } else {
+                LogUtils::warn(ThreadName::GameLogic,
+                    "world: no dry land within " + std::to_string(kNewWorldSpawnRadius)
+                    + " blocks of (" + std::to_string(originX) + ", "
+                    + std::to_string(originZ) + "); keeping the default spawn");
+            }
+        }
+
         world = std::make_unique<World>(*terrainGen, RendererSettings::get().chunkSize,
                                         RendererSettings::get().worldHeight, fresh);
         registerAllKeys();
@@ -81,11 +115,13 @@ namespace kc {
 
         // Publish the biome under the player for the debug overlay (read-only
         // on the renderer thread via an atomic).
-        if (biomeProvider && world) {
+        if (terrainGen && world) {
             glm::vec3 body = world->getPlayerController().getBodyPosition();
             currentBiomeEncoded_.store(
-                biomeProvider->getBiome(static_cast<int>(std::floor(body.x)),
-                                        static_cast<int>(std::floor(body.z))).getEncoded(),
+                terrainGen->getBiomeProvider()
+                    .getBiome(static_cast<int>(std::floor(body.x)),
+                              static_cast<int>(std::floor(body.z)))
+                    .getEncoded(),
                 std::memory_order_relaxed);
             playerFlying_.store(world->getPlayerController().isFlying(), std::memory_order_relaxed);
         }

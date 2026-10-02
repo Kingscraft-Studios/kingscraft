@@ -16,24 +16,30 @@ namespace kc {
     // chunk storage is still text. Text keeps it human-debuggable; a binary
     // layout arrives with the KCF pipeline later.
     //
-    //   #K <v>               worldFormatVersion (gate: refuse anything != 1)
+    //   #K <v>               worldFormatVersion (gate: refuse anything != WORLD_FORMAT_VERSION)
     //   #S <seed>            generator seed
-    //   #F <freq>            noise frequency
-    //   #O <octaves>         fractal octaves
-    //   #L <lacunarity>      fractal lacunarity
-    //   #N <gain>            fractal gain
+    //   #SL <y>              sea level (vanilla 63)
+    //   #RB <f>              extra rolling hills, in blocks (default 0 = vanilla)
+    //   #LP <f>              terrain dial: inland valley floor   (default 0.01)
+    //   #LH <f>              terrain dial: inland gentle middle (default 0.03)
+    //   #LT <f>              terrain dial: inland high ground   (default 0.10)
     //   #G <id> <version>    generatorId generatorVersion
     //   #B <version>         blockRegistryVersion
     //   #W <ticks>           worldTime
     //   #SP <x> <y> <z>      spawn point (body coords)
     //   #PL <x> <y> <z>      player position (body coords)
-    //   #PY <yaw> <pitch>    player camera facing
+    //   #PY <yaw> <pitch>    camera facing
     //
-    // Height shaping (amplitude / base height) moved onto Biomes and is no
-    // longer persisted in world.kcw; the old #A / #H tags are ignored on read.
-    // Unknown directives are ignored and absent directives keep the defaults,
-    // so future fields only need a new tag (no version bump) and a malformed or
-    // future-version file is refused and must not be overwritten.
+    // The #RB/#LP/#LH/#LT terrain dials are the whole terrain customisation
+    // surface and are safe to hand-edit: they are read into settings on load and
+    // written back verbatim, because World only ever overwrites worldTime and
+    // the player/spawn fields, never settings. See TerrainGenSettings.hpp.
+    //
+    // Height shaping used to live on Biomes and was never persisted; the legacy
+    // #A / #H tags are still ignored on read. Unknown directives are ignored and
+    // absent directives keep the defaults, so future fields only need a new tag
+    // (no version bump) and a malformed or future-version file is refused and
+    // must not be overwritten.
     class WorldMetadataTemplate final : public IOTemplateBase {
     public:
         enum class LoadResult { Ok, NotFound, Invalid };
@@ -72,14 +78,21 @@ namespace kc {
                     versionOk = true;
                 } else if (tag == "#S") {
                     if (!(iss >> outcome.metadata.settings.seed)) return fail();
-                } else if (tag == "#F") {
-                    if (!(iss >> outcome.metadata.settings.frequency)) return fail();
-                } else if (tag == "#O") {
-                    if (!(iss >> outcome.metadata.settings.octaves)) return fail();
-                } else if (tag == "#L") {
-                    if (!(iss >> outcome.metadata.settings.lacunarity)) return fail();
-                } else if (tag == "#N") {
-                    if (!(iss >> outcome.metadata.settings.gain)) return fail();
+                } else if (tag == "#SL") {
+                    // Optional: worlds written before the vanilla pipeline have no
+                    // #SL line, and keeping the default is the right reading for
+                    // them (the old generator hardcoded its own water level).
+                    if (!(iss >> outcome.metadata.settings.seaLevel)) return fail();
+                } else if (tag == "#RB") {
+                    // Terrain dials are optional for the same reason #SL is: a
+                    // world saved before the dials existed keeps vanilla terrain.
+                    if (!(iss >> outcome.metadata.settings.shape.reliefBlocks)) return fail();
+                } else if (tag == "#LP") {
+                    if (!(iss >> outcome.metadata.settings.shape.lowlandPlain)) return fail();
+                } else if (tag == "#LH") {
+                    if (!(iss >> outcome.metadata.settings.shape.lowlandHill)) return fail();
+                } else if (tag == "#LT") {
+                    if (!(iss >> outcome.metadata.settings.shape.lowlandTall)) return fail();
                 } else if (tag == "#G") {
                     if (!(iss >> outcome.metadata.generatorId >> outcome.metadata.generatorVersion)) return fail();
                 } else if (tag == "#B") {
@@ -96,6 +109,8 @@ namespace kc {
             }
 
             if (!versionOk) return fail();
+            // A hand-edited dial must not be able to invert the spline knots.
+            outcome.metadata.settings.shape.clampToValidRanges();
             outcome.result = LoadResult::Ok;
             return outcome;
         }
@@ -110,13 +125,19 @@ namespace kc {
         void flush() {
             if (!pending_) return;
 
+            // Write back the values actually in use, so a hand-edited dial that
+            // had to be clamped (see clampToValidRanges) reads back correctly.
+            TerrainShape shape = metadata_.settings.shape;
+            shape.clampToValidRanges();
+
             std::ostringstream out;
             out << "#K " << WORLD_FORMAT_VERSION << '\n';
             out << "#S " << metadata_.settings.seed << '\n';
-            out << "#F " << writeFloat(metadata_.settings.frequency) << '\n';
-            out << "#O " << metadata_.settings.octaves << '\n';
-            out << "#L " << writeFloat(metadata_.settings.lacunarity) << '\n';
-            out << "#N " << writeFloat(metadata_.settings.gain) << '\n';
+            out << "#SL " << metadata_.settings.seaLevel << '\n';
+            out << "#RB " << writeFloat(shape.reliefBlocks) << '\n';
+            out << "#LP " << writeFloat(shape.lowlandPlain) << '\n';
+            out << "#LH " << writeFloat(shape.lowlandHill) << '\n';
+            out << "#LT " << writeFloat(shape.lowlandTall) << '\n';
             out << "#G " << metadata_.generatorId << ' ' << metadata_.generatorVersion << '\n';
             out << "#B " << metadata_.blockRegistryVersion << '\n';
             out << "#W " << metadata_.worldTime << '\n';

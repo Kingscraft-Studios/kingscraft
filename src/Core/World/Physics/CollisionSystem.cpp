@@ -40,10 +40,15 @@ namespace kc {
     }
 
     std::optional<AABB> CollisionSystem::getWorldBlockAABB(const World& world, int x, int y, int z) {
-        if (y < 0 || y >= world.getHeight()) return std::nullopt;
+        if (y < world.getMinY() || y >= world.getMaxY() + 1) return std::nullopt;
 
         const uint64_t blockId = world.getBlock(x, y, z);
         if (blockId == 0) return std::nullopt;
+
+        // Never collide with non-solid blocks (liquids, air, etc.). This ensures
+        // water does not participate in collision testing at all.
+        auto block = Registry<Block>::getRegistry().getShared(blockId);
+        if (!block || !block->isSolid()) return std::nullopt;
 
         const AABB& box = getBlockCollisionBox(blockId);
         if (box.isEmpty()) return std::nullopt;
@@ -70,7 +75,7 @@ namespace kc {
         return false;
     }
 
-    void CollisionSystem::moveEntity(const World& world, AABB& box, glm::vec3& velocity, float dt) {
+    bool CollisionSystem::moveEntity(const World& world, AABB& box, glm::vec3& velocity, float dt) {
         const glm::vec3 delta = velocity * dt;
         const glm::vec3 size = box.getSize();
 
@@ -209,7 +214,11 @@ namespace kc {
         resokcAxis(0, delta.x);
         resokcAxis(2, delta.z);
         resokcAxis(1, delta.y);
-        depenetrate();
+
+        // Report the result instead of dropping it. A false here means the entity
+        // is still inside solid ground, and the caller needs to know so it can
+        // rescue the entity rather than leaving it wedged for good.
+        return depenetrate();
     }
 
 } // namespace kc

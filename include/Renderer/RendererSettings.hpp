@@ -13,9 +13,17 @@ namespace kc {
         int renderDistance = 10;
 
         int chunkSize = 16;
-        int worldHeight = 100;
-        
+
+        // Minecraft-exact vertical extent: y = -64 .. 319.
+        // minY is the world Y of the bottom layer; local chunk Y is
+        // worldY - minY, so it stays 0-based inside Chunk/ChunkMesher.
+        int minY = -64;
+        int worldHeight = 384;
+
         // Derived
+        int maxY() const { return minY + worldHeight - 1; }
+        bool containsY(int worldY) const { return worldY >= minY && worldY <= maxY(); }
+
         float farPlaneCalc = renderDistance * chunkSize;
 
         // Camera

@@ -107,8 +107,11 @@ public:
     VkQueryPool getPipelineStatsPool() const { return pipelineStatsPool_ ? pipelineStatsPool_->getHandle() : VK_NULL_HANDLE; }
 
     RenderTarget buildRenderTarget(const FrameScene& scene) const {
-        if (scene.terrain.renderTerrain)
-        {
+        // Keyed on the screen's chosen background, NOT on renderTerrain. The
+        // world screen used to fall through to the dim menu target whenever the
+        // culling pass produced zero visible chunks, which flashed flat grey over
+        // the whole screen mid-gameplay. A screen now has to ask for MenuDim.
+        if (scene.background == WorldBackground::Sky) {
             return {
                 .renderPass = worldRenderPass_->getHandle(),
                 .framebuffer = worldFramebuffers_[currentImageIndex_]->getHandle(),

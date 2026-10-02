@@ -149,14 +149,20 @@ void WorldScreen::onPlayerDeath() {
     }
 
 void WorldScreen::render(FrameScene& scene) {
-        auto& world = Runtime::get().kingscraft->getWorld();
-        auto& settings = RendererSettings::get();
-        world.getPlayerController().updateProjection(extent_, settings.fov,
+    auto& world = Runtime::get().kingscraft->getWorld();
+    auto& settings = RendererSettings::get();
+
+    // Explicit, and independent of how many chunks survived culling. The world
+    // screen always draws the world pass and clears to sky, so a frame where the
+    // culling pass yields nothing shows an empty sky rather than the menu's flat
+    // grey.
+    scene.background = WorldBackground::Sky;
+
+    world.getPlayerController().updateProjection(extent_, settings.fov,
                                            settings.nearPlane, settings.farPlane);
 
         glm::mat4 viewProj = world.getPlayerController().getViewProj();
         scene.camera.viewProj = viewProj;
-        float worldHeight = static_cast<float>(Runtime::get().kingscraft->getWorld().getHeight());
 
         scene.highlight.enabled = false;
         if (world.getPlayerController().isCursorCaptured()) {
@@ -176,7 +182,7 @@ void WorldScreen::render(FrameScene& scene) {
         uint32_t occlusionTested = 0, occlusionRemoved = 0;
         terrainRenderer_.render(scene, Runtime::get().kingscraft->getWorld().getLoadedChunks(),
                                 viewProj, world.getPlayerController().getCamera().getPosition(),
-                                settings.enableFrustumCulling, worldHeight,
+                                settings.enableFrustumCulling,
                                 worldChunkLookup, &Runtime::get().kingscraft->getWorld(),
                                 &frustumMs, &drawMs, &visibleChunks,
                                 &visibleSubChunks, &occlusionTested,

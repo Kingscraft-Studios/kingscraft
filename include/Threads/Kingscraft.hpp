@@ -58,9 +58,12 @@ private:
     std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
     // Built from the fresh WorldMetadata's settings; World re-seeds it via
     // ITerrainGenerator::applySettings once the loaded world.kcw resolves.
-    // Providing the biome per position (declared first: provider outlives the
-    // generator, which holds it by reference).
-    std::unique_ptr<BiomeProvider> biomeProvider;
+    //
+    // The generator owns its BiomeProvider, because the provider has to share
+    // the generator's OverworldNoise: two separately seeded graphs would let the
+    // biome map and the heightfield disagree. Read the provider through
+    // getBiomeProvider() rather than caching a reference, since applySettings()
+    // replaces the instance.
     std::unique_ptr<DefaultTerrainGenerator> terrainGen;
     std::unique_ptr<World> world;
 

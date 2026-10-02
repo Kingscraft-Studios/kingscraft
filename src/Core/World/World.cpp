@@ -1,7 +1,9 @@
 #include "Core/World/World.hpp"
 #include "Core/World/ChunkKey.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 
 #include "Bus/MessageBus.hpp"
 #include "Core/Registry.hpp"
@@ -126,10 +128,23 @@ namespace {
 namespace kc {
 
     World::World(ITerrainGenerator& terrainGen, int chunkSize, int height, const WorldMetadata& metadata)
-        : terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height), metadata_(metadata) {
+        : terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height)
+        , minY_(RendererSettings::get().minY), metadata_(metadata) {
         persistMetadata_ = true;
-        noiseDone_ = WorkerPool::get().startWorker([this]() { noiseThreadFunc(); });
+        // Several generators share one queue: whoever is free takes the next
+        // chunk. They all read the same terrain generator, which is why
+        // generateBlocks() takes a shared rather than an exclusive lock.
+        noiseDones_.reserve(GEN_WORKERS);
+        for (int i = 0; i < GEN_WORKERS; ++i)
+            noiseDones_.push_back(WorkerPool::get().startWorker([this]() { noiseThreadFunc(); }));
         meshDone_ = WorkerPool::get().startWorker([this]() { meshThreadFunc(); });
+
+        // Start the throughput window at "now". Left at 0 the first log would
+        // measure an interval of fifty years and report a nonsense rate.
+        throughputLogMicros_.store(
+            (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count(),
+            std::memory_order_relaxed);
         playerController_.init(Runtime::get().inputThread->getKeyBindHandler());
 
         worldTime_ = metadata_.worldTime;
@@ -163,7 +178,7 @@ namespace kc {
         noiseCV_.notify_all();
         meshCV_.notify_all();
         if (meshDone_.valid()) meshDone_.wait();
-        if (noiseDone_.valid()) noiseDone_.wait();
+        for (auto& done : noiseDones_) if (done.valid()) done.wait();
 
         if (persistMetadata_) {
             metadata_.worldTime = worldTime_;
@@ -230,7 +245,7 @@ namespace kc {
     }
 
     bool World::setBlock(int worldX, int worldY, int worldZ, const Block& block) {
-        if (worldY < 0 || worldY >= height_) return false;
+        if (worldY < minY_ || worldY >= minY_ + height_) return false;
         int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
         int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
         Chunk* chunk = getChunk(gx, gz);
@@ -240,7 +255,8 @@ namespace kc {
 
         const uint64_t previousEncoded = getBlock(worldX, worldY, worldZ);
         const uint64_t currentEncoded = block.getEncodedId();
-        chunk->setBlock(lx, worldY, lz, block.getEncodedId());
+        // Local Y, same as the read above -- see the note in getBlock().
+        chunk->setBlock(lx, worldY - minY_, lz, block.getEncodedId());
 
         // chunk->setBlock copy-on-writes to a fresh buffer; point the cache at
         // the same handle so cache and live chunk always share one grid.
@@ -267,24 +283,40 @@ namespace kc {
     }
 
     uint64_t World::getBlock(int worldX, int worldY, int worldZ) const {
-        if (worldY < 0 || worldY >= height_) return 0;
+        if (worldY < minY_ || worldY >= minY_ + height_) return 0;
         int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
         int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
         auto it = chunks_.find(makeChunkKey(gx, gz));
         if (it == chunks_.end()) return 0;
         int lx = worldX - gx * chunkSize_;
         int lz = worldZ - gz * chunkSize_;
-        return it->second->getBlock(lx, worldY, lz);
+        // Chunk grids are indexed by LOCAL Y (local 0 is world minY), so the world
+        // Y has to be converted here. Passing it straight through made every query
+        // answer for worldY + 64: collision found phantom ground 64 blocks above
+        // the real surface, the block highlight lit up empty air, and the player
+        // was shoved around by walls they could see straight through.
+        return it->second->getBlock(lx, worldY - minY_, lz);
     }
 
     int World::getSurfaceHeight(int worldX, int worldZ) const {
         int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
         int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
         const Chunk* chunk = getChunk(gx, gz);
-        if (!chunk) return -1;
+        if (!chunk) return UNLOADED_SURFACE;
         int lx = worldX - gx * chunkSize_;
         int lz = worldZ - gz * chunkSize_;
-        return chunk->getHeightAt(lx, lz);
+        // OCEAN_FLOOR, not MOTION_BLOCKING. Liquids are not collidable in this
+        // engine, so a spawn height that accepted them put the player on top of
+        // the water column with nothing under their feet: they fell through it,
+        // and the depenetration pass in CollisionSystem::moveEntity fought the
+        // fall every tick, which reads as the camera drifting on its own. The
+        // same empty ground also meant `grounded` never became true, so the
+        // double-tap that arms fly mode could never be reached.
+        //
+        // Vanilla reports the water surface here and pairs it with water physics
+        // (buoyancy and drag) so the player floats instead of falling. Those are
+        // not implemented, so this reports the seabed to keep spawning playable.
+        return chunk->localToWorldY(chunk->getOceanFloorTopY(lx, lz));
     }
 
     void World::remeshDirtyChunks() {
@@ -296,17 +328,17 @@ namespace kc {
         for (auto& [key, chunk] : chunks_) {
             if (!chunk->isRemeshNeeded()) continue;
 
-            uint32_t mask = 0;
-            uint32_t i = 0;
+            SubChunkMask mask;
+            size_t i = 0;
             for (auto& sub : chunk->getSubChunks()) {
-                if (sub.meshNeeded) mask |= (1u << i);
+                if (sub.meshNeeded) mask.set(i);
                 ++i;
             }
-            if (mask == 0) continue;
+            if (mask.empty()) continue;
 
             auto it = editMasks_.find(key);
             if (it != editMasks_.end()) {
-                it->second |= mask;   // already queued for this chunk: accumulate
+                it->second.merge(mask);   // already queued: accumulate
                 continue;
             }
             editMasks_[key] = mask;
@@ -367,7 +399,12 @@ namespace kc {
 
         auto chunk = std::make_unique<Chunk>(glm::ivec2(gridX, gridZ), N, 1.0f, h);
         chunk->setBlockData(handle, N, h);           // shares one grid with blockCache_
-        for (auto& sub : chunk->getSubChunks()) {
+        // Sub-chunks that are pure air produce no geometry, so they are never
+        // handed to the mesher. At 384 tall a typical chunk occupies only a
+        // fraction of its 96 sub-chunks, and the rest are all sky.
+        for (size_t i = 0; i < chunk->getSubChunks().size(); ++i) {
+            if (!chunk->isSubChunkOccupied(i)) continue;
+            auto& sub = chunk->getSubChunks()[i];
             ChunkMesher::generateSubChunk(sub, chunk->getBlockData(), N, h, sub.yBase,
                                            pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
         }
@@ -468,8 +505,47 @@ namespace kc {
                 std::lock_guard<std::mutex> lock(queueMutex_);
                 toMesh_.push_back(makeChunkKey(gx, gz));
             }
+            genChunksDone_.fetch_add(1, std::memory_order_relaxed);
             meshCV_.notify_one();
+            logThroughput();
         }
+    }
+
+    // Reports how many chunks/second generation and meshing are each turning
+    // over. Without this, a parallelisation change is unmeasurable from the
+    // outside: the world just looks slow and you cannot tell which stage is the
+    // one holding things up.
+    void World::logThroughput() {
+        using namespace std::chrono;
+        static constexpr uint64_t kWindowMicros = 2'000'000;   // 2 seconds
+
+        const uint64_t nowUs = (uint64_t)duration_cast<microseconds>(
+            steady_clock::now().time_since_epoch()).count();
+
+        // Whichever thread gets here first in a window does the logging and
+        // pushes the window forward; the others just return. That keeps the
+        // output to one line per window instead of one line per worker.
+        uint64_t lastUs = throughputLogMicros_.load(std::memory_order_relaxed);
+        if (nowUs < lastUs + kWindowMicros) return;
+        if (!throughputLogMicros_.compare_exchange_strong(
+                lastUs, nowUs, std::memory_order_relaxed))
+            return;
+
+        const double seconds = (double)(nowUs - lastUs) / 1e6;
+        if (seconds < 0.25) return;   // first call: not a real interval yet
+
+        const uint64_t gen = genChunksDone_.load(std::memory_order_relaxed);
+        const uint64_t mesh = meshChunksDone_.load(std::memory_order_relaxed);
+
+        char buf[160];
+        snprintf(buf, sizeof buf,
+                 "streaming: gen %.1f chunks/s (%d workers), mesh %.1f chunks/s",
+                 (double)(gen - lastGenCount_) / seconds, GEN_WORKERS,
+                 (double)(mesh - lastMeshCount_) / seconds);
+        LogUtils::info(ThreadName::GameLogic, buf);
+
+        lastGenCount_ = gen;
+        lastMeshCount_ = mesh;
     }
 
     // Mesher thread: owns every meshing task. User block-edit rebuilds first
@@ -511,7 +587,7 @@ namespace kc {
             int gz = static_cast<int>(key & 0xFFFFFFFF);
 
             if (isEdit) {
-                uint32_t mask = 0;
+                SubChunkMask mask;
                 {
                     std::lock_guard<std::mutex> lock(queueMutex_);
                     auto it = editMasks_.find(key);
@@ -531,13 +607,24 @@ namespace kc {
                 std::vector<uint64_t> strip[4];
                 const std::vector<uint64_t>* edges[4] = {};
                 {
-                    std::lock_guard<std::mutex> lock(cacheMutex_);
+                    // Grab the four neighbour pointers under the lock, then do the
+                    // copying outside it. extractEdgeStrip pulls a 16x384 strip
+                    // per neighbour, so holding cacheMutex_ across all four kept
+                    // the lock busy for long enough to stall every chunk
+                    // generator trying to publish its result.
                     constexpr int edx[4] = {1, -1, 0, 0};
                     constexpr int edz[4] = {0, 0, 1, -1};
+                    BlockDataPtr neighbour[4];
+                    {
+                        std::lock_guard<std::mutex> lock(cacheMutex_);
+                        for (int e = 0; e < 4; ++e) {
+                            auto it = blockCache_.find(makeChunkKey(gx + edx[e], gz + edz[e]));
+                            neighbour[e] = (it != blockCache_.end()) ? it->second : nullptr;
+                        }
+                    }
                     for (int e = 0; e < 4; ++e) {
-                        auto it = blockCache_.find(makeChunkKey(gx + edx[e], gz + edz[e]));
-                        if (it != blockCache_.end()) {
-                            strip[e] = extractEdgeStrip(*it->second, N, h, e);
+                        if (neighbour[e]) {
+                            strip[e] = extractEdgeStrip(*neighbour[e], N, h, e);
                             edges[e] = &strip[e];
                         }
                     }
@@ -550,7 +637,7 @@ namespace kc {
                 result.mask = mask;
                 result.subs.reserve(static_cast<size_t>(subCount));
                 for (int i = 0; i < subCount; ++i) {
-                    if (!(mask & (1u << static_cast<uint32_t>(i)))) continue;
+                    if (!mask.test(static_cast<size_t>(i))) continue;
                     SubChunk sub{};
                     sub.yBase = i * static_cast<int>(SUBCHUNK_H);
                     ChunkMesher::generateSubChunk(sub, *blockData, N, h, sub.yBase,
@@ -667,7 +754,9 @@ namespace kc {
             auto tempChunk = std::make_unique<Chunk>(glm::ivec2(gx, gz), N, 1.0f, h);
             tempChunk->setBlockData(blockData, N, h);   // shares the cache grid, no copy
             const std::vector<uint64_t>& chunkData = tempChunk->getBlockData();
-            for (auto& sub : tempChunk->getSubChunks()) {
+            for (size_t i = 0; i < tempChunk->getSubChunks().size(); ++i) {
+                if (!tempChunk->isSubChunkOccupied(i)) continue;
+                auto& sub = tempChunk->getSubChunks()[i];
                 ChunkMesher::generateSubChunk(sub, chunkData, N, h, sub.yBase,
                                               edges[0], edges[1], edges[2], edges[3]);
             }
@@ -680,6 +769,7 @@ namespace kc {
                 std::lock_guard<std::mutex> lock(queueMutex_);
                 completedGen_.push_back(std::move(result));
             }
+            meshChunksDone_.fetch_add(1, std::memory_order_relaxed);
         }
     }
 
@@ -786,7 +876,7 @@ namespace kc {
             auto& dst = existing->getSubChunks();
             size_t k = 0;
             for (size_t i = 0; i < dst.size() && k < r.subs.size(); ++i) {
-                if (r.mask & (1u << static_cast<uint32_t>(i))) {
+                if (r.mask.test(i)) {
                     dst[i] = std::move(r.subs[k++]);
                 }
             }
@@ -1005,7 +1095,11 @@ namespace kc {
                     });
             }
         }
-        if (queued > 0) noiseCV_.notify_one();
+        // Wake every generator, not just one. With a single generator
+        // notify_one() was equivalent; with several it would hand a fresh batch
+        // to one thread and leave the rest asleep, which is the same as not
+        // having added them.
+        if (queued > 0) noiseCV_.notify_all();
 
         flushPendingCleanup();
         processCompletedChunks();

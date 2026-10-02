@@ -15,6 +15,7 @@
 #include <condition_variable>
 #include <deque>
 #include <atomic>
+#include <limits>
 
 #include "PlayerController.hpp"
 
@@ -39,6 +40,11 @@ namespace kc {
 
         int getChunkSize() const { return chunkSize_; }
         int getHeight() const { return height_; }
+        int getMinY() const { return minY_; }
+        int getMaxY() const { return minY_ + height_ - 1; }
+        // getSurfaceHeight reports minY - 1 for an unloaded column, so compare
+        // against getMinY() rather than against 0.
+        static constexpr int UNLOADED_SURFACE = std::numeric_limits<int>::min();
 
         uint64_t getWorldTime() const { return worldTime_; }
 
@@ -83,7 +89,7 @@ namespace kc {
         struct ChunkEditResult {
             int gx;
             int gz;
-            uint32_t mask;              // subchunks rebuilt (1 bit per subchunk)
+            SubChunkMask mask;           // subchunks rebuilt (1 bit per subchunk)
             std::vector<SubChunk> subs; // rebuilt geometry, one per set bit (ascending)
         };
 
@@ -101,9 +107,24 @@ namespace kc {
         static constexpr int MAX_REMESH_PER_FRAME = 16;
         static constexpr int CLEANUP_DELAY = 4;
 
+        // How many threads generate chunk blocks at once.
+        //
+        // Generation is the long pole in streaming a view: tens of milliseconds
+        // per 16x16 chunk, and nothing else in the loop comes close. It is also
+        // pure CPU work on data that does not change mid-generation, so it is the
+        // one place where more threads pay off directly.
+        //
+        // 3 is deliberate rather than hardware_concurrency-derived. Generation
+        // also competes with the game thread, the mesher and the render thread,
+        // so past a handful of generators the extra threads mostly take CPU away
+        // from the mesher instead of finishing chunks faster. Raise it if the
+        // throughput log shows the mesher idling; lower it if meshing starves.
+        static constexpr int GEN_WORKERS = 3;
+
         ITerrainGenerator& terrainGen_;
         int chunkSize_;
         int height_;
+        int minY_;
         WorldMetadata metadata_;
         // False when world.kcw failed to load (corrupt / future version): the
         // unreadable file is left untouched on shutdown instead of overwritten.
@@ -117,13 +138,30 @@ namespace kc {
         std::array<std::vector<std::unique_ptr<Chunk>>, CLEANUP_DELAY + 1> pendingCleanup_;
         uint64_t frameCount_ = 0;
 
-        std::shared_future<void> noiseDone_;
+        // One entry per generation thread (GEN_WORKERS). Each waits on the same
+        // noiseCV_ and pops from the same pendingGen_ queue, so the work splits
+        // itself; all of them are joined in the destructor.
+        std::vector<std::shared_future<void>> noiseDones_;
         std::atomic<bool> noiseRunning_{true};
         std::condition_variable noiseCV_;
 
         std::shared_future<void> meshDone_;
         std::atomic<bool> meshRunning_{true};
         std::condition_variable meshCV_;
+
+        // Streaming throughput counters. Generation is now several threads and
+        // meshing is still one, so the interesting question after this change is
+        // no longer "is generation slow" but "has generation simply handed the
+        // bottleneck to the mesher". logThroughput() answers that once every
+        // couple of seconds so the answer does not have to be guessed at.
+        std::atomic<uint64_t> genChunksDone_{0};
+        std::atomic<uint64_t> meshChunksDone_{0};
+        std::atomic<uint64_t> throughputLogMicros_{0};
+        // Written only by whichever worker wins the log slot below, so these
+        // need no synchronisation of their own.
+        uint64_t lastGenCount_ = 0;
+        uint64_t lastMeshCount_ = 0;
+        void logThroughput();
 
         std::mutex queueMutex_;   // guards the hand-off queues both threads share
 
@@ -135,7 +173,7 @@ namespace kc {
         std::deque<GateRemeshResult> completedGateRemesh_;
         std::unordered_map<uint64_t, uint8_t> remeshGates_;
         std::deque<uint64_t> editQueue_;           // block edits awaiting mesher rebuild
-        std::unordered_map<uint64_t, uint32_t> editMasks_;   // queued subchunk masks per key
+        std::unordered_map<uint64_t, SubChunkMask> editMasks_; // queued subchunk masks per key
         std::deque<ChunkEditResult> completedEdits_;
         int remeshRequestsThisTick_ = 0;
 

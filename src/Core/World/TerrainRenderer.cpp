@@ -5,6 +5,7 @@
 #include "Vulkan/TextureCache.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Util/TimeUtil.hpp"
+#include <string>
 #include "../../../include/Core/Bootstrapper.hpp"
 #include "Core/World/Chunk.hpp"
 #include <algorithm>
@@ -90,7 +91,12 @@ namespace kc {
                     int lz = std::clamp(static_cast<int>(localZ), 0, static_cast<int>(cs) - 1);
 
                     float rayY = origin.y + dir.y * sampleT;
-                    if (static_cast<float>(chunk->getHeightAt(lx, lz)) > rayY + epsilon)
+                    // OCEAN_FLOOR is the solid, non-liquid top: water is drawn
+                    // translucent and must not count as occluding geometry.
+                    // -1 means the column is empty.
+                    const int topLocal = chunk->getOceanFloorTopY(lx, lz);
+                    if (topLocal >= 0 &&
+                        static_cast<float>(chunk->localToWorldY(topLocal)) > rayY + epsilon)
                         return;  // BLOCKED
                 }
             }
@@ -144,9 +150,12 @@ namespace kc {
         if (camChunk) {
             int lx = static_cast<int>(cameraPos.x - camChunk->getWorldOrigin().x);
             int lz = static_cast<int>(cameraPos.z - camChunk->getWorldOrigin().z);
-            if (lx >= 0 && lx < static_cast<int>(cs) && lz >= 0 && lz < static_cast<int>(cs))
-                if (cameraPos.y < static_cast<float>(camChunk->getHeightAt(lx, lz)) - 1.0f)
+            if (lx >= 0 && lx < static_cast<int>(cs) && lz >= 0 && lz < static_cast<int>(cs)) {
+                const int topLocal = camChunk->getOceanFloorTopY(lx, lz);
+                if (topLocal >= 0 &&
+                    cameraPos.y < static_cast<float>(camChunk->localToWorldY(topLocal)) - 1.0f)
                     underground = true;
+            }
         }
 
         float maxDist = settings.farPlane;
@@ -242,7 +251,7 @@ namespace kc {
 
     void TerrainRenderer::render(FrameScene& scene, const std::vector<Chunk*>& chunks,
                                  const glm::mat4& viewProj, const glm::vec3& cameraPos,
-                                 bool enableFrustumCulling, float worldHeight,
+                                 bool enableFrustumCulling,
                                  ChunkLookupFn lookupFn, void* lookupContext,
                                   double* outFrustumMs, double* outDrawMs,
                                   uint32_t* outVisibleChunks,
@@ -260,25 +269,59 @@ namespace kc {
         uint32_t visibleSubCount = 0;
 
         if (enableFrustumCulling && !chunks.empty()) {
-            float chunkSize = static_cast<float>(chunks[0]->getVerticesPerAxis() - 1);
-            glm::vec3 halfExtents(chunkSize * 0.5f, worldHeight * 0.5f, chunkSize * 0.5f);
+            // A chunk spans exactly `verticesPerAxis` blocks in world space
+            // (spacing is 1.0, so the origin advances by that many blocks per
+            // grid step). The old `- 1` made this 15 for a 16-wide chunk, which
+            // put the camera in the wrong grid cell and misaligned the box.
+            const float chunkSize = static_cast<float>(chunks[0]->getVerticesPerAxis());
+
+            // The box tracks each chunk's real vertical extent instead of the
+            // full 384-block column. A shared full-height box would intersect
+            // almost every frustum and cull nothing; an all-air chunk collapses
+            // to nothing at all and drops out here.
+            auto boundsOf = [chunkSize](const Chunk* c) {
+                const glm::vec3 origin = c->getWorldOrigin();
+                const glm::vec3 mn(origin.x - FRUSTUM_MARGIN,
+                                   origin.y + static_cast<float>(c->getMinHeight()),
+                                   origin.z - FRUSTUM_MARGIN);
+                const glm::vec3 mx(origin.x + chunkSize + FRUSTUM_MARGIN,
+                                   origin.y + static_cast<float>(c->getMaxHeight()) + 1.0f,
+                                   origin.z + chunkSize + FRUSTUM_MARGIN);
+                return std::pair<glm::vec3, glm::vec3>(mn, mx);
+            };
 
             Frustum frustum(viewProj);
+
+            // Grid cell the camera sits in. The chunk containing it is never
+            // culled: you cannot see past your own chunk, so rejecting it can
+            // only ever remove geometry the camera is standing inside. Losing it
+            // is also how the visible list could end up empty while chunks were
+            // still loaded.
+            const int camGx = static_cast<int>(std::floor(cameraPos.x / chunkSize));
+            const int camGz = static_cast<int>(std::floor(cameraPos.z / chunkSize));
+
             for (Chunk* chunk : chunks) {
-                glm::vec3 origin = chunk->getWorldOrigin();
-                glm::vec3 min = origin - glm::vec3(FRUSTUM_MARGIN, 0.0f, FRUSTUM_MARGIN);
-                glm::vec3 max = origin + glm::vec3(chunkSize + FRUSTUM_MARGIN, worldHeight, chunkSize + FRUSTUM_MARGIN);
-                if (!frustum.isVisible(min, max)) continue;
                 if (chunk->getSubChunks().empty()) continue;
+                if (!chunk->getMaxHeight()) continue;   // nothing but air
+
+                auto [mn, mx] = boundsOf(chunk);
+                const bool boxVisible = frustum.isVisible(mn, mx);
+
+                // The chunk the camera stands in is never culled, however its box
+                // happens to straddle the near plane.
+                const bool isCameraChunk =
+                    chunk->getGridPos().x == camGx && chunk->getGridPos().y == camGz;
+                if (!isCameraChunk && !boxVisible) continue;
+
                 visible.push_back(chunk);
                 for (auto& sub : chunk->getSubChunks())
                     if (sub.indexCount > 0) visibleSubCount++;
             }
 
             std::sort(visible.begin(), visible.end(),
-                [cameraPos, halfExtents](Chunk* a, Chunk* b) {
-                    glm::vec3 da = (a->getWorldOrigin() + halfExtents) - cameraPos;
-                    glm::vec3 db = (b->getWorldOrigin() + halfExtents) - cameraPos;
+                [cameraPos, &boundsOf](Chunk* a, Chunk* b) {
+                    glm::vec3 da = (boundsOf(a).first + boundsOf(a).second) * 0.5f - cameraPos;
+                    glm::vec3 db = (boundsOf(b).first + boundsOf(b).second) * 0.5f - cameraPos;
                     return da.x * da.x + da.y * da.y + da.z * da.z <
                            db.x * db.x + db.y * db.y + db.z * db.z;
                 });
@@ -295,7 +338,8 @@ namespace kc {
         uint32_t occlusionTested = 0;
         uint32_t occlusionRemoved = 0;
         if (lookupFn && enableFrustumCulling && RendererSettings::get().enableOcclusionCulling && !visible.empty()) {
-            float cs = static_cast<float>(visible[0]->getVerticesPerAxis() - 1);
+            // Same world-space width as the visibility pass above.
+            const float cs = static_cast<float>(visible[0]->getVerticesPerAxis());
             float nearDist = cs * OCCLUSION_NEAR_FACTOR;
 
             uint64_t mutationGen = 0;
@@ -341,7 +385,11 @@ namespace kc {
 
         double drawStart = TimeUtil::uptimeSeconds();
         scene.terrain.draws.clear();
-        scene.terrain.renderTerrain = !visible.empty();
+        // Always on for the world screen. It no longer selects between a sky and a
+        // dim menu background (WorldBackground does that), so this just means "this
+        // frame draws the world pass" -- true even with nothing to draw, because
+        // the target still needs its sky-blue clear and depth.
+        scene.terrain.renderTerrain = true;
         for (Chunk* c : visible) {
             scene.terrain.draws.push_back({
             makeChunkKey(c->getGridPos().x, c->getGridPos().y),

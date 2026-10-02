@@ -94,11 +94,12 @@ namespace {
         for (int vi = 0; vi < 4; ++vi) {
             vertices.push_back({
                 static_cast<uint8_t>(localCorners[vi].x),
-                static_cast<uint8_t>(localCorners[vi].y),
                 static_cast<uint8_t>(localCorners[vi].z),
+                static_cast<int16_t>(localCorners[vi].y),
                 static_cast<uint8_t>(dir),
                 uvs[vi][0],
                 uvs[vi][1],
+                0,
                 cellTex
             });
         }
