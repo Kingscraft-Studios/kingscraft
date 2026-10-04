@@ -38,11 +38,11 @@ namespace kc {
             }
 
             const BlockFlags& lookup(uint64_t id) const {
-                static const BlockFlags kAir{};
-                if (id == 0) return kAir;
+                static const BlockFlags air{};
+                if (id == 0) return air;
                 for (size_t i = 0; i < ids_.size(); ++i)
                     if (ids_[i] == id) return flags_[i];
-                return kAir;
+                return air;
             }
 
         private:

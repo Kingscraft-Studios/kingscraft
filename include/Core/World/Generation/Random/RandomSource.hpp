@@ -84,17 +84,17 @@ namespace kc {
     // same answer as Java's wrap-then-mask.
     class LegacyRandom final : public RandomSource {
     public:
-        static constexpr uint64_t kModulusMask = 281474976710655ULL;  // 2^48 - 1
+        static constexpr uint64_t modulusMask = 281474976710655ULL;  // 2^48 - 1
 
         explicit LegacyRandom(int64_t seed = 0) { setSeed(seed); }
         ~LegacyRandom() override = default;
 
         void setSeed(int64_t seed) {
-            state_ = (static_cast<uint64_t>(seed) ^ 0x5DEECE66DULL) & kModulusMask;
+            state_ = (static_cast<uint64_t>(seed) ^ 0x5DEECE66DULL) & modulusMask;
         }
 
         int32_t next(int bits) override {
-            state_ = (state_ * 0x5DEECE66DULL + 0xBULL) & kModulusMask;
+            state_ = (state_ * 0x5DEECE66DULL + 0xBULL) & modulusMask;
             return static_cast<int32_t>(state_ >> (48 - bits));
         }
 

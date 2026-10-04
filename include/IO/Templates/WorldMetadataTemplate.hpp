@@ -53,9 +53,9 @@ namespace kc {
 
         LoadOutcome load() {
             LoadOutcome outcome;
-            if (!std::filesystem::exists(kWorldPath)) return outcome;
+            if (!std::filesystem::exists(worldPath)) return outcome;
 
-            auto fileData = readBytes(kWorldPath);
+            auto fileData = readBytes(worldPath);
             if (fileData.empty()) return outcome;
 
             std::string text(fileData.begin(), fileData.end());
@@ -146,12 +146,12 @@ namespace kc {
             out << "#PY " << writeFloat(metadata_.yaw) << ' ' << writeFloat(metadata_.pitch) << '\n';
 
             std::string text = out.str();
-            writeBytes(kWorldPath, std::vector<char>(text.begin(), text.end()));
+            writeBytes(worldPath, std::vector<char>(text.begin(), text.end()));
             pending_ = false;
         }
 
     private:
-        static constexpr const char* kWorldPath = "world/world.kcw";
+        static constexpr const char* worldPath = "world/world.kcw";
 
         WorldMetadata metadata_;
         bool pending_ = false;

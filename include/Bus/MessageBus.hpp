@@ -41,14 +41,14 @@ public:
             }
         });
 
-        constexpr auto kRetryDelay = std::chrono::microseconds(100);
-        constexpr auto kTimeout = std::chrono::milliseconds(500);
+        constexpr auto retryDelay = std::chrono::microseconds(100);
+        constexpr auto timeout = std::chrono::milliseconds(500);
 
         const auto start = std::chrono::steady_clock::now();
-        while (std::chrono::steady_clock::now() - start < kTimeout) {
+        while (std::chrono::steady_clock::now() - start < timeout) {
             if (send(target, [payload]() { (*payload)(); }))
                 return;
-            std::this_thread::sleep_for(kRetryDelay);
+            std::this_thread::sleep_for(retryDelay);
         }
         log(LogLevel::WARN, "MessageBus request timed out: target thread not responding");
     }

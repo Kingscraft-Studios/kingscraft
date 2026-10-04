@@ -22,19 +22,19 @@ namespace kc {
     class PerlinNoise {
     public:
         // The 16 gradients, in vanilla's exact order.
-        static constexpr std::array<std::array<int, 3>, 16> kGradients = {{
+        static constexpr std::array<std::array<int, 3>, 16> gradients = {{
             {{1, 1, 0}}, {{-1, 1, 0}}, {{1, -1, 0}}, {{-1, -1, 0}},
             {{1, 0, 1}}, {{-1, 0, 1}}, {{1, 0, -1}}, {{-1, 0, -1}},
             {{0, 1, 1}}, {{0, -1, 1}}, {{0, 1, -1}}, {{0, -1, -1}},
             {{1, 1, 0}}, {{0, -1, 1}}, {{-1, 1, 0}}, {{0, -1, -1}},
         }};
 
-        static constexpr double kStandardDeviation = 0.2702247831245211;
+        static constexpr double standardDeviation = 0.2702247831245211;
 
         // Vanilla's bound: coordinates are wrapped into
         // [-Math.nextDown(1.6777216E7), 1.6777216E7).
-        static constexpr double kWrapLimit = 1.6777216e7;
-        static constexpr double kWrapPeriod = 3.3554432e7;
+        static constexpr double wrapLimit = 1.6777216e7;
+        static constexpr double wrapPeriod = 3.3554432e7;
 
         explicit PerlinNoise(RandomSource& random) { init(random); }
 
@@ -93,8 +93,8 @@ namespace kc {
         // GradientNoise.wrap compares against Math.nextDown(1.6777216E7) for BOTH
         // bounds; the upper bound is not 1.6777216E7 itself.
         static double wrap(double x) {
-            if (x >= -kWrapLimitNextDown && x < kWrapLimitNextDown) return x;
-            return x - std::floor(x / kWrapPeriod + 0.5) * kWrapPeriod;
+            if (x >= -wrapLimitNextDown && x < wrapLimitNextDown) return x;
+            return x - std::floor(x / wrapPeriod + 0.5) * wrapPeriod;
         }
 
         int permute(int x) const { return perms_[static_cast<uint8_t>(x)]; }
@@ -103,7 +103,7 @@ namespace kc {
         // mask. Skipping the permute still yields a plausible in-range value, so the
         // bug is silent, but the noise is wrong.
         const std::array<int, 3>& permuteToGrad(int x) const {
-            return kGradients[static_cast<std::size_t>(perms_[static_cast<std::uint8_t>(x)] & 15)];
+            return gradients[static_cast<std::size_t>(perms_[static_cast<std::uint8_t>(x)] & 15)];
         }
         const std::array<uint8_t, 256>& perms() const { return perms_; }
         const std::array<std::uint8_t, 256>& permutation() const { return perms_; }
@@ -117,8 +117,8 @@ namespace kc {
     private:
         // 1.6777216E7 is exactly 2^24, so Math.nextDown(1.6777216E7) is one ulp
         // (2^-28) below it. Vanilla hardcodes Math.nextDown here.
-        static constexpr double kWrapLimitNextDown = 0x1p24 - 0x1p-28;
-        static_assert(kWrapLimitNextDown < kWrapLimit, "wrap lower bound must be nextDown");
+        static constexpr double wrapLimitNextDown = 0x1p24 - 0x1p-28;
+        static_assert(wrapLimitNextDown < wrapLimit, "wrap lower bound must be nextDown");
 
         void init(RandomSource& random) {
             // The offsets are drawn FIRST, then the table is shuffled.
@@ -136,7 +136,7 @@ namespace kc {
         }
 
         static float gradDot(int hash, float x, float y, float z) {
-            const auto& g = kGradients[hash & 15];
+            const auto& g = gradients[hash & 15];
             return static_cast<float>(g[0]) * x + static_cast<float>(g[1]) * y +
                    static_cast<float>(g[2]) * z;
         }

@@ -26,23 +26,23 @@ namespace kc {
         // natural unit here: each one is asked for its best column in a single
         // heightmap pass, so a wider ring costs a few more reads rather than a
         // few hundred more.
-        constexpr int kSpawnSearchChunks = 14;
+        constexpr int spawnSearchChunks = 14;
 
         // How many chunks one tick is allowed to inspect. The sweep is resumable,
         // so this only sets how smoothly the search spreads across frames; it
         // caps the per-tick cost either way.
-        constexpr int kSpawnChunksPerTick = 64;
+        constexpr int spawnChunksPerTick = 64;
 
         // How much of the search area must have actually streamed in before the
         // sweep is allowed to conclude "this is all ocean" and settle for the
         // shallowest column. Without this the search can finish sweeping unloaded
         // chunks and drop the player on the seabed mid-load.
-        constexpr int kSpawnMinInspectedChunks = 32;
+        constexpr int spawnMinInspectedChunks = 32;
 
         // How long the player must be unable to make any progress before the
         // watchdog tries to lift them out. Long enough that a normal pause never
         // trips it, short enough that being wedged is not a long wait.
-        constexpr float kStuckSeconds = 1.5f;
+        constexpr float stuckSeconds = 1.5f;
 
         // Converts a block coordinate into the MIN corner of a body of the given
         // width centred on that block.
@@ -80,9 +80,14 @@ namespace kc {
         // the search has no business mutating anything anyway.
         const World& view = world;
 
-        const auto water = Registry<Block>::getRegistry().getShared(Blocks::WATER.getEncoded());
-        if (!water) return false;                       // registry not up yet
-        const uint64_t waterId = static_cast<uint64_t>(water->getEncodedId());
+        // The cell encoding of water. Taken straight off the key rather than resolved
+        // through the registry: Blocks::WATER.getEncoded() IS the value
+        // WaterBlock::getEncodedId() would return, and the old
+        // getShared(...)->getEncodedId() round trip cost an O(n) scan of the
+        // whole registry under a lock on every search tick -- and returned
+        // "registry not up yet", failing the spawn search outright whenever
+        // this ran before block registration finished.
+        const uint64_t waterId = Blocks::WATER.getEncoded();
 
         const int cs = world.getChunkSize();
         if (cs <= 0) return false;
@@ -93,13 +98,13 @@ namespace kc {
         const int originGz = static_cast<int>(std::floor(spawnPos_.z / static_cast<float>(cs)));
         if (!view.getChunk(originGx, originGz)) return false;
 
-        int budget = kSpawnChunksPerTick;
+        int budget = spawnChunksPerTick;
         while (budget > 0) {
             // Where we are on the square spiral. Ring 0 is the spawn chunk
             // itself; each later ring is walked one chunk at a time around its
             // perimeter.
             const int ring = spawnSearchRing_;
-            if (ring > kSpawnSearchChunks) break;       // sweep finished
+            if (ring > spawnSearchChunks) break;       // sweep finished
 
             int ringDx = 0, ringDz = 0;
             if (ring == 0) {
@@ -175,8 +180,8 @@ namespace kc {
         // but only once enough of the area has actually loaded to justify
         // concluding it really is all ocean. Otherwise restart the sweep and let
         // more chunks stream in first.
-        if (spawnSearchRing_ > kSpawnSearchChunks) {
-            if (spawnChunksInspected_ < kSpawnMinInspectedChunks) {
+        if (spawnSearchRing_ > spawnSearchChunks) {
+            if (spawnChunksInspected_ < spawnMinInspectedChunks) {
                 resetSpawnSearch();
                 return false;
             }
@@ -189,7 +194,7 @@ namespace kc {
                                       centeredMin(wz, Attributes::PLAYER_WIDTH));
                 resetSpawnSearch();
                 LogUtils::warn(ThreadName::GameLogic,
-                    "spawn: no dry land within " + std::to_string(kSpawnSearchChunks) +
+                    "spawn: no dry land within " + std::to_string(spawnSearchChunks) +
                     " chunks (" + std::to_string(inspected) +
                     " loaded chunks inspected); settling on the shallowest water at (" +
                     std::to_string(wx) + ", " + std::to_string(surfaceY) + ", " +
@@ -444,15 +449,15 @@ namespace kc {
 
         if (!flyMode_ && ( !freed || embedded || hanging)) {
             stuckSeconds_ += dtf;
-            if (stuckSeconds_ >= kStuckSeconds && !stuckLogged_) {
+            if (stuckSeconds_ >= stuckSeconds && !stuckLogged_) {
                 stuckLogged_ = true;
                 LogUtils::warn(ThreadName::GameLogic,
                     "player: unable to move for "
-                    + std::to_string(static_cast<int>(kStuckSeconds))
+                    + std::to_string(static_cast<int>(stuckSeconds))
                     + "s (freed=" + (freed ? "yes" : "no")
                     + ", embedded=" + (embedded ? "yes" : "no") + ")");
             }
-            if (stuckSeconds_ >= kStuckSeconds) recoverFromStuck(world);
+            if (stuckSeconds_ >= stuckSeconds) recoverFromStuck(world);
         } else {
             stuckSeconds_ = 0.0f;
             stuckLogged_ = false;

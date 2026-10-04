@@ -17,7 +17,7 @@ namespace kc {
     // (e.g. the window closing while a reload is in flight), so ordering across
     // threads is guaranteed while targets are live, and a dead target can never
     // wedge dispatch or WorkerPool shutdown for longer than this.
-    inline constexpr auto kEventRoutedHandlerTimeout = std::chrono::seconds(10);
+    inline constexpr auto eventRoutedHandlerTimeout = std::chrono::seconds(10);
     void EventDispatcher::addHandler(const EventHandler& handler) {
         std::lock_guard<std::mutex> lock(mutex);
         auto& list = handlers[handler.eventType];
@@ -69,7 +69,7 @@ namespace kc {
 
         // Handlers run in highest-priority-first order. A handler bound to
         // another thread is handed to that thread's mailbox; dispatch waits
-        // (bounded by kEventRoutedHandlerTimeout) for the remote body, so order
+        // (bounded by eventRoutedHandlerTimeout) for the remote body, so order
         // across threads matches priority order and the firing thread sees the
         // effects before callEvent returns.
         //
@@ -110,7 +110,7 @@ namespace kc {
                 continue;
             }
 
-            if (done.wait_for(kEventRoutedHandlerTimeout) != std::future_status::ready) {
+            if (done.wait_for(eventRoutedHandlerTimeout) != std::future_status::ready) {
                 LogUtils::error(ThreadName::Engine,
                     StringBuilder::build("Event Handler timed out waiting for target thread: event type ", eventType));
                 continue;

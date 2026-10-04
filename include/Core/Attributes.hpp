@@ -10,7 +10,7 @@ namespace kc {
         inline static float GRAVITY       = -20.0f;
         inline static float TERMINAL_FALL_SPEED = 30.0f;
         inline static float JUMP_STRENGTH = 8.0f;
-        inline static float FLY_SPEED        = 6.0f;
+        inline static float FLY_SPEED        = 12.0f;
         inline static float FLY_CLIMB_SPEED  = 5.0f;
         inline static float FLY_DESCEND_SPEED = 5.0f;
         inline static float STEP_HEIGHT   = 0.5f;

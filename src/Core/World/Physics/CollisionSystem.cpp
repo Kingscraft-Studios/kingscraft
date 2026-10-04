@@ -36,7 +36,16 @@ namespace kc {
     }
 
     AABB CollisionSystem::blockAABBAt(const Block& block, int x, int y, int z) {
-        return blockAABBAt(block.getEncodedId(), x, y, z);
+        // Asked for a block we are already holding, so read its box straight off.
+        // Going via block.getEncodedId() first meant an O(n) reverse scan of the
+        // registry under a lock, and then getBlockCollisionBox() looked the very
+        // same block up again by that id -- two registry round trips to reach a
+        // field the caller already had.
+        const AABB& box = block.getCollisionBox();
+        if (box.isEmpty()) return AABB{};
+
+        const glm::vec3 base(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        return AABB(base + box.min, base + box.max);
     }
 
     std::optional<AABB> CollisionSystem::getWorldBlockAABB(const World& world, int x, int y, int z) {

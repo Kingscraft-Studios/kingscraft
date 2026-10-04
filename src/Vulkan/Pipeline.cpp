@@ -5,8 +5,7 @@
 #include <memory>
 
 namespace kc {
-    Pipeline::Pipeline(kc::Device &device, const std::vector<char>& vertCode, const std::vector<char>& fragCode,
-                             const kc::PipelineConfigInfo& configInfo) : device(device) {
+    Pipeline::Pipeline(Device &device, const std::vector<char>& vertCode, const std::vector<char>& fragCode, const PipelineConfigInfo& configInfo) : device(device) {
         createGraphicsPipeline(vertCode, fragCode, configInfo);
     }
 
@@ -14,43 +13,37 @@ namespace kc {
         vkDestroyPipeline(device.device(), graphicsPipeline, nullptr);
     }
 
-    void Pipeline::createGraphicsPipeline(
-    const std::vector<char>& vertCode,
-    const std::vector<char>& fragCode,
-    const PipelineConfigInfo &configInfo) {
+    void Pipeline::createGraphicsPipeline(const std::vector<char>& vertCode, const std::vector<char>& fragCode, const PipelineConfigInfo &configInfo) {
+        vertShaderModule = std::make_unique<ShaderModule>(device, vertCode);
+        fragShaderModule = std::make_unique<ShaderModule>(device, fragCode);
 
-    vertShaderModule = std::make_unique<ShaderModule>(device, vertCode);
-    fragShaderModule = std::make_unique<ShaderModule>(device, fragCode);
+        VkSpecializationInfo fragSpecInfo{};
+        if (!configInfo.specMapEntries.empty() && !configInfo.specData.empty()) {
+            fragSpecInfo.mapEntryCount = static_cast<uint32_t>(configInfo.specMapEntries.size());
+            fragSpecInfo.pMapEntries = configInfo.specMapEntries.data();
+            fragSpecInfo.dataSize = configInfo.specData.size() * sizeof(uint32_t);
+            fragSpecInfo.pData = configInfo.specData.data();
+        }
 
-    VkSpecializationInfo fragSpecInfo{};
-    if (!configInfo.specMapEntries.empty() && !configInfo.specData.empty()) {
-        fragSpecInfo.mapEntryCount = static_cast<uint32_t>(configInfo.specMapEntries.size());
-        fragSpecInfo.pMapEntries = configInfo.specMapEntries.data();
-        fragSpecInfo.dataSize = configInfo.specData.size() * sizeof(uint32_t);
-        fragSpecInfo.pData = configInfo.specData.data();
-    }
+        VkPipelineShaderStageCreateInfo shaderStages[2];
+        shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        shaderStages[0].module = vertShaderModule->getHandle();
+        shaderStages[0].pName = "main";
+        shaderStages[0].flags = 0;
+        shaderStages[0].pNext = nullptr;
+        shaderStages[0].pSpecializationInfo = nullptr;
 
-    VkPipelineShaderStageCreateInfo shaderStages[2];
-    shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    shaderStages[0].module = vertShaderModule->getHandle();
-    shaderStages[0].pName = "main";
-    shaderStages[0].flags = 0;
-    shaderStages[0].pNext = nullptr;
-    shaderStages[0].pSpecializationInfo = nullptr;
+        shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        shaderStages[1].module = fragShaderModule->getHandle();
+        shaderStages[1].pName = "main";
+        shaderStages[1].flags = 0;
+        shaderStages[1].pNext = nullptr;
+        shaderStages[1].pSpecializationInfo = configInfo.specMapEntries.empty() ? nullptr : &fragSpecInfo;
 
-    shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    shaderStages[1].module = fragShaderModule->getHandle();
-    shaderStages[1].pName = "main";
-    shaderStages[1].flags = 0;
-    shaderStages[1].pNext = nullptr;
-    shaderStages[1].pSpecializationInfo = configInfo.specMapEntries.empty() ? nullptr : &fragSpecInfo;
-
-    // --- UPDATED SECTION ---
-    // Use the descriptions from configInfo instead of the hardcoded kcModel::Vertex
-    const auto &bindingDescriptions = configInfo.bindingDescriptions;
-    const auto &attributeDescriptions = configInfo.attributeDescriptions;
+        const auto &bindingDescriptions = configInfo.bindingDescriptions;
+        const auto &attributeDescriptions = configInfo.attributeDescriptions;
 
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -59,40 +52,38 @@ namespace kc {
         // Safely handle empty vectors
         vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.empty() ? nullptr : bindingDescriptions.data();
         vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.empty() ? nullptr : attributeDescriptions.data();
-    // -----------------------
 
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &configInfo.inputAssemblyInfo;
-    pipelineInfo.pViewportState = &configInfo.viewportInfo;
-    pipelineInfo.pRasterizationState = &configInfo.rasterizationInfo;
-    pipelineInfo.pMultisampleState = &configInfo.multisampleInfo;
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &configInfo.inputAssemblyInfo;
+        pipelineInfo.pViewportState = &configInfo.viewportInfo;
+        pipelineInfo.pRasterizationState = &configInfo.rasterizationInfo;
+        pipelineInfo.pMultisampleState = &configInfo.multisampleInfo;
 
-    pipelineInfo.pColorBlendState = &configInfo.colorBlendInfo;
-    pipelineInfo.pDepthStencilState = &configInfo.depthStencilInfo;
-    pipelineInfo.pDynamicState = &configInfo.dynamicStateInfo;
+        pipelineInfo.pColorBlendState = &configInfo.colorBlendInfo;
+        pipelineInfo.pDepthStencilState = &configInfo.depthStencilInfo;
+        pipelineInfo.pDynamicState = &configInfo.dynamicStateInfo;
 
-    pipelineInfo.layout = configInfo.pipelineLayout;
-    pipelineInfo.renderPass = configInfo.renderPass;
-    pipelineInfo.subpass = configInfo.subpass;
+        pipelineInfo.layout = configInfo.pipelineLayout;
+        pipelineInfo.renderPass = configInfo.renderPass;
+        pipelineInfo.subpass = configInfo.subpass;
 
-    pipelineInfo.basePipelineIndex = -1;
-    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+        pipelineInfo.basePipelineIndex = -1;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-    if (vkCreateGraphicsPipelines(device.device(), device.getPipelineCache(), 1, &pipelineInfo, nullptr,
-                                  &graphicsPipeline) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create graphics pipeline!");
+        if (vkCreateGraphicsPipelines(device.device(), device.getPipelineCache(), 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create graphics pipeline!");
+        }
     }
-}
 
     void Pipeline::bind(VkCommandBuffer commandBuffer) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
     }
 
-    void Pipeline::defaultPipelineConfigInfo(PipelineConfigInfo &configInfo) {
+    void Pipeline::applyDefaultPipelineConfigInfo(PipelineConfigInfo &configInfo) {
         configInfo.inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         configInfo.inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         configInfo.inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;

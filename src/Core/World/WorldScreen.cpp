@@ -106,9 +106,10 @@ namespace kc {
                     Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                     Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
                 });
-        world.getPlayerController().setCaptured(true);
-        world.getPlayerController().resetMouse();
+                world.getPlayerController().setCaptured(true);
+                world.getPlayerController().resetMouse();
             }
+
             world.getPlayerController().resetMouse();
         }
 

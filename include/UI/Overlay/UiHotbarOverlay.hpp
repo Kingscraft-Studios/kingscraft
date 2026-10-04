@@ -35,8 +35,8 @@ namespace kc {
         int getSelectedSlot() const { return selectedSlot_.load(std::memory_order_relaxed); }
 
         const RegistryKey<Block>& getSlotBlock(int slot) const {
-            static const RegistryKey<Block> kInvalid;
-            return (slot >= 0 && slot < SLOT_COUNT) ? slotBlocks_[slot] : kInvalid;
+            static const RegistryKey<Block> invalid;
+            return (slot >= 0 && slot < SLOT_COUNT) ? slotBlocks_[slot] : invalid;
         }
 
     private:

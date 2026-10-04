@@ -4,14 +4,16 @@
 #include "Core/World/Biomes/ForestBiome.hpp"
 #include "Core/World/Biomes/DesertBiome.hpp"
 #include "Core/World/Biomes/MountainsBiome.hpp"
+#include "Core/World/Biomes/OceanBiome.hpp"
 
 namespace kc {
-    void Biomes::registerBiomes() {
+    void Biomes::registerBiomes(int& pending) {
         auto& registry = Registry<Biome>::getRegistry();
 
         registry.add(GRASSLANDS, std::make_unique<GrasslandsBiome>());
         registry.add(FOREST, std::make_unique<ForestBiome>());
         registry.add(DESERT, std::make_unique<DesertBiome>());
         registry.add(MOUNTAINS, std::make_unique<MountainsBiome>());
+        registry.add(OCEAN, std::make_unique<OceanBiome>());
     }
 }

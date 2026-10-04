@@ -60,7 +60,7 @@ private:
     // ITerrainGenerator::applySettings once the loaded world.kcw resolves.
     //
     // The generator owns its BiomeProvider, because the provider has to share
-    // the generator's OverworldNoise: two separately seeded graphs would let the
+    // the generator's HomelandsNoise: two separately seeded graphs would let the
     // biome map and the heightfield disagree. Read the provider through
     // getBiomeProvider() rather than caching a reference, since applySettings()
     // replaces the instance.

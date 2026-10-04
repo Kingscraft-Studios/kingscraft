@@ -2,10 +2,10 @@
 
 #include "StagingArena.hpp"
 
-// std lib headers
 #include <memory>
 #include <string>
 #include <vector>
+#include "Renderer/RendererSettings.hpp"
 
 namespace kc {
 
@@ -26,11 +26,7 @@ namespace kc {
 
     class Device {
     public:
-#ifdef NDEBUG
-        const bool enableValidationLayers = false;
-#else
-        const bool enableValidationLayers = false;
-#endif
+        const bool enableValidationLayers = RendererSettings::get().enableVkDebugValidation;
 
         Device();
 
@@ -38,11 +34,8 @@ namespace kc {
 
         // Not copyable or movable
         Device(const Device &) = delete;
-
         Device &operator=(const Device &) = delete;
-
         Device(Device &&) = delete;
-
         Device &operator=(Device &&) = delete;
 
         VkCommandPool getCommandPool() { return commandPool; }

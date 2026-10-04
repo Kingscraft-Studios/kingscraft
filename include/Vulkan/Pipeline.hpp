@@ -40,27 +40,20 @@ namespace kc {
 
     class Pipeline {
     public:
-        Pipeline(
-                Device &device,
-                const std::vector<char>& vertCode,
-                const std::vector<char>& fragCode,
-                const PipelineConfigInfo& configInfo);
-
+        Pipeline(Device &device, const std::vector<char>& vertCode, const std::vector<char>& fragCode, const PipelineConfigInfo& configInfo);
         ~Pipeline();
 
         Pipeline(const Pipeline &) = delete;
-
         Pipeline &operator=(const Pipeline &) = delete;
 
         void bind(VkCommandBuffer commandBuffer);
 
         VkPipeline getHandle() const { return graphicsPipeline; }
 
-        static void defaultPipelineConfigInfo(PipelineConfigInfo &configInfo);
+        static void applyDefaultPipelineConfigInfo(PipelineConfigInfo &configInfo);
 
     private:
-        void createGraphicsPipeline(const std::vector<char>& vertCode, const std::vector<char>& fragCode,
-                                    const PipelineConfigInfo &configInfo);
+        void createGraphicsPipeline(const std::vector<char>& vertCode, const std::vector<char>& fragCode, const PipelineConfigInfo &configInfo);
 
         Device &device;
         VkPipeline graphicsPipeline;

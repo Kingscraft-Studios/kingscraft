@@ -11,7 +11,8 @@ namespace kc {
         inline static const RegistryKey<Biome> FOREST = Registry<Biome>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("forest"));
         inline static const RegistryKey<Biome> DESERT = Registry<Biome>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("desert"));
         inline static const RegistryKey<Biome> MOUNTAINS = Registry<Biome>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("mountains"));
+        inline static const RegistryKey<Biome> OCEAN = Registry<Biome>::getRegistry().createKey(ResourceLocation::withDefaultNamespace("ocean"));
 
-        static void registerBiomes();
+        static void registerBiomes(int& pending);
     };
 }

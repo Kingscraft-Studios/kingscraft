@@ -4,8 +4,7 @@
 
 namespace kc {
     GrasslandsBiome::GrasslandsBiome() {
-        terrainSettings.baseHeight = 34.0f;
-        terrainSettings.layers = {
+        layers = {
             {Blocks::GRASS_BLOCK, 1}, // surface
             {Blocks::DIRT,        2}, // below
             {Blocks::STONE,       0}, // fill to bottom

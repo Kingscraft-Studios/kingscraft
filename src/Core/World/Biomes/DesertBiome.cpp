@@ -4,13 +4,7 @@
 
 namespace kc {
     DesertBiome::DesertBiome() {
-        terrainSettings.baseHeight = 33.0f;
-        terrainSettings.amplitude = 6.0f;
-        terrainSettings.noise.frequency = 0.015f;
-        terrainSettings.noise.octaves = 3;
-        terrainSettings.noise.gain = 0.35f;
-        terrainSettings.noise.seedOffset = 202;
-        terrainSettings.layers = {
+        layers = {
             {Blocks::SAND,       2}, // surface dunes
             {Blocks::SANDSTONE,  0}, // fill to bottom
         };

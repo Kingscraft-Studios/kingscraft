@@ -12,11 +12,11 @@ namespace kc {
     static constexpr uint32_t SUBCHUNK_H = 4;
     static constexpr int MAX_SUBCHUNKS = 128;
 
-    // One bit per sub-chunk. A full Minecraft-height column is
-    // 384 / SUBCHUNK_H = 96 sub-chunks, so a 32-bit mask is both too small and
-    // undefined to shift past bit 31; 128 bits covers the height cap.
+    // One bit per sub-chunk. A full-height column is 384 / SUBCHUNK_H = 96
+    // sub-chunks, so a 32-bit mask is both too small and undefined to shift past
+    // bit 31; 128 bits covers the height cap.
     static_assert(MAX_SUBCHUNKS * static_cast<int>(SUBCHUNK_H) >= 384,
-                  "MAX_SUBCHUNKS must cover a full Minecraft-height world");
+                  "MAX_SUBCHUNKS must cover a full-height world");
 
     struct SubChunkMask {
         std::array<uint64_t, MAX_SUBCHUNKS / 64> words{};
@@ -129,8 +129,8 @@ namespace kc {
         const std::vector<SubChunk>& getSubChunks() const { return subChunks_; }
 
         const std::vector<uint64_t>& getBlockData() const {
-            static const std::vector<uint64_t> kEmpty;
-            return blockData_ ? *blockData_ : kEmpty;
+            static const std::vector<uint64_t> empty;
+            return blockData_ ? *blockData_ : empty;
         }
         BlockDataPtr getBlockDataPtr() const { return blockData_; }
         void setBlockData(BlockDataPtr data, int chunkSize, int height);

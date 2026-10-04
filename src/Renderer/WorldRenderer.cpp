@@ -25,7 +25,7 @@ namespace kc {
     static constexpr uint32_t HIGHLIGHT_VERTEX_COUNT = 24;
 
     // Where distance fog begins, as a fraction of the chunk load distance.
-    static constexpr float kFogStartFraction = 0.55f;
+    static constexpr float fogStartFraction = 0.55f;
 
     WorldRenderer::~WorldRenderer() {
         cleanup();
@@ -74,7 +74,7 @@ namespace kc {
         auto& fragShaderCode = Bootstrapper::Get().getShader("resources/shaders/terrain.frag.spv");
 
         PipelineConfigInfo configInfo{};
-        Pipeline::defaultPipelineConfigInfo(configInfo);
+        Pipeline::applyDefaultPipelineConfigInfo(configInfo);
         configInfo.rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 
         VkSpecializationMapEntry entry{};
@@ -101,7 +101,7 @@ namespace kc {
         auto& fragShaderCode = Bootstrapper::Get().getShader("resources/shaders/highlight.frag.spv");
 
         PipelineConfigInfo configInfo{};
-        Pipeline::defaultPipelineConfigInfo(configInfo);
+        Pipeline::applyDefaultPipelineConfigInfo(configInfo);
         configInfo.inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
         configInfo.rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
         configInfo.depthStencilInfo.depthTestEnable = VK_TRUE;
@@ -135,8 +135,7 @@ namespace kc {
         auto& fragShaderCode = Bootstrapper::Get().getShader("resources/shaders/transparent.frag.spv");
 
         PipelineConfigInfo configInfo{};
-        Pipeline::defaultPipelineConfigInfo(configInfo);
-        configInfo.rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+        Pipeline::applyDefaultPipelineConfigInfo(configInfo);
 
         // Transparent pass: alpha-blended (60% from transparent.frag), depth
         // test on, depth write off so water/glass composite over the opaque
@@ -204,15 +203,15 @@ namespace kc {
         // Fog starts partway out and only becomes solid at the load distance, so
         // the edge of the loaded world dissolves instead of being cut off.
         const float loadDistance = RendererSettings::get().farPlaneCalc;
-        pc.fogParams = glm::vec4(loadDistance * kFogStartFraction, loadDistance, 0.0f, 0.0f);
+        pc.fogParams = glm::vec4(loadDistance * fogStartFraction, loadDistance, 0.0f, 0.0f);
 
         // Only chunkOrigin changes per chunk, so the rest is written once.
-        const VkShaderStageFlags kTerrainStages =
+        const VkShaderStageFlags terrainStages =
             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
         for (const TerrainDraw& draw : scene.terrain.draws) {
             pc.chunkOrigin = glm::vec4(draw.worldOrigin, 0.0f);
-            vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), kTerrainStages, 0, sizeof(TerrainPushConstants), &pc);
+            vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), terrainStages, 0, sizeof(TerrainPushConstants), &pc);
             drawChunk(cmd, draw.chunkKey);
         }
 
@@ -230,7 +229,7 @@ namespace kc {
             }
             for (auto it = scene.terrain.draws.rbegin(); it != scene.terrain.draws.rend(); ++it) {
                 pc.chunkOrigin = glm::vec4(it->worldOrigin, 0.0f);
-                vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), kTerrainStages, 0, sizeof(TerrainPushConstants), &pc);
+                vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), terrainStages, 0, sizeof(TerrainPushConstants), &pc);
                 drawTransparentChunk(cmd, it->chunkKey);
             }
         }
@@ -323,7 +322,7 @@ namespace kc {
 
         HighlightPushConstants pc{};
         pc.viewProj = viewProj;
-        vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(HighlightPushConstants), &pc);
+        vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(HighlightPushConstants), &pc);
 
         VkBuffer vb = highlightVertexBuffer_->getHandle();
         VkDeviceSize offset = 0;

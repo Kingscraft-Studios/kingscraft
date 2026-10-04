@@ -183,7 +183,7 @@ resource economy — this is the in-fiction meaning of "everything connects".
 
 ## 6. The Four Dimensions
 
-1. **OverWorld** — the living reality sandbox: settlements, quests, survival,
+1. **Homelands** — the living reality sandbox: settlements, quests, survival,
    glitched areas, the player's home region.
 2. **Tech Wasteland** — ruins and wreckage; a source of **machines and the
    ingredients to build them**. Technology's frontier.
@@ -225,7 +225,7 @@ reality as **Glitched Areas**.
 
 ### 7.2 Glitched Areas
 
-- **Randomly spawning** corrupted regions in the OverWorld and Tech Wasteland.
+- **Randomly spawning** corrupted regions in the Homelands and Tech Wasteland.
 - They warp the surrounding world and are hostile to habitation.
 - Clearing one yields **essence and corrupted material**, and shifts the
   region's stability.
@@ -268,7 +268,7 @@ data, not code) — updates should be content drops, not engine rewrites.
 
 | Milestone | Goal | Contains |
 |---|---|---|
-| **Alpha** (Dec 2026) | Playable slice of the loop | OverWorld; one settlement; Lumberjack deck + reputation; his workstation (log→plank→stick); one Glitched Area; reach the Magic Expanse (locked). Free sandbox building available. Experimental features welcome. |
+| **Alpha** (Dec 2026) | Playable slice of the loop | Homelands; one settlement; Lumberjack deck + reputation; his workstation (log→plank→stick); one Glitched Area; reach the Magic Expanse (locked). Free sandbox building available. Experimental features welcome. |
 | **Beta** (early 2027) | Breadth and polish | Add Armorer/Toolsmith; first Tech Wasteland zone + machines; more glitches; audio; stability and balancing. |
 | **1.0** | The full contract | All four dimensions; the Warden's terms; the boss arc; post-slay endgame; full profession roster; complete progression economy. |
 | **Post-1.0** | Live content | New regions, loot, professions, spells, glitch types — shipped as data updates. |

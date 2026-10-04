@@ -28,7 +28,7 @@ namespace kc {
         void save(int gridX, int gridZ, const std::vector<uint64_t>& data) {
             auto path = buildPath(gridX, gridZ);
 
-            // Serialize the BlockIds
+            // Serialize the per-cell block ids
             auto formatted = serialize(data);
 
             // Save to Disk

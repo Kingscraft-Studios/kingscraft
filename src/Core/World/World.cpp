@@ -256,7 +256,7 @@ namespace kc {
         const uint64_t previousEncoded = getBlock(worldX, worldY, worldZ);
         const uint64_t currentEncoded = block.getEncodedId();
         // Local Y, same as the read above -- see the note in getBlock().
-        chunk->setBlock(lx, worldY - minY_, lz, block.getEncodedId());
+        chunk->setBlock(lx, worldY - minY_, lz, currentEncoded);
 
         // chunk->setBlock copy-on-writes to a fresh buffer; point the cache at
         // the same handle so cache and live chunk always share one grid.
@@ -517,7 +517,7 @@ namespace kc {
     // one holding things up.
     void World::logThroughput() {
         using namespace std::chrono;
-        static constexpr uint64_t kWindowMicros = 2'000'000;   // 2 seconds
+        static constexpr uint64_t windowMicros = 2'000'000;   // 2 seconds
 
         const uint64_t nowUs = (uint64_t)duration_cast<microseconds>(
             steady_clock::now().time_since_epoch()).count();
@@ -526,7 +526,7 @@ namespace kc {
         // pushes the window forward; the others just return. That keeps the
         // output to one line per window instead of one line per worker.
         uint64_t lastUs = throughputLogMicros_.load(std::memory_order_relaxed);
-        if (nowUs < lastUs + kWindowMicros) return;
+        if (nowUs < lastUs + windowMicros) return;
         if (!throughputLogMicros_.compare_exchange_strong(
                 lastUs, nowUs, std::memory_order_relaxed))
             return;

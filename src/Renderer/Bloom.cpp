@@ -366,7 +366,7 @@ std::unique_ptr<Pipeline> Bloom::createBlurPipeline(VkRenderPass renderPass, uin
     auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.frag.spv");
 
     PipelineConfigInfo configInfo{};
-    Pipeline::defaultPipelineConfigInfo(configInfo);
+    Pipeline::applyDefaultPipelineConfigInfo(configInfo);
 
     configInfo.bindingDescriptions = {};
     configInfo.attributeDescriptions = {};
@@ -419,7 +419,7 @@ void Bloom::createPipelines() {
     auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.frag.spv");
 
     PipelineConfigInfo configInfo{};
-    Pipeline::defaultPipelineConfigInfo(configInfo);
+    Pipeline::applyDefaultPipelineConfigInfo(configInfo);
 
     VkVertexInputBindingDescription bindingDesc{};
     bindingDesc.binding = 0;

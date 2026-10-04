@@ -4,8 +4,8 @@
 #include "Core/Registry.hpp"
 #include "Core/World/Biomes/Biome.hpp"
 #include "Core/World/Biomes/Biomes.hpp"
-#include "Core/World/Generation/OverworldNoise.hpp"
-#include "Core/World/Biomes/VanillaBiomeProvider.hpp"
+#include "Core/World/Generation/HomelandsNoise.hpp"
+#include "Core/World/Biomes/ClimateBiomeProvider.hpp"
 #include "Core/World/ITerrainGenerator.hpp"
 #include "Core/World/TerrainGenSettings.hpp"
 #include <algorithm>
@@ -20,11 +20,11 @@
 
 namespace kc {
 
-    // Vanilla-shaped overworld generator.
+    // Vanilla-shaped generator for the Homelands.
     //
-    // The heightfield comes from OverworldNoise, a node-for-node transcription of
+    // The heightfield comes from HomelandsNoise, a node-for-node transcription of
     // Minecraft 26.3's NoiseRouterData overworld router with the cave, vein and
-    // structure terms removed (see OverworldNoise.hpp). Two properties of that
+    // structure terms removed (see HomelandsNoise.hpp). Two properties of that
     // graph drive the whole design:
     //
     //  1. With no cave/vein terms in final_density, density is monotonic in y for
@@ -44,13 +44,6 @@ namespace kc {
     // biomes this project ships. See the .cpp comments for the rule names.
     class DefaultTerrainGenerator : public ITerrainGenerator {
     public:
-        // SurfaceRules.StoneDepthRule(top, filler, 0.25, 0.8): the topsoil layer
-        // is 0.25 + 0.55 * minecraft:surface blocks thick, clamped to [1, 4].
-        static int stoneDepth(float surfaceNoise) {
-            const float depth = 0.25f + 0.55f * surfaceNoise;
-            return std::clamp(static_cast<int>(std::floor(depth)), 1, 4);
-        }
-
         explicit DefaultTerrainGenerator(const TerrainGenSettings& settings) {
             reseed(settings);
         }
@@ -63,13 +56,39 @@ namespace kc {
         }
 
         // Resolved once per call: the biome provider is a view onto the same
-        // OverworldNoise the heightfield uses, so the biome map and the
+        // HomelandsNoise the heightfield uses, so the biome map and the
         // heightfield cannot drift apart.
         const BiomeProvider& getBiomeProvider() const { return *biomes_; }
 
-        std::vector<uint64_t> generateBlocks(
-            int gridX, int gridZ, int chunkSize, int height) override
-        {
+        // World Y of the top solid block in this column, or unknownSurfaceY for
+        // a column with no solid cell at all.
+        //
+        // Exposed because biome selection is height-aware, so any caller asking
+        // "which biome is here?" has to offer a height or it gets the weaker
+        // climate-only answer. Costs one density scan (~10-20 samples), the same
+        // one generateBlocks() already does per column.
+        int getSurfaceY(int worldX, int worldZ) const {
+            std::shared_lock<std::shared_mutex> lock(mutex_);
+            const int topLimit = HomelandsNoise::height - 1;
+            const int local = columnTop(worldX, worldZ, topLimit, settings_.solidThreshold);
+            return local < 0 ? unknownSurfaceY : local + HomelandsNoise::minY;
+        }
+
+        // The biome the terrain at this column was actually built with. Preferred
+        // over BiomeProvider::getBiomeForColumn directly so the caller cannot
+        // pair a height from one moment with settings from another.
+        RegistryKey<Biome> getBiomeAt(int worldX, int worldZ) const {
+            std::shared_lock<std::shared_mutex> lock(mutex_);
+            const int topLimit = HomelandsNoise::height - 1;
+            const int local = columnTop(worldX, worldZ, topLimit, settings_.solidThreshold);
+            const int surfaceY = local < 0 ? unknownSurfaceY : local + HomelandsNoise::minY;
+            const int sea = std::clamp(settings_.seaLevel, HomelandsNoise::minY,
+                                       HomelandsNoise::maxY - 1);
+            return ClimateBiomeProvider::biomeFor(
+                biomes_->climateAt(worldX, worldZ, surfaceY), surfaceY, sea);
+        }
+
+        std::vector<uint64_t> generateBlocks(int gridX, int gridZ, int chunkSize, int height) override {
             // Shared, not exclusive. Several chunk-generation threads call this
             // at once, and the whole reason this lock exists is to stop
             // applySettings() from swapping the noise out from under a
@@ -80,12 +99,12 @@ namespace kc {
             std::shared_lock<std::shared_mutex> lock(mutex_);
 
             // Local y 0 is the bottom of the world, so a world Y of `sea` sits at
-            // local y = sea - kMinY. kMinY/kMaxY are already world Y bounds, so
-            // the clamp range is [kMinY, kMaxY - 1]; the water table itself is
+            // local y = sea - minY. minY/maxY are already world Y bounds, so
+            // the clamp range is [minY, maxY - 1]; the water table itself is
             // just a fill, so clamping it into the world is enough.
-            const int sea = std::clamp(settings_.seaLevel, OverworldNoise::kMinY,
-                                       OverworldNoise::kMaxY - 1);
-            const int seaLocal = sea - OverworldNoise::kMinY;
+            const int sea = std::clamp(settings_.seaLevel, HomelandsNoise::minY,
+                                       HomelandsNoise::maxY - 1);
+            const int seaLocal = sea - HomelandsNoise::minY;
             // Terrain is not capped at sea level: anything above it is simply
             // land, and that is how mountains get above the water.
             const int topLimit = height - 1;
@@ -95,45 +114,79 @@ namespace kc {
             std::vector<uint64_t> blocks(
                 static_cast<size_t>(chunkSize) * height * chunkSize, 0);
 
-            const BlockIds ids = resolveBlocks();
+            // Cell encodings for the two blocks this function writes outside the
+            // biome path. RegistryKey::getEncoded() is the registry's own map key,
+            // which is exactly what Block::getEncodedId() reverse-maps to, so this
+            // is the same value the old resolveBlocks() produced -- without the
+            // getShared() round trip and without its O(n) getEncodedID() scan, and
+            // without collapsing to 0 (air) for any block that had not finished
+            // registering. That fallback was the real hazard: block registration
+            // is asynchronous, so a chunk generated during startup became solid air
+            // and was then written to the region file that way.
+            const uint64_t stoneId = Blocks::STONE.getEncoded();
+            const uint64_t waterId = Blocks::WATER.getEncoded();
             const float solid = settings_.solidThreshold;
 
-            // Column-major on purpose: DensityGraph memoises per node on the last
-            // (x, z) it saw, so sweeping y within one column keeps every
-            // y-invariant node cached for the whole column. Row-major throws that
-            // away and costs ~7x (1158 ms vs 150 ms per chunk, -O2).
+            BiomeChunkContext ctx;
+            ctx.chunkSize = chunkSize;
+            ctx.height = height;
+            ctx.seaLevel = sea;
+            ctx.minWorldY = HomelandsNoise::minY;
+
+            // Biome cache to avoid repeated getShared calls
+            struct BiomeSlot {
+                uint64_t encoded = 0;
+                std::shared_ptr<Biome> ref;
+            };
+            BiomeSlot biomeSlots[8];
+            int biomeSlotCount = 0;
+            const auto resolveBiome = [&](const RegistryKey<Biome>& key) -> const Biome* {
+                for (int i = 0; i < biomeSlotCount; ++i) {
+                    if (biomeSlots[i].encoded == key.getEncoded()) {
+                        return biomeSlots[i].ref.get();
+                    }
+                }
+                auto ref = Registry<Biome>::getRegistry().getShared(key.getEncoded());
+                if (!ref) return nullptr;
+                if (biomeSlotCount < 8) {
+                    biomeSlots[biomeSlotCount++] = BiomeSlot{key.getEncoded(), ref};
+                    return ref.get();
+                }
+                return ref.get();
+            };
+            const auto fillPlainStone = [&](int x, int z, int top, uint64_t stoneId) {
+                for (int y = 0; y <= top; ++y) {
+                    blocks[(static_cast<size_t>(y) * chunkSize + z) * chunkSize + x] = stoneId;
+                }
+            };
+
+            // Column-major on purpose
             for (int x = 0; x < chunkSize; ++x) {
                 const int wx = gridX * chunkSize + x;
                 for (int z = 0; z < chunkSize; ++z) {
                     const int wz = gridZ * chunkSize + z;
 
                     const int top = columnTop(wx, wz, topLimit, solid);
-                    uint64_t topBlock = ids.air;
-                    uint64_t soilBlock = ids.stone;
-                    int soil = 0;
                     if (top >= 0) {
-                        // One climate lookup per column, shared by the surface cell
-                        // and the filler beneath it.
                         const float surfaceNoise = noise_->sampleSurfaceNoise(wx, wz);
-                        const SurfaceChoice pick = chooseSurface(wx, wz, top, sea, surfaceNoise);
-                        topBlock = surfaceBlock(pick, ids);
-                        soilBlock = subSurfaceBlock(pick, ids);
-                        soil = stoneDepth(surfaceNoise);
-                    }
-
-                    for (int y = 0; y <= top; ++y) {
-                        uint64_t block = ids.stone;
-                        if (y == top) {
-                            block = topBlock;
-                        } else if (y > top - 1 - soil) {
-                            block = soilBlock;
+                        // Biome selection needs the height we just measured: it is
+                        // what decides "mountains", and "below sea level" is what
+                        // decides "ocean". Passing unknownSurfaceY here would
+                        // quietly fall back to the climate-only answer and
+                        // reintroduce the mislabelling this fixes.
+                        const int surfaceY = top + HomelandsNoise::minY;
+                        const kc::Climate climate = biomes_->climateAt(wx, wz, surfaceY);
+                        const auto biomeKey = ClimateBiomeProvider::biomeFor(climate, surfaceY, sea);
+                        if (const Biome* biome = resolveBiome(biomeKey)) {
+                            biome->postGenerateColumn(ctx, x, z, wx, wz, top, top + HomelandsNoise::minY, surfaceNoise, climate, ClimateWeights{climate.desert, climate.grassland, climate.forest, climate.mountain}, blocks);
+                        } else {
+                            fillPlainStone(x, z, top, stoneId);
                         }
-                        blocks[(static_cast<size_t>(y) * chunkSize + z) * chunkSize + x] = block;
                     }
 
                     // Aquifer fill: air at or below sea level is water.
                     for (int y = std::max(0, top + 1); y <= seaLocal && y < height; ++y) {
-                        blocks[(static_cast<size_t>(y) * chunkSize + z) * chunkSize + x] = ids.water;
+                        blocks[(static_cast<size_t>(y) * chunkSize + z) * chunkSize + x] = waterId;
                     }
                 }
             }
@@ -143,13 +196,13 @@ namespace kc {
         // How far above the waterline a column has to sit before the spawn scan
         // will accept it. Two blocks of freeboard keeps the player out of the
         // shallows where waves and any future water motion would reach them.
-        static constexpr int kSpawnDryMargin = 2;
+        static constexpr int spawnDryMargin = 2;
 
         // How far the surface is allowed to differ between a spawn candidate and
         // the blocks right beside it. One block is enough to walk off; anything
         // more means a cliff or a spire, which is what used to drop the player
         // into a hole the moment they moved.
-        static constexpr int kSpawnPadStepTolerance = 1;
+        static constexpr int spawnPadStepTolerance = 1;
 
         // Picks the closest patch of dry land to (originX, originZ) so a new
         // world does not start the player in the middle of an ocean.
@@ -171,18 +224,18 @@ namespace kc {
                              int& outX, int& outY, int& outZ) {
             std::shared_lock<std::shared_mutex> lock(mutex_);
 
-            const int sea = std::clamp(settings_.seaLevel, OverworldNoise::kMinY,
-                                       OverworldNoise::kMaxY - 1);
+            const int sea = std::clamp(settings_.seaLevel, HomelandsNoise::minY,
+                                       HomelandsNoise::maxY - 1);
             const float solid = settings_.solidThreshold;
-            const int topLimit = OverworldNoise::kHeight - 1;
+            const int topLimit = HomelandsNoise::height - 1;
             const int step = 16; // one chunk
 
             // World Y of the top solid block, or a value below the world when the
             // column is open water all the way down.
             const auto surfaceY = [&](int wx, int wz) {
                 const int local = columnTop(wx, wz, topLimit, solid);
-                return local < 0 ? OverworldNoise::kMinY - 1
-                                 : local + OverworldNoise::kMinY;
+                return local < 0 ? HomelandsNoise::minY - 1
+                                 : local + HomelandsNoise::minY;
             };
             // A candidate also has to be part of a small flat dry pad, not just a
             // single dry column. The player is 0.6 blocks wide and centred on the
@@ -198,14 +251,14 @@ namespace kc {
                                            {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
                 for (int i = 0; i < 8; ++i) {
                     const int ny = surfaceY(wx + offsets[i][0], wz + offsets[i][1]);
-                    const bool dry = ny > sea + kSpawnDryMargin;
-                    const bool level = std::abs(ny - centreY) <= kSpawnPadStepTolerance;
+                    const bool dry = ny > sea + spawnDryMargin;
+                    const bool level = std::abs(ny - centreY) <= spawnPadStepTolerance;
                     if (!dry || !level) return false;
                     if (i == 3) {   // sides are fine, now the corners
                         for (int j = 4; j < 8; ++j) {
                             const int cy = surfaceY(wx + offsets[j][0], wz + offsets[j][1]);
-                            if (cy <= sea + kSpawnDryMargin
-                                || std::abs(cy - centreY) > kSpawnPadStepTolerance) {
+                            if (cy <= sea + spawnDryMargin
+                                || std::abs(cy - centreY) > spawnPadStepTolerance) {
                                 return false;
                             }
                         }
@@ -227,7 +280,7 @@ namespace kc {
                         const int wx = originX + dx;
                         const int wz = originZ + dz;
                         const int centreY = surfaceY(wx, wz);
-                        if (centreY <= sea + kSpawnDryMargin) continue;
+                        if (centreY <= sea + spawnDryMargin) continue;
                         if (!flatPad(wx, wz, centreY)) continue;
 
                         outX = wx;
@@ -244,43 +297,12 @@ namespace kc {
 
 
     private:
-        struct BlockIds {
-            uint64_t air = 0;
-            uint64_t stone = 0;
-            uint64_t dirt = 0;
-            uint64_t sand = 0;
-            uint64_t sandstone = 0;
-            uint64_t water = 0;
-            uint64_t grass = 0;
-            uint64_t forestGrass = 0;
-        };
-
-        // Registry entries can disappear on a reload, so every block is resolved
-        // through getShared and falls back to air rather than being dereferenced.
-        static uint64_t blockId(const RegistryKey<Block>& key) {
-            const auto block = Registry<Block>::getRegistry().getShared(key.getEncoded());
-            return block ? static_cast<uint64_t>(block->getEncodedId()) : 0;
-        }
-
-        static BlockIds resolveBlocks() {
-            BlockIds b;
-            b.air = 0;
-            b.stone = blockId(Blocks::STONE);
-            b.dirt = blockId(Blocks::DIRT);
-            b.sand = blockId(Blocks::SAND);
-            b.sandstone = blockId(Blocks::SANDSTONE);
-            b.water = blockId(Blocks::WATER);
-            b.grass = blockId(Blocks::GRASS_BLOCK);
-            b.forestGrass = blockId(Blocks::FOREST_GRASS);
-            return b;
-        }
-
         void reseed(const TerrainGenSettings& settings) {
             settings_ = settings;
             // The shape dials are baked into the spline knots here, so they only
             // need reading when the generator is rebuilt -- not per column.
-            noise_ = std::make_unique<OverworldNoise>(settings.seed, settings.shape);
-            biomes_ = std::make_unique<VanillaBiomeProvider>(*noise_);
+            noise_ = std::make_unique<HomelandsNoise>(settings.seed, settings.shape);
+            biomes_ = std::make_unique<ClimateBiomeProvider>(*noise_);
         }
 
         // Highest local y whose final density exceeds `solid`, or -1 for a column
@@ -313,17 +335,17 @@ namespace kc {
         // findTopSurface against a brute force of its OWN input field rather than
         // of final_density; that pair is self-consistent by construction.
         //
-        // kScanMargin is now only a performance hint -- correctness comes from the
+        // scanMargin is now only a performance hint -- correctness comes from the
         // bisection fallback -- so its exact value no longer has to be a bound.
-        static constexpr int kScanMargin = 16;
+        static constexpr int scanMargin = 16;
 
         int columnTop(int wx, int wz, int topLimit, float solid) const {
             const auto isSolid = [&](int localY) {
-                return noise_->sampleFinalDensity(wx, localY + OverworldNoise::kMinY, wz) > solid;
+                return noise_->sampleFinalDensity(wx, localY + HomelandsNoise::minY, wz) > solid;
             };
 
             const int surface = static_cast<int>(std::floor(noise_->sampleChunkSurfaceLevel(wx, wz)));
-            const int start = std::clamp(surface - OverworldNoise::kMinY + kScanMargin, 0, topLimit);
+            const int start = std::clamp(surface - HomelandsNoise::minY + scanMargin, 0, topLimit);
 
             // Fast path. isSolid(start) false means the estimate is at or above the
             // surface, so the true top is somewhere at or below it.
@@ -347,125 +369,33 @@ namespace kc {
             return lo;
         }
 
-        // Surface material decisions, resolved once per column so the surface
-        // cell, the soil underneath it and the depth of that soil all key off the
-        // same numbers.
+        // Visual surface decisions moved to Biome::postGenerateColumn.
+        // The ocean label moved too: a submerged column is now Biome::OCEAN via
+        // ClimateBiomeProvider::biomeFor, which picks ocean on depth before any
+        // climate term is consulted, and OceanBiome::resolveSurface owns the
+        // seabed material.
         //
-        // These used to be identity comparisons on the argmax biome, which made
-        // every biome border a 1-block vertical cliff -- grass next to sand
-        // stepped over in a single column, and because the argmax flips where the
-        // four smooth climate fields cross, that line is a smooth isoline and
-        // reads as a drawn edge rather than a landscape. getClimateWeights()
-        // already existed and was written precisely to cross-fade this, but
-        // nothing called it.
-        //
-        // Blocks cannot be blended, so the border is broken up with noise instead:
-        // the climate term decides *where* it sits, and the existing per-column
-        // surface noise jitters the threshold so it wanders instead of tracing the
-        // isoline. That is the usual way to get a ragged natural border out of a
-        // smooth field, and surface noise is already sampled once per column for
-        // stoneDepth(), so it costs a reuse rather than a new field.
-        struct SurfaceChoice {
-            bool sand = false;     // desert sand, or sand at the shoreline
-            bool forest = false;   // forest grass rather than plains grass
-            bool bareRock = false; // above the treeline: stone, not soil
-        };
-
-        // How hard a hot+dry column is pushed toward sand, and how far the surface
-        // noise can drag a border across it. Unitless multipliers on a 0..1 climate
-        // term. The gain lifts the sand midpoint above a plain "hot and dry" test so
-        // sand starts appearing while the desert weight is still merely the largest
-        // of the four, which is what puts the border in the middle of the climate
-        // gradient instead of at the far end of it.
-        static constexpr float kSandGain = 1.45f;
-        static constexpr float kBorderDither = 0.22f;
-
-        // Above this, mountains are bare rock. Vanilla splits the mountains family
-        // across snowy/stony slopes and peaks; with four biomes this single line
-        // is what keeps peaks from looking like meadows.
-        //
-        // This has to be read against how high THIS terrain actually gets, not
-        // against vanilla's numbers. A measured sweep of the default shape gives a
-        // land p90 of 98-115 and a peak of 144-184 depending on seed, so the old
-        // value of 160 sat at the very top of the range: it caught only the single
-        // highest column of a seed, and on seed 1337 (peak 144) it caught nothing
-        // at all, leaving exposed stone unreachably rare and every "mountain"
-        // biome painted as grass.
-        //
-        // 104 is roughly the 90th percentile of land height across the seeds
-        // swept, so the rule reads as "the top tenth of the land is bare rock".
-        // Measured bare-rock share of land: 4.7%-17.2% depending on seed, 6.9%
-        // on seed 1337 -- visible ridgelines without turning the world grey.
-        // Raise it for bare rock only on the very highest peaks, lower it for a
-        // rockier, more mountainous look.
-        static constexpr int kTreelineY = 104;
-
-        SurfaceChoice chooseSurface(int wx, int wz, int top, int sea, float dither) const {
-            SurfaceChoice pick;
-            const int worldY = top + OverworldNoise::kMinY;
-
-            // Below sea level everything is a shoreline. biome_surface.json sends
-            // warm_ocean/beach/desert to sand_or_sandstone_if_ceiling, and with no
-            // carvers there is never a ceiling, so that always lands on sand.
-            if (worldY < sea) {
-                pick.sand = true;
-                return pick;
-            }
-
-            const auto c = biomes_->climateAt(wx, wz);
-            const float wet = VanillaBiomeProvider::ramp(
-                c.humidity, VanillaBiomeProvider::kWetLo,
-                VanillaBiomeProvider::kWetHi);
-            const float hot = VanillaBiomeProvider::ramp(
-                c.temperature, VanillaBiomeProvider::kHotLo,
-                VanillaBiomeProvider::kHotHi);
-
-            // Sand needs heat AND dryness, mirroring the desert weight itself.
-            if (hot * (1.0f - wet) * kSandGain + dither * kBorderDither > 0.5f) {
-                pick.sand = true;
-            } else {
-                // Otherwise grass, split between the two grass blocks by wetness
-                // using the same jittered threshold.
-                pick.forest = wet + dither * kBorderDither > 0.5f;
-            }
-
-            pick.bareRock = c.mountain >= VanillaBiomeProvider::kTreelineBiome &&
-                            worldY > kTreelineY;
-            return pick;
-        }
-
-        // The single exposed cell: the "on_floor" branch of
-        // material_rule/overworld/surface.json.
-        uint64_t surfaceBlock(const SurfaceChoice& pick, const BlockIds& ids) const {
-            if (pick.bareRock) return ids.stone; // frozen_peaks/stony_peaks are bare
-            if (pick.sand) return ids.sand;
-            return pick.forest ? ids.forestGrass : ids.grass;
-        }
-
-        // Everything between the topsoil and the stone: the "under_floor" branch,
-        // i.e. biome-specific filler.
-        //
-        // Vanilla's under_biome_surface only overrides the default dirt for the
-        // peaks biomes, which resolve to stone. Everything else -- desert and
-        // forest included -- inherits default.json, which is plain dirt, so a
-        // desert's subsurface is dirt and NOT sandstone. Sandstone only ever shows
-        // up as a desert *surface* block.
-        //
-        // Gated on bareRock rather than on the raw biome so it agrees with the
-        // surface cell by construction: grass at y=66 with a stone cell under it
-        // would leave a bare one-block lip and no soil band.
-        uint64_t subSurfaceBlock(const SurfaceChoice& pick, const BlockIds& ids) const {
-            return pick.bareRock ? ids.stone : ids.dirt;
-        }
+        // What stays here is the water *fill* above, because it is a density
+        // property rather than a surface one. It deliberately does not consult
+        // the biome: Vanilla's overworld declares no aquifer_density_functions,
+        // so the sea-level fallback aquifer fills every non-solid cell at or
+        // below sea level regardless of which biome won the argmax. Coupling it
+        // to the biome would be actively wrong here, because the climate-only
+        // ClimateBiomeProvider::biomeFor overload -- the one used whenever
+        // surfaceY is unknown -- never returns OCEAN, and would leave dry holes
+        // wherever a caller took that path.
 
         TerrainGenSettings settings_;
-        std::unique_ptr<OverworldNoise> noise_;
-        std::unique_ptr<VanillaBiomeProvider> biomes_;
+        std::unique_ptr<HomelandsNoise> noise_;
+        std::unique_ptr<ClimateBiomeProvider> biomes_;
         // A reader-writer lock, not a plain mutex. Generation is the long pole
         // (tens of milliseconds per chunk) and it only reads, so shared_lock
         // lets the chunk threads run concurrently while applySettings() still
         // gets exclusive access to swap the terrain out safely.
-        std::shared_mutex mutex_;
+        // Mutable because the biome/surface queries are const: they only read
+        // settings_ and noise_, but they still have to join the same lock so they
+        // cannot observe a half-applied reseed.
+        mutable std::shared_mutex mutex_;
     };
 
 } // namespace kc

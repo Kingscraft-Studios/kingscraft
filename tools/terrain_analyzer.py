@@ -3,13 +3,32 @@
 
 Parses world/regions/r.<rx>.<rz>.txt (ChunkTemplate block-grid layout) into a
 per-column surface model and prints a text-based terrain report: height stats,
-biome proxy distribution, cliff detector, ASCII heightmap/biome maps and
-cross-section strips. No image output, and no third-party packages -- this only
-uses the Python standard library, so it runs anywhere the game runs.
+exposed surface material composition, cliff detector, ASCII heightmap/material
+maps and cross-section strips. No image output, and no third-party packages --
+this only uses the Python standard library, so it runs anywhere the game runs.
 
 Run after exploring with the F5 save-all toggle ON:
 
-    python3 tools/terrain_analyzer.py --world cmake-build-debug
+    python3 tools/terrain_analyzer.py --world cmake-build-release
+
+WHAT THIS TOOL CANNOT DO
+    It reports SURFACE MATERIAL, not biome identity. A region dump stores only
+    the encoded block id per cell (ChunkTemplate::serialize takes a
+    std::vector<uint64_t>); no biome id is written, and Chunk does not keep one
+    either -- biome is resolved on demand from the climate noises via
+    BiomeProvider::getBiome(x, z).
+
+    So do not read the material breakdown as a biome map, and do not use it to
+    validate a change to biome classification. Since the surface material is now
+    derived FROM the biome (Biome::resolveSurface), inferring biome back out of
+    the material would be circular: it would rubber-stamp whatever the surface
+    rules just decided. For the real biome at a position, use the in-game F3
+    overlay ("Biome: <name>"), which reads the authoritative argmax.
+
+    An earlier version of this script guessed a biome from the top two blocks
+    (grass over stone -> "Mountains", sand -> "Desert"). That mapping is gone;
+    it reported confidently wrong labels and could not see the forest/desert
+    surface conflict it was supposed to catch.
 
 IMPORTANT: --miny
     A chunk's block grid is indexed by LOCAL Y, where local 0 is the world's
@@ -42,34 +61,38 @@ BLOCK_NAMES = [
     "air", "grass_block", "forest_grass", "stone", "dirt", "sand", "sandstone", "gravel", "water",
 ]
 HASH_TO_NAME = {fnv1a("kingscraft:" + n): n for n in BLOCK_NAMES}
-WATER_HASH = fnv1a("kingscraft:water")
 
 RAMP = ".:-=+*#%@"
-BIOME_NAMES = {"O": "Ocean", "D": "Desert", "G": "Grasslands", "F": "Forest",
-               "M": "Mountains", "V": "void", "?": "unknown"}
+
+# One letter per EXPOSED SURFACE BLOCK -- a fact read straight out of the dump,
+# not an inference about which biome produced it.
+SURFACE_LEGEND = {
+    ".": "water",
+    "g": "grass_block",
+    "f": "forest_grass",
+    "s": "sand",
+    "S": "sandstone",
+    "d": "dirt",
+    "#": "stone",
+    "r": "gravel",
+    "?": "unknown",
+}
+SURFACE_ORDER = [".", "g", "f", "s", "S", "d", "#", "r", "?"]
+_LETTER_BY_NAME = {name: letter for letter, name in SURFACE_LEGEND.items()}
+
+# Blocks that count as a soil layer under the surface block. Biome::resolveSurface
+# always writes one unless the column is bare rock, so "no soil here" is a real
+# signal about which columns took the bare-rock path.
+SOIL_BLOCKS = ("dirt", "sand", "sandstone")
 
 
-def biome_code(top_id, below_id):
-    top = HASH_TO_NAME.get(int(top_id), "?")
-    if top == "water":
-        # Lake cells: classify by the terrain they cover. One-level fallback to
-        # the block below the probe (deep lakes are resolved in store_chunk).
-        below = HASH_TO_NAME.get(int(below_id), "?")
-        if below in ("water", "?"):
-            return ord("?")
-        return biome_code(below_id, below_id)
-    if top in ("sand", "sandstone"):
-        return ord("D")
-    if top in ("grass_block", "forest_grass"):
-        below = HASH_TO_NAME.get(int(below_id), "?")
-        if below in ("stone", "gravel", "sandstone"):
-            return ord("M")
-        return ord("F") if top == "forest_grass" else ord("G")
-    if top in ("stone", "gravel"):
-        return ord("M")
-    if top == "dirt":
-        return ord("G")
-    return ord("?")
+def surface_code(top_id):
+    """Exposed top block -> legend letter. Pure lookup, no guessing."""
+    return _LETTER_BY_NAME.get(HASH_TO_NAME.get(int(top_id)), "?")
+
+
+def has_soil(below_id):
+    return HASH_TO_NAME.get(int(below_id), "?") in SOIL_BLOCKS
 
 
 def parse_command_line():
@@ -83,7 +106,7 @@ def parse_command_line():
                    help="lowest world Y (must match RendererSettings::minY; the dump's "
                         "row 0 is this Y)")
     p.add_argument("--sea", type=int, default=63, help="sea level in world Y")
-    p.add_argument("--dump", action="store_true", help="write heights.csv (wx,wz,height,biome)")
+    p.add_argument("--dump", action="store_true", help="write heights.csv (wx,wz,height,surface,soil)")
     p.add_argument("--maxchars", type=int, default=180, help="max ASCII map width in characters")
     return p.parse_args()
 
@@ -189,8 +212,26 @@ def store_chunk(chunks, gx, gz, rows, chunk_size, world_height):
                 tops[z][x] = y
                 pending.discard(x)
 
+    # Water is not terrain. `tops` is the *exposed* block, which over an ocean
+    # column is the water surface at sea level -- correct for the material tally
+    # and the ASCII map, wrong for every height statistic, because it pinned the
+    # low percentiles at exactly sea level and made the whole ocean look like it
+    # was terrain at Y=63. Descend past the water to get the ground underneath.
+    # Only submerged columns pay for this, so it is a second short walk down the
+    # columns that actually have water in them.
+    ground = [row[:] for row in tops]
+    for z in range(chunk_size):
+        for x in range(chunk_size):
+            y = tops[z][x]
+            if y < 0:
+                continue
+            while y > 0 and HASH_TO_NAME.get(int(rows[y * chunk_size + z][x])) == "water":
+                y -= 1
+            ground[z][x] = y
+
     heights = [[-1] * chunk_size for _ in range(chunk_size)]
-    biome = [[ord(" ")] * chunk_size for _ in range(chunk_size)]
+    surface = [[" "] * chunk_size for _ in range(chunk_size)]
+    soil = [[False] * chunk_size for _ in range(chunk_size)]
     valid = [[False] * chunk_size for _ in range(chunk_size)]
 
     for z in range(chunk_size):
@@ -199,21 +240,17 @@ def store_chunk(chunks, gx, gz, rows, chunk_size, world_height):
             if top < 0:
                 continue
             # Local Y -> world Y. Without this every height is minY too high.
-            heights[z][x] = top
+            # `ground`, not `top`: an ocean column reports its seabed, not the
+            # water sitting above it.
+            heights[z][x] = ground[z][x]
             valid[z][x] = True
             src = rows[top * chunk_size + z][x]
-            # A water column is reported as Ocean rather than classified as the
-            # biome it covers. Everything below sea level is sand in this
-            # generator, so resolving through the water would file the entire
-            # seabed under "Desert" and make a coast look like a desert biome.
-            if rows[top * chunk_size + z][x] == WATER_HASH:
-                biome[z][x] = ord("O")
-                continue
             below_row = rows[(top - 1) * chunk_size + z] if top > 0 else None
             below = below_row[x] if below_row is not None else 0
-            biome[z][x] = biome_code(src, below)
+            surface[z][x] = surface_code(src)
+            soil[z][x] = has_soil(below)
 
-    chunks[(gx, gz)] = (heights, biome, valid)
+    chunks[(gx, gz)] = (heights, surface, soil, valid)
 
 
 def build_globals(chunks, chunk_size):
@@ -227,17 +264,19 @@ def build_globals(chunks, chunk_size):
     W = (gx1 - gx0 + 1) * chunk_size
     H = (gz1 - gz0 + 1) * chunk_size
     height = [[-1] * W for _ in range(H)]
-    biome = [[ord(" ")] * W for _ in range(H)]
+    surface = [[" "] * W for _ in range(H)]
+    soil = [[False] * W for _ in range(H)]
     valid = [[False] * W for _ in range(H)]
-    for (gx, gz), (h, b, v) in chunks.items():
+    for (gx, gz), (h, s, so, v) in chunks.items():
         bx = (gx - gx0) * chunk_size
         bz = (gz - gz0) * chunk_size
         for z in range(chunk_size):
             for x in range(chunk_size):
                 height[bz + z][bx + x] = h[z][x]
-                biome[bz + z][bx + x] = b[z][x]
+                surface[bz + z][bx + x] = s[z][x]
+                soil[bz + z][bx + x] = so[z][x]
                 valid[bz + z][bx + x] = v[z][x]
-    return height, biome, valid, gx0 * chunk_size, gz0 * chunk_size
+    return height, surface, soil, valid, gx0 * chunk_size, gz0 * chunk_size
 
 
 def percentile(sorted_vals, p):
@@ -283,9 +322,9 @@ def ascii_map(values, valid, width, ramp, minv, maxv):
     return chars
 
 
-def ascii_biome_map(biome, valid, width):
-    grid = downsample(biome, valid, width)
-    return ["".join(chr(v) if ok else " " for v, ok in line) for line in grid]
+def ascii_material_map(surface, valid, width):
+    grid = downsample(surface, valid, width)
+    return ["".join(v if ok else " " for v, ok in line) for line in grid]
 
 
 def strip_from(values, valid, fixed_idx, along_z, width, minv, maxv):
@@ -312,7 +351,7 @@ def strip_from(values, valid, fixed_idx, along_z, width, minv, maxv):
     return s
 
 
-def print_report(height, biome, valid, origin_x, origin_z, chunks, n_files, args):
+def print_report(height, surface, soil, valid, origin_x, origin_z, chunks, n_files, args):
     hv, wh = len(height), len(height[0])
     gx0, gz0 = origin_x, origin_z
     gx1, gz1 = gx0 + wh - 1, gz0 + hv - 1
@@ -349,23 +388,33 @@ def print_report(height, biome, valid, origin_x, origin_z, chunks, n_files, args
             blo = lo + b * span // nbins
             bhi = lo + (b + 1) * span // nbins
             print(f"  [{blo:3d}-{bhi:3d}) {'#' * round(counts[b] / hmax * 40)} {counts[b]}")
-        ocean = sum(1 for v in hm if v <= args.sea)
-        print(f"\nOcean (surface <= {args.sea}) : {100.0 * ocean / len(hm):.1f}%")
-        print(f"Land                      : {100.0 * (len(hm) - ocean) / len(hm):.1f}%")
+        ocean = sum(1 for v in hm if v < args.sea)
+        print(f"\nOcean (ground below Y={args.sea}) : {100.0 * ocean / len(hm):.1f}%")
+        print(f"Land                               : {100.0 * (len(hm) - ocean) / len(hm):.1f}%")
     print("-" * 60)
 
     tally = {}
     for y in range(hv):
         for x in range(wh):
             if valid[y][x]:
-                ch = chr(biome[y][x])
+                ch = surface[y][x]
                 tally[ch] = tally.get(ch, 0) + 1
-    print("Biome proxy distribution (surface palette):")
-    for ch in sorted(tally):
-        if ch == " ":
-            continue
-        print(f"  {ch:<2} {BIOME_NAMES.get(ch, 'unknown'):<12} "
-              f"{100.0 * tally[ch] / max(1, len(hm)):6.1f}%")
+    total = max(1, len(hm))
+    print("Exposed surface material (read from the dump, NOT a biome map):")
+    for ch in SURFACE_ORDER:
+        if tally.get(ch):
+            print(f"  {ch}  {SURFACE_LEGEND[ch]:<13} {100.0 * tally[ch] / total:6.1f}%  "
+                  f"({tally[ch]})")
+    # Biome::resolveSurface writes a soil layer under every land column except the
+    # bare-rock ones, so land columns missing soil are exactly the rock line.
+    land = [1 for y in range(hv) for x in range(wh)
+            if valid[y][x] and surface[y][x] not in (".", "?")]
+    no_soil = sum(1 for y in range(hv) for x in range(wh)
+                  if valid[y][x] and surface[y][x] not in (".", "?")
+                  and not soil[y][x])
+    if land:
+        print(f"  land columns with no soil layer (bare rock): {no_soil} "
+              f"({100.0 * no_soil / len(land):.1f}% of land)")
     print("-" * 60)
 
     within, boundary = [], []
@@ -378,10 +427,10 @@ def print_report(height, biome, valid, origin_x, origin_z, chunks, n_files, args
                 if not (valid[y][x] and valid[y2][x2]):
                     continue
                 d = abs(height[y][x] - height[y2][x2])
-                (boundary if biome[y][x] != biome[y2][x2] else within).append(d)
+                (boundary if surface[y][x] != surface[y2][x2] else within).append(d)
     print("Cliff detector -- |delta height| between horizontal neighbors,")
-    print("split by whether the pair crosses a biome boundary:")
-    for label, arr in (("within biome ", within), ("boundary     ", boundary)):
+    print("split by whether the pair crosses a surface-material boundary:")
+    for label, arr in (("same material", within), ("across border ", boundary)):
         if not arr:
             print(f"  {label}: no data")
             continue
@@ -395,8 +444,8 @@ def print_report(height, biome, valid, origin_x, origin_z, chunks, n_files, args
         mb = sum(boundary) / len(boundary)
         ratio = mb / max(mw, 1e-9)
         if ratio >= 2.0:
-            print(f"  WARNING: boundary cliffs average {ratio:.1f}x steeper than interior "
-                  "-- biome borders are hard/unblended.")
+            print(f"  WARNING: material-boundary cliffs average {ratio:.1f}x steeper than "
+                  "interior -- material borders are hard/unblended.")
         else:
             print(f"  Border blending ratio: {ratio:.2f}x (1.0 = seamless).")
     print("-" * 60)
@@ -408,8 +457,10 @@ def print_report(height, biome, valid, origin_x, origin_z, chunks, n_files, args
             if line.strip():
                 print("  " + line)
         print("-" * 60)
-        print("ASCII biome proxy map (O=Ocean D=Desert G=Grasslands F=Forest M=Mountains):")
-        for line in ascii_biome_map(biome, valid, args.maxchars):
+        print("ASCII surface material map "
+              "(.=water g=grass_block f=forest_grass s=sand S=sandstone d=dirt "
+              "#=stone r=gravel ?=unknown):")
+        for line in ascii_material_map(surface, valid, args.maxchars):
             if line.strip():
                 print("  " + line)
         print("-" * 60)
@@ -428,14 +479,18 @@ def print_report(height, biome, valid, origin_x, origin_z, chunks, n_files, args
     if args.dump:
         outp = os.path.join(os.path.abspath(args.world), "heights.csv")
         with open(outp, "w", encoding="utf-8") as fh:
-            fh.write("wx,wz,height,biome\n")
+            fh.write("wx,wz,height,surface,soil\n")
             for y in range(hv):
                 for x in range(wh):
                     if not valid[y][x]:
                         continue
                     fh.write(f"{gx0 + x},{gz0 + y},{height[y][x]},"
-                             f"{BIOME_NAMES.get(chr(biome[y][x]), '?')}\n")
+                             f"{SURFACE_LEGEND.get(surface[y][x], '?')},"
+                             f"{int(soil[y][x])}\n")
         print("Wrote " + outp)
+    print("=" * 60)
+    print("NOTE: 'surface' is the exposed block, not a biome. Biome ids are not")
+    print("      stored in region dumps; use the in-game F3 overlay for those.")
     print("=" * 60)
 
 
@@ -447,10 +502,10 @@ if __name__ == "__main__":
     chunks = parse_regions(files, args.chunk, args.height)
     # One last local -> world conversion, applied in one place so the report,
     # the histograms and the CSV can never disagree with each other.
-    for _, (h, _, _) in chunks.items():
+    for _, (h, _, _, _) in chunks.items():
         for z in range(len(h)):
             for x in range(len(h[z])):
                 if h[z][x] != -1:
                     h[z][x] += args.miny
-    height, biome, valid, ox, oz = build_globals(chunks, args.chunk)
-    print_report(height, biome, valid, ox, oz, chunks, len(files), args)
+    height, surface, soil, valid, ox, oz = build_globals(chunks, args.chunk)
+    print_report(height, surface, soil, valid, ox, oz, chunks, len(files), args)

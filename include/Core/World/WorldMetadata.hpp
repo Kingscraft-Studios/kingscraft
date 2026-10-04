@@ -21,7 +21,7 @@ namespace kc {
     //
     // generator v3: the terrain shape stopped being hard-coded. The spline knots
     // that decided how rugged the wilderness is and how much the inland lowlands
-    // roll moved out of OverworldNoise and into TerrainShape (persisted in
+    // roll moved out of HomelandsNoise and into TerrainShape (persisted in
     // world.kcw as #RB/#LP/#LH/#LT). The defaults are the same numbers vanilla
     // uses, so the shape is unchanged until a dial is edited — but an edited dial
     // makes an unedited chunk regenerate differently from a region overlay that

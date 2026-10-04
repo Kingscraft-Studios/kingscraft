@@ -119,6 +119,10 @@ namespace kc {
             return i - 1;
         }
 
+        // Alpha first, then the endpoints: this matches vanilla's
+        // MathHelper.lerp(delta, start, end). It does NOT match
+        // std::lerp(start, end, alpha), and the two orders are easy to
+        // transpose by eye when transcribing vanilla's call sites.
         static float lerp(float alpha, float p0, float p1) { return p0 + alpha * (p1 - p0); }
 
         int coordinate_ = -1;

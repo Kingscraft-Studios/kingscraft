@@ -14,7 +14,7 @@ namespace kc {
     // the terrain changes. No spline or calculus knowledge is needed to tune it.
     //
     // The defaults are the verbatim Minecraft 26.3 constants transcribed in
-    // OverworldNoise.hpp, so an untouched world generates exactly vanilla terrain.
+    // HomelandsNoise.hpp, so an untouched world generates exactly vanilla terrain.
     // The units below are the ones that make the numbers predictable.
     struct TerrainShape {
         // --- how much the lowlands roll ---------------------------------
@@ -29,8 +29,8 @@ namespace kc {
         // lowlandHill  -- the gentle middle
         // lowlandTall  -- the highest inland ground
         //
-        //   0.01 / 0.03 / 0.10  vanilla
-        //   0.01 / 0.20 / 0.90  measured: ~32% land, clearly rougher
+        //   0.01 / 0.03 / 0.10  vanilla, and the defaults below
+        //   0.01 / 0.20 / 0.90  rougher experimental variant, not the default
         //
         // Raising lowlandPlain floods the inland above sea level and FLATTENS it
         // (it is both the spline's "low" and "mid" knot, so it pins the whole

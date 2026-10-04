@@ -10,7 +10,10 @@ namespace kc {
     public:
         static void build();
         static bool isBuilt() { return built_.load(); }
-        static void waitForBuild();
+        static void waitForBuild()  {
+            std::unique_lock<std::mutex> lock(mutex_);
+            cv_.wait(lock, [] { return built_.load(); });
+        }
 
         // Clears + rebuilds the block registry on a WorkerPool worker, then
         // fires RegistryReloadEvent (the point where mods re-register their
@@ -21,6 +24,9 @@ namespace kc {
         static std::shared_future<void> reload();
 
     private:
+        static void addAllRegistry(int& pending);
+        static void clearAllRegistry();
+
         static std::atomic<bool> built_;
         static std::mutex mutex_;
         static std::condition_variable cv_;

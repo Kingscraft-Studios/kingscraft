@@ -22,12 +22,9 @@ namespace kc {
     void Registries::build() {
         auto mailbox = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::Registry, mailbox);
-
         int pending = 0;
 
-        // Register
-        Blocks::registerBlocks(pending);
-        Biomes::registerBiomes();
+        addAllRegistry(pending);
 
         while (pending > 0) {
             Message msg;
@@ -45,11 +42,6 @@ namespace kc {
         cv_.notify_all();
     }
 
-    void Registries::waitForBuild() {
-        std::unique_lock<std::mutex> lock(mutex_);
-        cv_.wait(lock, [] { return built_.load(); });
-    }
-
     std::shared_future<void> Registries::reload() {
         return WorkerPool::get().startWorker([]() {
             // Serializes overlapping reloads: build() re-subscribes the
@@ -61,25 +53,30 @@ namespace kc {
             LogUtils::info(ThreadName::Registry, "Registry reload starting...");
 
             try {
-                // Clear
-                Registry<Biome>::getRegistry().clear();
-                Registry<Block>::getRegistry().clear();
+                clearAllRegistry();
 
-                // Build Again
                 build();
 
                 EventManager::get().callEvent<RegistryReloadEvent>();
 
-                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - started).count();
-                LogUtils::info(ThreadName::Registry,
-                    StringBuilder::build("Registry reload completed in ", elapsed, "ms."));
+                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+
+                LogUtils::info(ThreadName::Registry, StringBuilder::build("Registry reload completed in ", elapsed, "ms."));
             } catch (const std::runtime_error& e) {
-                LogUtils::error(ThreadName::Registry,
-                    StringBuilder::build("Registry reload failed: ", e.what()));
+                LogUtils::error(ThreadName::Registry, StringBuilder::build("Registry reload failed: ", e.what()));
             } catch (...) {
                 LogUtils::error(ThreadName::Registry, "Registry reload failed with an unknown exception.");
             }
         });
+    }
+
+    void Registries::addAllRegistry(int& pending) {
+        Blocks::registerBlocks(pending);
+        Biomes::registerBiomes(pending);
+    }
+
+    void Registries::clearAllRegistry() {
+        Registry<Biome>::getRegistry().clear();
+        Registry<Block>::getRegistry().clear();
     }
 } // namespace kc

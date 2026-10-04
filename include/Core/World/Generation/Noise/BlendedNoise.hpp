@@ -172,16 +172,16 @@ namespace kc {
     //
     // It interpolates between two 16-octave smeared fbms ("limit" noises) based on
     // where an 8-octave "main" noise falls, which gives flat plateaus in lowlands
-    // and full-strength detail on peaks. Overworld params:
+    // and full-strength detail on peaks. Homelands params:
     //   BlendedNoise(0.25, 0.125, 80.0, 160.0, 8.0)
     class BlendedNoise {
     public:
-        static constexpr double kBaseScale = 684.412;
-        static constexpr double kLimitFactor = 0.99998474;
-        static constexpr double kMainFactor = 12.75;
-        static constexpr int kLimitFirstOctave = -15;
-        static constexpr int kMainFirstOctave = -7;
-        static constexpr const char* kNoiseSeed = "minecraft:terrain";
+        static constexpr double baseScale = 684.412;
+        static constexpr double limitFactor = 0.99998474;
+        static constexpr double mainFactor = 12.75;
+        static constexpr int limitFirstOctave = -15;
+        static constexpr int mainFirstOctave = -7;
+        static constexpr const char* noiseSeed = "minecraft:terrain";
 
         BlendedNoise(double xzScale, double yScale, double xzFactor, double yFactor,
                      double smearScaleMultiplier)
@@ -193,9 +193,9 @@ namespace kc {
             const double mainSmearScaleY = limitSmearScaleY / yFactor_;
             // Order matters: the three stacks draw from `random` in sequence, so
             // minLimit and maxLimit are NOT the same noise.
-            minLimit_ = SmearedNoiseStack::createFbm(random, kLimitFirstOctave, limitSmearScaleY, kLimitFactor);
-            maxLimit_ = SmearedNoiseStack::createFbm(random, kLimitFirstOctave, limitSmearScaleY, kLimitFactor);
-            main_ = SmearedNoiseStack::createFbm(random, kMainFirstOctave, mainSmearScaleY, kMainFactor);
+            minLimit_ = SmearedNoiseStack::createFbm(random, limitFirstOctave, limitSmearScaleY, limitFactor);
+            maxLimit_ = SmearedNoiseStack::createFbm(random, limitFirstOctave, limitSmearScaleY, limitFactor);
+            main_ = SmearedNoiseStack::createFbm(random, mainFirstOctave, mainSmearScaleY, mainFactor);
         }
 
         float sample(double x, double y, double z) const {
@@ -211,7 +211,7 @@ namespace kc {
             return minValue + choice * (maxValue - minValue);
         }
 
-        static BlendedNoise overworld() { return BlendedNoise(0.25, 0.125, 80.0, 160.0, 8.0); }
+        static BlendedNoise homelands() { return BlendedNoise(0.25, 0.125, 80.0, 160.0, 8.0); }
 
         // Test-only introspection for parity harnesses.
         const SmearedNoiseStack& minLimit() const { return minLimit_; }
@@ -219,8 +219,8 @@ namespace kc {
         const SmearedNoiseStack& mainNoise() const { return main_; }
 
     private:
-        double xzMultiplier() const { return kBaseScale * xzScale_; }
-        double yMultiplier() const { return kBaseScale * yScale_; }
+        double xzMultiplier() const { return baseScale * xzScale_; }
+        double yMultiplier() const { return baseScale * yScale_; }
         static float clamp(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
         double xzScale_, yScale_, xzFactor_, yFactor_, smearScaleMultiplier_;

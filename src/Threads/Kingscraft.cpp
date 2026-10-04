@@ -40,7 +40,7 @@ namespace kc {
         // How far the spawn scan is allowed to travel for dry land, in blocks.
         // Wider than the render distance on purpose, so the player can start on
         // land even when the middle of the map is open ocean.
-        constexpr int kNewWorldSpawnRadius = 1536;
+        constexpr int newWorldSpawnRadius = 1536;
 
         // A brand new world starts on dry land near the origin instead of at the
         // hardcoded (67, 67), which for many seeds sits far out at sea. This runs
@@ -51,7 +51,7 @@ namespace kc {
             int landX = 0;
             int landY = 0;
             int landZ = 0;
-            if (terrainGen->findSpawnColumn(originX, originZ, kNewWorldSpawnRadius,
+            if (terrainGen->findSpawnColumn(originX, originZ, newWorldSpawnRadius,
                                             landX, landY, landZ)) {
                 // Eye height is added back because metadata stores eye position,
                 // not feet position.
@@ -65,7 +65,7 @@ namespace kc {
                     + std::to_string(landY) + ", " + std::to_string(landZ) + ")");
             } else {
                 LogUtils::warn(ThreadName::GameLogic,
-                    "world: no dry land within " + std::to_string(kNewWorldSpawnRadius)
+                    "world: no dry land within " + std::to_string(newWorldSpawnRadius)
                     + " blocks of (" + std::to_string(originX) + ", "
                     + std::to_string(originZ) + "); keeping the default spawn");
             }
@@ -118,9 +118,8 @@ namespace kc {
         if (terrainGen && world) {
             glm::vec3 body = world->getPlayerController().getBodyPosition();
             currentBiomeEncoded_.store(
-                terrainGen->getBiomeProvider()
-                    .getBiome(static_cast<int>(std::floor(body.x)),
-                              static_cast<int>(std::floor(body.z)))
+                terrainGen->getBiomeAt(static_cast<int>(std::floor(body.x)),
+                                       static_cast<int>(std::floor(body.z)))
                     .getEncoded(),
                 std::memory_order_relaxed);
             playerFlying_.store(world->getPlayerController().isFlying(), std::memory_order_relaxed);

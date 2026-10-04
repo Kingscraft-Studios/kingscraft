@@ -46,6 +46,9 @@ namespace kc {
         int occlusionGridW = 64;
         int occlusionGridH = 36;
 
+        // Vulkan Settings
+        bool enableVkDebugValidation = false;
+
     private:
         RendererSettings() = default;
     };

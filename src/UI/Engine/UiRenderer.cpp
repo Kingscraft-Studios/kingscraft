@@ -306,7 +306,7 @@ namespace kc {
         auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/ui.frag.spv");
 
         PipelineConfigInfo configInfo{};
-        Pipeline::defaultPipelineConfigInfo(configInfo);
+        Pipeline::applyDefaultPipelineConfigInfo(configInfo);
 
         VkVertexInputBindingDescription bindingDesc{};
         bindingDesc.binding = 0;
@@ -368,7 +368,7 @@ namespace kc {
         auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/composite.frag.spv");
 
         PipelineConfigInfo configInfo{};
-        Pipeline::defaultPipelineConfigInfo(configInfo);
+        Pipeline::applyDefaultPipelineConfigInfo(configInfo);
 
         configInfo.bindingDescriptions = {};
         configInfo.attributeDescriptions = {};

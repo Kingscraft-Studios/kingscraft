@@ -28,7 +28,7 @@ namespace kc {
     class DensityGraph {
     public:
 
-        // Per-sample memoisation. The Overworld graph is a DAG in which the same
+        // Per-sample memoisation. The Homelands graph is a DAG in which the same
         // spline/noise sub-expression is reachable by many paths from the root,
         // so a plain recursive walk re-evaluates it exponentially often (measurably
         // ~58us per density sample, ~5.7s per 16x16x384 chunk). Vanilla has the
@@ -37,7 +37,7 @@ namespace kc {
         //
         // The cache is thread_local and sized to nodes_.size(), because several
         // chunk threads may evaluate the same graph concurrently.
-        // Memoisation state. Two caches are kept because the Overworld graph
+        // Memoisation state. Two caches are kept because the Homelands graph
         // mixes two very different kinds of node:
         //
         //  * "pure 2D" nodes (climate noises, shift noises, and every spline
@@ -66,7 +66,7 @@ namespace kc {
         struct SampleCache {
             // The cache is a function-local thread_local, i.e. one per thread for
             // the whole process, so it outlives any individual graph. Two graphs
-            // (e.g. two OverworldNoise built with different seeds) can hold the
+            // (e.g. two HomelandsNoise built with different seeds) can hold the
             // same node count and be sampled at the same coordinates, and the
             // coordinate/epoch check alone would then happily return the *other*
             // graph's values. `owner` is each graph's address, so a mismatch

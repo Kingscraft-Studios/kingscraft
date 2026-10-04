@@ -31,7 +31,7 @@ namespace kc {
             // entries, matching vanilla's codec validation.
             std::vector<double> amplitudeModifiers;
 
-            static constexpr int kMaxOctaveCount = 32;
+            static constexpr int maxOctaveCount = 32;
         };
 
         struct OctaveInfo {
@@ -61,7 +61,7 @@ namespace kc {
                 PerlinNoise second(*secondFactory, name);
                 const double valueFactor = normalizationFactor_ * octave.amplitude;
                 layers_.push_back(Layer{first, octave.frequency, static_cast<float>(valueFactor)});
-                layers_.push_back(Layer{second, octave.frequency * kSecondStackScale,
+                layers_.push_back(Layer{second, octave.frequency * secondStackScale,
                                         static_cast<float>(valueFactor)});
             }
         }
@@ -119,7 +119,7 @@ namespace kc {
 
         // The frequency multiplier applied to the second stack so the two halves
         // do not line up.
-        static constexpr double kSecondStackScale = 1.0181268882175227;
+        static constexpr double secondStackScale = 1.0181268882175227;
 
         // Test-only introspection so parity harnesses can diff octave by octave.
         std::size_t layerCount() const { return layers_.size(); }
@@ -202,7 +202,7 @@ namespace kc {
         static double estimateDeviation(const std::vector<OctaveInfo>& octaves) {
             double variance = 0.0;
             for (const OctaveInfo& o : octaves) {
-                const double layerDeviation = PerlinNoise::kStandardDeviation * o.absAmplitude();
+                const double layerDeviation = PerlinNoise::standardDeviation * o.absAmplitude();
                 variance += layerDeviation * layerDeviation;
             }
             return std::sqrt(variance);

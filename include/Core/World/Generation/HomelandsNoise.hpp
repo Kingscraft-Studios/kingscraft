@@ -31,12 +31,12 @@ namespace kc {
     //   erosion         -> both of the above
     //   weirdness       -> factor, and peaks-and-valleys for jaggedness
     //   ridges          -> the spline values themselves
-    class OverworldNoise {
+    class HomelandsNoise {
     public:
-        static constexpr int kMinY = -64;
-        static constexpr int kHeight = 384;
-        static constexpr int kMaxY = kMinY + kHeight;  // 320 exclusive top
-        static constexpr int kSeaLevel = 63;
+        static constexpr int minY = -64;
+        static constexpr int height = 384;
+        static constexpr int maxY = minY + height;  // 320 exclusive top
+        static constexpr int seaLevel = 63;
 
         struct Rngs {
             std::unique_ptr<RandomSource> root;
@@ -52,7 +52,7 @@ namespace kc {
         }
 
         // Noises.instantiate seeds each noise with its ResourceKey identifier, i.e.
-        // "minecraft:" + the Noises enum name. Those names are NOT dimension
+        // "<namespace>:" + the Noises enum name. Those names are NOT dimension
         // prefixed: Noises.SHIFT is "offset", Noises.RIDGE is "ridge" and
         // Noises.CONTINENTALNESS is "continentalness" (only the Nether entries
         // carry a "nether/" prefix). The per-octave seeds are then
@@ -130,13 +130,13 @@ namespace kc {
         int surfaceUpperBound = -1;
         int zero = -1;
 
-        OverworldNoise() = default;
+        HomelandsNoise() = default;
 
-        explicit OverworldNoise(int64_t worldSeed) { build(worldSeed); }
+        explicit HomelandsNoise(int64_t worldSeed) { build(worldSeed); }
 
         // The shape dials only move spline knots, so they are read once at build
         // time and baked into the graph. There is no per-sample dial lookup.
-        OverworldNoise(int64_t worldSeed, const kc::TerrainShape& shape) { build(worldSeed, shape); }
+        HomelandsNoise(int64_t worldSeed, const kc::TerrainShape& shape) { build(worldSeed, shape); }
 
         void build(int64_t worldSeed) { build(worldSeed, kc::TerrainShape{}); }
 
@@ -184,25 +184,25 @@ namespace kc {
             // Height conversion: depth = yLinearGradient(-64,320, 1.5,-1.5) +
             // offset, and that gradient falls 3.0 over 384 blocks, i.e. 0.0078125
             // per block. The surface sits where depth == 0, so one block of
-            // height is 1/128 of offset. kOffsetPerBlock converts blocks -> offset.
+            // height is 1/128 of offset. offsetPerBlock converts blocks -> offset.
             //
             // At reliefBlocks == 0 the multiplier is exactly 0.0f and add() with
             // a zero constant is the identity in IEEE-754, so the graph evaluates
             // bit-identically to vanilla.
-            constexpr float kOffsetPerBlock = 1.0f / 128.0f;
+            constexpr float offsetPerBlock = 1.0f / 128.0f;
 
             // BlendedNoise seeds from the factory with the literal "minecraft:terrain"
             // id, NOT from the world seed's octave names.
             {
                 const std::unique_ptr<RandomSource> terrainRandom =
-                    rootFactory.fromHashOf(BlendedNoise::kNoiseSeed);
-                BlendedNoise blended = BlendedNoise::overworld();
+                    rootFactory.fromHashOf(BlendedNoise::noiseSeed);
+                BlendedNoise blended = BlendedNoise::homelands();
                 blended.create(*terrainRandom);
                 graph.addBlended(std::move(blended));
                 // addBlended() returns an index into the graph's BlendedNoise
                 // storage, not a node id; blended() is what mints the node.
                 base3d = graph.blended(0);
-                graph.registerFunction("overworld/base_3d_noise", base3d);
+                graph.registerFunction("terrain/base_3d_noise", base3d);
             }
 
             // ---- 2D climate noises --------------------------------------
@@ -220,12 +220,12 @@ namespace kc {
             // hills bend around the continents instead of cutting across them.
             const int relief = graph.noise2d(shiftX, shiftZ, 0.25, reliefNoise);
 
-            graph.registerFunction("overworld/temperature", temperature);
-            graph.registerFunction("overworld/vegetation", vegetation);
-            graph.registerFunction("overworld/continentalness", continentalness);
-            graph.registerFunction("overworld/erosion", erosion);
-            graph.registerFunction("overworld/ridges", ridges);
-            graph.registerFunction("overworld/ridges_folded", ridgesFolded);
+            graph.registerFunction("terrain/temperature", temperature);
+            graph.registerFunction("terrain/vegetation", vegetation);
+            graph.registerFunction("terrain/continentalness", continentalness);
+            graph.registerFunction("terrain/erosion", erosion);
+            graph.registerFunction("terrain/ridges", ridges);
+            graph.registerFunction("terrain/ridges_folded", ridgesFolded);
 
             // ---- TerrainProvider splines -------------------------------
             const CubicSpline offsetSpline = buildOffsetSpline(continentalness, erosion, ridgesFolded, shape);
@@ -242,7 +242,7 @@ namespace kc {
             // Relief rides on top of the spline offset. Negated because the
             // surface sits where depth == 0 and depth RISES with offset, so
             // adding a positive offset term would sink the terrain.
-            const int reliefTerm = graph.mulConst(relief, -shape.reliefBlocks * kOffsetPerBlock);
+            const int reliefTerm = graph.mulConst(relief, -shape.reliefBlocks * offsetPerBlock);
             offset = graph.add(offset, reliefTerm);
             graph.registerFunction("kingscraft_relief", relief);
 
@@ -260,7 +260,7 @@ namespace kc {
             const int jaggedScaled = graph.noise2d(zero, zero, 1500.0, jaggedNoise);
             const int halfJagged = graph.halfNegative(jaggedScaled);
             const int jaggedness = graph.mul(unscaledJaggedness, halfJagged);
-            graph.registerFunction("overworld/jaggedness", jaggedness);
+            graph.registerFunction("terrain/jaggedness", jaggedness);
             this->jaggedNoise = jaggedScaled;
 
             // initialDensity = noiseGradientDensity(factor, depth + jaggedness)
@@ -268,29 +268,29 @@ namespace kc {
             initialDensity = graph.mulConst(graph.quarterNegative(unscaledDensity), 4.0f);
 
             // slopedCheese = initialDensity + base_3d_noise
-            slopedCheese = graph.add(initialDensity, graph.function("overworld/base_3d_noise"));
-            graph.registerFunction("overworld/initial_density", initialDensity);
-            graph.registerFunction("overworld/sloped_cheese", slopedCheese);
-            graph.registerFunction("overworld/density", depth);
-            graph.registerFunction("overworld/factor", factor);
-            graph.registerFunction("overworld/offset", offset);
+            slopedCheese = graph.add(initialDensity, graph.function("terrain/base_3d_noise"));
+            graph.registerFunction("terrain/initial_density", initialDensity);
+            graph.registerFunction("terrain/sloped_cheese", slopedCheese);
+            graph.registerFunction("terrain/density", depth);
+            graph.registerFunction("terrain/factor", factor);
+            graph.registerFunction("terrain/offset", offset);
 
             // ---- final density ------------------------------------------
-            // Vanilla: min(postProcess(slideOverworld(caves), 4, 8), noodle) + beardifier
+            // Vanilla: min(postProcess(slideDensity(caves), 4, 8), noodle) + beardifier
             // where caves = rangeChoice(slopedCheese, -1e6, 1.5625, surfaceWithEntrances,
             // underground(...)). Caves are deferred, so the rangeChoice collapses to
             // slopedCheese itself; the noodle/vein min and the beardifier add are the
             // ore/structure layer and are also skipped.
-            finalDensity = postProcess(slideOverworld(slopedCheese), 4, 8);
-            graph.registerFunction("overworld/final_density", finalDensity);
+            finalDensity = postProcess(slideDensity(slopedCheese), 4, 8);
+            graph.registerFunction("terrain/final_density", finalDensity);
 
             // ---- top surface -------------------------------------------
             preliminarySurfaceLevel = buildPreliminarySurfaceLevel(offset, factor);
             chunkSurfaceLevel = graph.interpolated(preliminarySurfaceLevel, 16, 1);
             surfaceNoise = addNoise(rootFactory, "surface");
-            graph.registerFunction("overworld/preliminary_surface_level", preliminarySurfaceLevel);
-            graph.registerFunction("overworld/chunk_surface_level", chunkSurfaceLevel);
-            graph.registerFunction("overworld/surface_noise", surfaceNoise);
+            graph.registerFunction("terrain/preliminary_surface_level", preliminarySurfaceLevel);
+            graph.registerFunction("terrain/chunk_surface_level", chunkSurfaceLevel);
+            graph.registerFunction("terrain/surface_noise", surfaceNoise);
 
             // The graph is complete, so this must come LAST: computePurity()
             // sizes its per-node flags to the current node count, and eval()
@@ -336,7 +336,7 @@ namespace kc {
 
         // NoiseRouterData.offsetToDepth(offset) = yClampedGradient(-64, 320, 1.5, -1.5) + offset
         int offsetToDepth(int offsetFn) {
-            return graph.add(graph.yLinearGradient(kMinY, kMaxY, 1.5f, -1.5f), offsetFn);
+            return graph.add(graph.yLinearGradient(minY, maxY, 1.5f, -1.5f), offsetFn);
         }
 
         int noiseGradientDensity(int factorFn, int depthWithJaggedness) {
@@ -351,11 +351,9 @@ namespace kc {
             return graph.interpolated(graph.mulConst(slide, 0.64f), cellSizeXz, cellSizeY);
         }
 
-        // slideOverworld(amplified=false, caves):
+        // slideDensity(amplified=false, caves):
         //   slide(caves, -64, 384, 80, 64, -0.078125, 0, 24, 0.1171875)
-        int slideOverworld(int caves) {
-            const int minY = kMinY;
-            const int height = kHeight;
+        int slideDensity(int caves) {
             const int topStartY = minY + height - 80;  // 240
             const int topEndY = minY + height - 64;    // 256
             const int bottomStartY = minY + 0;         // -64
@@ -375,7 +373,7 @@ namespace kc {
         // NoiseRouterData.preliminarySurfaceLevel(offset, factor, amplified=false):
         //   upperBound = clamp(remap(0.2734375 / factor - offset, 1.5, -1.5, -64, 320), -40, 320)
         //   density    = findTopSurface(
-        //                    slideOverworld(clamp(noiseGradientDensity(factor, depth) - 0.703125, -64, 64))
+        //                    slideDensity(clamp(noiseGradientDensity(factor, depth) - 0.703125, -64, 64))
         //                                - 0.390625,
         //                    upperBound, -64, 8)
         int buildPreliminarySurfaceLevel(int offsetFn, int factorFn) {
@@ -387,10 +385,10 @@ namespace kc {
 
             const int gradient = noiseGradientDensity(factorFn, offsetToDepth(offsetFn));
             const int clamped = graph.clamp(graph.addConst(gradient, -0.703125f), -64.0f, 64.0f);
-            const int density = graph.addConst(slideOverworld(clamped), -0.390625f);
+            const int density = graph.addConst(slideDensity(clamped), -0.390625f);
 
             surfaceUpperBound = upperBound;
-            return graph.findTopSurface(density, upperBound, kMinY, 8);
+            return graph.findTopSurface(density, upperBound, minY, 8);
         }
 
         // ---- TerrainProvider overworldOffset ---------------------------
@@ -560,7 +558,11 @@ namespace kc {
             const CubicSpline mountains = mountainRidgeSpline(ridges, mountainFactor, saddle);
             const CubicSpline widePlateau =
                 ridgeSpline(ridges, lowValley - 0.15f, 0.5f * mountainFactor,
-                            lerp(0.5f, 0.5f, 0.5f) * mountainFactor, 0.5f * mountainFactor,
+                            // Vanilla writes MathHelper.lerp(0.5, 0.5, 0.5) here,
+                            // which is 0.5 + 0.5 * (0.5 - 0.5) == 0.5, so it is
+                            // the same knot as the one below it. Spelled out to
+                            // match rather than left as a no-op call.
+                            0.5f * mountainFactor, 0.5f * mountainFactor,
                             0.6f * mountainFactor, 0.5f);
             const CubicSpline narrowPlateau =
                 ridgeSpline(ridges, lowValley, plain * mountainFactor, hill * mountainFactor,
@@ -599,22 +601,22 @@ namespace kc {
 
         // TerrainProvider.mountainContinentalness
         static float mountainContinentalness(float ridge, float modulation) {
-            constexpr float kRidgeOffset = 1.17f;
-            constexpr float kRidgeAmplitude = 0.46082947f;
+            constexpr float ridgeOffset = 1.17f;
+            constexpr float ridgeAmplitude = 0.46082947f;
             const float ridgeSlope = 1.0f - (1.0f - modulation) * 0.5f;
             const float ridgeIntersect = 0.5f * (1.0f - modulation);
-            const float adjustedRidgeHeight = (ridge + kRidgeOffset) * kRidgeAmplitude;
+            const float adjustedRidgeHeight = (ridge + ridgeOffset) * ridgeAmplitude;
             const float continentalness = adjustedRidgeHeight * ridgeSlope - ridgeIntersect;
             return ridge < -0.7f ? std::fmax(continentalness, -0.2222f) : std::fmax(continentalness, 0.0f);
         }
 
         // TerrainProvider.calculateMountainRidgeZeroContinentalnessPoint
         static float ridgeZeroContinentalnessPoint(float modulation) {
-            constexpr float kRidgeOffset = 1.17f;
-            constexpr float kRidgeAmplitude = 0.46082947f;
+            constexpr float ridgeOffset = 1.17f;
+            constexpr float ridgeAmplitude = 0.46082947f;
             const float ridgeSlope = 1.0f - (1.0f - modulation) * 0.5f;
             const float ridgeIntersect = 0.5f * (1.0f - modulation);
-            return ridgeIntersect / (kRidgeAmplitude * ridgeSlope) - kRidgeOffset;
+            return ridgeIntersect / (ridgeAmplitude * ridgeSlope) - ridgeOffset;
         }
 
         // TerrainProvider.buildMountainRidgeSplineWithPoints
@@ -633,8 +635,8 @@ namespace kc {
                 b.addPoint(-0.65f, afterRiverThreshold);
                 const float ridgeZeroContinentalness = mountainContinentalness(ridgeZeroPoint, modulation);
                 const float maxPointDerivative = slope(ridgeZeroContinentalness, maxPointContinentalness, ridgeZeroPoint, 1.0f);
-                constexpr float kSmallOffset = 0.01f;
-                b.addPoint(ridgeZeroPoint - kSmallOffset, ridgeZeroContinentalness);
+                constexpr float smallOffset = 0.01f;
+                b.addPoint(ridgeZeroPoint - smallOffset, ridgeZeroContinentalness);
                 b.addPoint(ridgeZeroPoint, ridgeZeroContinentalness, maxPointDerivative);
                 b.addPoint(1.0f, maxPointContinentalness, maxPointDerivative);
             } else {

@@ -54,14 +54,14 @@ namespace kc {
     // Xoroshiro128PlusPlus: the state machine behind the modern worldgen RNG.
     class Xoroshiro128PlusPlus {
     public:
-        static constexpr int64_t kGoldenRatio64 = -7046029254386353131LL;
-        static constexpr int64_t kSilverRatio64 = 7640891576956012809LL;
+        static constexpr int64_t goldenRatio64 = -7046029254386353131LL;
+        static constexpr int64_t silverRatio64 = 7640891576956012809LL;
 
         Xoroshiro128PlusPlus(int64_t lo, int64_t hi) : lo_(lo), hi_(hi) {
             // An all-zero state is a fixed point, so vanilla substitutes a constant.
             if ((lo_ | hi_) == 0) {
-                lo_ = kGoldenRatio64;
-                hi_ = kSilverRatio64;
+                lo_ = goldenRatio64;
+                hi_ = silverRatio64;
             }
         }
         explicit Xoroshiro128PlusPlus(Seed128bit seed)
@@ -86,7 +86,7 @@ namespace kc {
         int64_t hi_;
     };
 
-    // XoroshiroRandomSource. This is what the Overworld actually uses:
+    // XoroshiroRandomSource. This is what the Homelands actually uses:
     // data/minecraft/worldgen/noise_settings/overworld.json sets
     // "legacy_random_source": false, so the noise permutation tables are drawn
     // from this generator and not from the 48-bit LCG. The Nether, End, Caves and
