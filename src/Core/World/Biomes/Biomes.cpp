@@ -5,6 +5,7 @@
 #include "Core/World/Biomes/DesertBiome.hpp"
 #include "Core/World/Biomes/MountainsBiome.hpp"
 #include "Core/World/Biomes/OceanBiome.hpp"
+#include "Core/World/Biomes/RiverBiome.hpp"
 
 namespace kc {
     void Biomes::registerBiomes(int& pending) {
@@ -15,5 +16,6 @@ namespace kc {
         registry.add(DESERT, std::make_unique<DesertBiome>());
         registry.add(MOUNTAINS, std::make_unique<MountainsBiome>());
         registry.add(OCEAN, std::make_unique<OceanBiome>());
+        registry.add(RIVER, std::make_unique<RiverBiome>());
     }
 }

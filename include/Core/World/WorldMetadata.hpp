@@ -28,9 +28,22 @@ namespace kc {
     // was saved against the old shape, so worlds wanting the new look should
     // start fresh. GENERATOR_VERSION is recorded but not yet enforced on load;
     // validation is a known gap.
+    //
+    // generator v4: rivers. Columns inside a river corridor are carved below sea
+    // level -- and in the estuary the trench keeps carving out under the sea
+    // instead of stopping at the coastline -- and a fifth biome (river) can be
+    // selected, so terrain that v3 left alone now generates as a channel: a v3
+    // world loaded by a v4 build grows rivers into any chunk it has not saved
+    // yet, right up against v3 overlays that have none. That is the same class
+    // of mismatch v3 describes, which is why the version moves; the five river
+    // dials persist as
+    // #RV/#RW/#RC/#RK/#RD so a world can turn them off or tune them back to
+    // match older terrain instead of being stuck with it. The width/depth dials
+    // are typical values the carve varies per column (+-30% width, 0.45x..1.55x
+    // depth), so they steer the river rather than pin it.
     constexpr uint32_t WORLD_FORMAT_VERSION = 2;      // line layout of world.kcw
     constexpr uint32_t GENERATOR_ID = 1;              // which generator made the terrain
-    constexpr uint32_t GENERATOR_VERSION = 3;         // version of that generator
+    constexpr uint32_t GENERATOR_VERSION = 4;         // version of that generator
     constexpr uint32_t BLOCK_REGISTRY_VERSION = 1;    // block table worlds are saved against
 
     // Everything about the world and the player that must survive a restart.

@@ -40,7 +40,13 @@ namespace kc {
     //     aquifer. Caves and the real Aquifer (lava below y -54/drowned caves) are
     //     deferred.
     //
-    // Surface blocks follow material_rule/overworld.json, restricted to the four
+    // Rivers are the one place terrain and water are both shaped here: a column
+    // inside a river corridor is carved down towards a floor just below sea
+    // level (HomelandsNoise::carveRiverTop), and then rule 2 fills it. Nothing
+    // about the fill changes -- which is why a river and the ocean it runs into
+    // always share a waterline.
+    //
+    // Surface blocks follow material_rule/overworld.json, restricted to the
     // biomes this project ships. See the .cpp comments for the rule names.
     class DefaultTerrainGenerator : public ITerrainGenerator {
     public:
@@ -67,11 +73,16 @@ namespace kc {
         // "which biome is here?" has to offer a height or it gets the weaker
         // climate-only answer. Costs one density scan (~10-20 samples), the same
         // one generateBlocks() already does per column.
+        //
+        // This is the CARVED height -- what the world actually has -- so a
+        // river's answer is its bed, not the hillside the density graph drew
+        // before the channel was cut into it.
         int getSurfaceY(int worldX, int worldZ) const {
             std::shared_lock<std::shared_mutex> lock(mutex_);
             const int topLimit = HomelandsNoise::height - 1;
             const int local = columnTop(worldX, worldZ, topLimit, settings_.solidThreshold);
-            return local < 0 ? unknownSurfaceY : local + HomelandsNoise::minY;
+            if (local < 0) return unknownSurfaceY;
+            return noise_->carveRiverTop(worldX, worldZ, local, seaLocalY()) + HomelandsNoise::minY;
         }
 
         // The biome the terrain at this column was actually built with. Preferred
@@ -81,11 +92,20 @@ namespace kc {
             std::shared_lock<std::shared_mutex> lock(mutex_);
             const int topLimit = HomelandsNoise::height - 1;
             const int local = columnTop(worldX, worldZ, topLimit, settings_.solidThreshold);
-            const int surfaceY = local < 0 ? unknownSurfaceY : local + HomelandsNoise::minY;
-            const int sea = std::clamp(settings_.seaLevel, HomelandsNoise::minY,
-                                       HomelandsNoise::maxY - 1);
-            return ClimateBiomeProvider::biomeFor(
-                biomes_->climateAt(worldX, worldZ, surfaceY), surfaceY, sea);
+            const int sea = seaWorldY();
+            if (local < 0) {
+                // Open water with no solid cell anywhere in the column: no height
+                // to offer, so biomeFor falls back to the climate-only answer,
+                // exactly as it did before rivers existed.
+                return ClimateBiomeProvider::biomeFor(biomes_->climateAt(worldX, worldZ),
+                                                      unknownSurfaceY, unknownSurfaceY, sea);
+            }
+            const int naturalY = local + HomelandsNoise::minY;
+            const int surfaceY =
+                noise_->carveRiverTop(worldX, worldZ, local, sea - HomelandsNoise::minY) +
+                HomelandsNoise::minY;
+            return ClimateBiomeProvider::biomeFor(biomes_->climateAt(worldX, worldZ, naturalY), naturalY,
+                                                  surfaceY, sea);
         }
 
         std::vector<uint64_t> generateBlocks(int gridX, int gridZ, int chunkSize, int height) override {
@@ -99,12 +119,11 @@ namespace kc {
             std::shared_lock<std::shared_mutex> lock(mutex_);
 
             // Local y 0 is the bottom of the world, so a world Y of `sea` sits at
-            // local y = sea - minY. minY/maxY are already world Y bounds, so
-            // the clamp range is [minY, maxY - 1]; the water table itself is
+            // local y = sea - minY. minY/maxY are already world Y bounds, so the
+            // clamp range is [minY, maxY - 1]; the water table itself is
             // just a fill, so clamping it into the world is enough.
-            const int sea = std::clamp(settings_.seaLevel, HomelandsNoise::minY,
-                                       HomelandsNoise::maxY - 1);
-            const int seaLocal = sea - HomelandsNoise::minY;
+            const int sea = seaWorldY();
+            const int seaLocal = seaLocalY();
             // Terrain is not capped at sea level: anything above it is simply
             // land, and that is how mountains get above the water.
             const int topLimit = height - 1;
@@ -166,7 +185,22 @@ namespace kc {
                 for (int z = 0; z < chunkSize; ++z) {
                     const int wz = gridZ * chunkSize + z;
 
-                    const int top = columnTop(wx, wz, topLimit, solid);
+                    // Two tops per column, and everything downstream has to know
+                    // which one it wants:
+                    //
+                    //   naturalTop  what the density graph drew. Only biome
+                    //               selection sees it, and only for the OCEAN
+                    //               test ("is the ground itself below sea").
+                    //   top         what the column is BUILT at after the river
+                    //               carve. The surface material, the stone
+                    //               filler and the water fill all see this one.
+                    //
+                    // Both come from carveRiverTop(), which is also what
+                    // getSurfaceY/getBiomeAt/findSpawnColumn call, so a query
+                    // made before generation and the chunk that generation
+                    // produces cannot disagree about a column.
+                    const int naturalTop = columnTop(wx, wz, topLimit, solid);
+                    const int top = noise_->carveRiverTop(wx, wz, naturalTop, seaLocal);
                     if (top >= 0) {
                         const float surfaceNoise = noise_->sampleSurfaceNoise(wx, wz);
                         // Biome selection needs the height we just measured: it is
@@ -174,9 +208,17 @@ namespace kc {
                         // decides "ocean". Passing unknownSurfaceY here would
                         // quietly fall back to the climate-only answer and
                         // reintroduce the mislabelling this fixes.
+                        //
+                        // Natural for the ocean test, carved for the river test --
+                        // see ClimateBiomeProvider::biomeFor. Passing only `top`
+                        // would name every river ocean; passing only naturalTop
+                        // would let the land biome underneath paint a carved
+                        // riverbed.
                         const int surfaceY = top + HomelandsNoise::minY;
-                        const kc::Climate climate = biomes_->climateAt(wx, wz, surfaceY);
-                        const auto biomeKey = ClimateBiomeProvider::biomeFor(climate, surfaceY, sea);
+                        const int naturalY = naturalTop + HomelandsNoise::minY;
+                        const kc::Climate climate = biomes_->climateAt(wx, wz, naturalY);
+                        const auto biomeKey =
+                            ClimateBiomeProvider::biomeFor(climate, naturalY, surfaceY, sea);
                         if (const Biome* biome = resolveBiome(biomeKey)) {
                             biome->postGenerateColumn(ctx, x, z, wx, wz, top, top + HomelandsNoise::minY, surfaceNoise, climate, ClimateWeights{climate.desert, climate.grassland, climate.forest, climate.mountain}, blocks);
                         } else {
@@ -184,7 +226,13 @@ namespace kc {
                         }
                     }
 
-                    // Aquifer fill: air at or below sea level is water.
+                    // Aquifer fill: air at or below sea level is water. This is
+                    // also what fills a carved river -- the carve only digs the
+                    // trench, the fill is the same unconditional sea-level table
+                    // the ocean gets, so a river surface cannot end up at a
+                    // different Y from the sea it eventually runs into. It runs
+                    // from the CARVED top, which is the whole reason the carve
+                    // happens above this line.
                     for (int y = std::max(0, top + 1); y <= seaLocal && y < height; ++y) {
                         blocks[(static_cast<size_t>(y) * chunkSize + z) * chunkSize + x] = waterId;
                     }
@@ -224,18 +272,22 @@ namespace kc {
                              int& outX, int& outY, int& outZ) {
             std::shared_lock<std::shared_mutex> lock(mutex_);
 
-            const int sea = std::clamp(settings_.seaLevel, HomelandsNoise::minY,
-                                       HomelandsNoise::maxY - 1);
+            const int sea = seaWorldY();
             const float solid = settings_.solidThreshold;
             const int topLimit = HomelandsNoise::height - 1;
             const int step = 16; // one chunk
 
             // World Y of the top solid block, or a value below the world when the
             // column is open water all the way down.
+            //
+            // Carved: a river's bed is what stands here, which sits below
+            // sea + spawnDryMargin and so can never win the scan. That is the
+            // point -- the scan is looking for dry ground, and a river is not
+            // dry, however level its banks look.
             const auto surfaceY = [&](int wx, int wz) {
                 const int local = columnTop(wx, wz, topLimit, solid);
-                return local < 0 ? HomelandsNoise::minY - 1
-                                 : local + HomelandsNoise::minY;
+                if (local < 0) return HomelandsNoise::minY - 1;
+                return noise_->carveRiverTop(wx, wz, local, seaLocalY()) + HomelandsNoise::minY;
             };
             // A candidate also has to be part of a small flat dry pad, not just a
             // single dry column. The player is 0.6 blocks wide and centred on the
@@ -297,6 +349,14 @@ namespace kc {
 
 
     private:
+        // The water table, clamped into the world. Both forms live here so the
+        // carve, the fill and the biome queries cannot end up comparing against
+        // two different sea levels after a settings load clamps one of them.
+        int seaWorldY() const {
+            return std::clamp(settings_.seaLevel, HomelandsNoise::minY, HomelandsNoise::maxY - 1);
+        }
+        int seaLocalY() const { return seaWorldY() - HomelandsNoise::minY; }
+
         void reseed(const TerrainGenSettings& settings) {
             settings_ = settings;
             // The shape dials are baked into the spline knots here, so they only

@@ -23,6 +23,14 @@ namespace kc {
     //   #LP <f>              terrain dial: inland valley floor   (default 0.01)
     //   #LH <f>              terrain dial: inland gentle middle (default 0.03)
     //   #LT <f>              terrain dial: inland high ground   (default 0.10)
+    //   #RV <0|1>            rivers on/off                      (default 1)
+    //   #RW <f>              river wavelength, in blocks         (default 384)
+    //   #RC <f>              river channel half-width, in blocks (default 4.5)
+    //   #RK <f>              river bank width, in blocks         (default 8)
+    //   #RD <f>              river bed depth below sea, blocks   (default 5)
+    //
+    // #RC/#RK/#RD are typical values: the generated river breathes around them
+    // (+-30% width, 0.45x..1.55x depth) -- see TerrainGenSettings.hpp.
     //   #G <id> <version>    generatorId generatorVersion
     //   #B <version>         blockRegistryVersion
     //   #W <ticks>           worldTime
@@ -30,10 +38,11 @@ namespace kc {
     //   #PL <x> <y> <z>      player position (body coords)
     //   #PY <yaw> <pitch>    camera facing
     //
-    // The #RB/#LP/#LH/#LT terrain dials are the whole terrain customisation
-    // surface and are safe to hand-edit: they are read into settings on load and
-    // written back verbatim, because World only ever overwrites worldTime and
-    // the player/spawn fields, never settings. See TerrainGenSettings.hpp.
+    // The #RB/#LP/#LH/#LT/#RV/#RW/#RC/#RK/#RD terrain dials are the whole
+    // terrain customisation surface and are safe to hand-edit: they are read
+    // into settings on load and written back verbatim, because World only ever
+    // overwrites worldTime and the player/spawn fields, never settings. See
+    // TerrainGenSettings.hpp.
     //
     // Height shaping used to live on Biomes and was never persisted; the legacy
     // #A / #H tags are still ignored on read. Unknown directives are ignored and
@@ -93,6 +102,22 @@ namespace kc {
                     if (!(iss >> outcome.metadata.settings.shape.lowlandHill)) return fail();
                 } else if (tag == "#LT") {
                     if (!(iss >> outcome.metadata.settings.shape.lowlandTall)) return fail();
+                } else if (tag == "#RV") {
+                    // River dials are optional for the same reason #SL is: a
+                    // world saved before rivers existed keeps the defaults, and
+                    // each dial has its own tag so one of them can be added
+                    // later without the others having to be present.
+                    int riversOn = 1;
+                    if (!(iss >> riversOn)) return fail();
+                    outcome.metadata.settings.shape.riversEnabled = riversOn != 0;
+                } else if (tag == "#RW") {
+                    if (!(iss >> outcome.metadata.settings.shape.riverWavelengthBlocks)) return fail();
+                } else if (tag == "#RC") {
+                    if (!(iss >> outcome.metadata.settings.shape.riverChannelHalfWidth)) return fail();
+                } else if (tag == "#RK") {
+                    if (!(iss >> outcome.metadata.settings.shape.riverBankWidth)) return fail();
+                } else if (tag == "#RD") {
+                    if (!(iss >> outcome.metadata.settings.shape.riverDepthBlocks)) return fail();
                 } else if (tag == "#G") {
                     if (!(iss >> outcome.metadata.generatorId >> outcome.metadata.generatorVersion)) return fail();
                 } else if (tag == "#B") {
@@ -138,6 +163,11 @@ namespace kc {
             out << "#LP " << writeFloat(shape.lowlandPlain) << '\n';
             out << "#LH " << writeFloat(shape.lowlandHill) << '\n';
             out << "#LT " << writeFloat(shape.lowlandTall) << '\n';
+            out << "#RV " << (shape.riversEnabled ? 1 : 0) << '\n';
+            out << "#RW " << writeFloat(shape.riverWavelengthBlocks) << '\n';
+            out << "#RC " << writeFloat(shape.riverChannelHalfWidth) << '\n';
+            out << "#RK " << writeFloat(shape.riverBankWidth) << '\n';
+            out << "#RD " << writeFloat(shape.riverDepthBlocks) << '\n';
             out << "#G " << metadata_.generatorId << ' ' << metadata_.generatorVersion << '\n';
             out << "#B " << metadata_.blockRegistryVersion << '\n';
             out << "#W " << metadata_.worldTime << '\n';

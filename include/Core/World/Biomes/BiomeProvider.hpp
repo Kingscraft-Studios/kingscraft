@@ -43,6 +43,13 @@ namespace kc {
         float grassland = 0.0f;
         float forest = 0.0f;
         float mountain = 0.0f;
+        // River membership, 0..1 (HomelandsNoise::sampleRiverMask). Unlike the
+        // fields above this is already normalised -- it is the distance to the
+        // nearest river centreline as a fraction of the corridor half-width --
+        // because what the selector compares against has to mean a width in
+        // blocks, and a raw contour noise has no such unit. 1 is the centreline,
+        // 0 the edge of the corridor.
+        float river = 0.0f;
     };
 
     // Decides which Biome exists at a world X/Z coordinate, based on a

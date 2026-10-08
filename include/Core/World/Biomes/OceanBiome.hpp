@@ -18,6 +18,13 @@ namespace kc {
     // generic path had reached it. It never did: a global `worldTopY < seaLevel`
     // branch in Biome::resolveSurface shadowed it, which left this biome
     // contributing nothing but a name.
+    //
+    // The seabed is sand over sand and stays that everywhere a column's
+    // natural ground sits below the waterline. The trench a river keeps
+    // carving out under the sea is still dug -- that relief is the smooth
+    // junction -- but the label there belongs to the ocean, so the estuary
+    // trough's floor is sand too; this biome owns every sea-covered column,
+    // corridor or not.
     class OceanBiome : public Biome {
     public:
         SurfaceLayers resolveSurface(
