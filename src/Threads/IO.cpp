@@ -5,6 +5,8 @@
 #include <fstream>
 #include <stdexcept>
 
+#include "Util/LogUtils.hpp"
+
 namespace kc {
 
     std::unique_ptr<IO> IO::instance_ = nullptr;
@@ -28,7 +30,24 @@ namespace kc {
         return *instance_;
     }
 
-    std::vector<char> IO::readFile(const std::string& path) {
+    bool IO::exists(const std::string& path) const {
+        return std::filesystem::exists(path);
+    }
+
+    void IO::createDirectories(const std::string& directory) {
+        if (directory.empty()) return;
+        std::filesystem::create_directories(directory);
+    }
+
+    std::optional<std::vector<char>> IO::readFile(const std::string& path, MissingFile missing) {
+        // A read must never create anything on disk (no directory, no empty file).
+        if (!std::filesystem::exists(path)) {
+            if (missing == MissingFile::Warn)
+                LogUtils::warn(ThreadName::Engine,
+                    "Unable to Read File: File Doesn't Exist (" + path + ")");
+            return std::nullopt;
+        }
+
         auto& file = getFile(path, std::ios::in | std::ios::out | std::ios::binary);
 
         return file.read();
@@ -55,25 +74,35 @@ namespace kc {
         }
     }
 
-    std::vector<char> IO::readData(const std::string& path, size_t offset, size_t size) {
-        if (!std::filesystem::exists(path))
-            throw std::runtime_error("failed to open file: " + path);
+    std::optional<std::vector<char>> IO::readData(const std::string& path, size_t offset, size_t size) {
+        if (!std::filesystem::exists(path)) {
+            LogUtils::warn(ThreadName::Engine,
+                "Unable to Read File: File Doesn't Exist (" + path + ")");
+            return std::nullopt;
+        }
         try {
             auto& file = getFile(path, std::ios::in | std::ios::out | std::ios::binary);
             return file.readData(offset, size);
         } catch (const std::runtime_error&) {
-            throw std::runtime_error("failed to open file: " + path);
+            LogUtils::warn(ThreadName::Engine,
+                "Unable to Read File: File Doesn't Exist (" + path + ")");
+            return std::nullopt;
         }
     }
 
-    size_t IO::getFileSize(const std::string& path) {
-        if (!std::filesystem::exists(path))
-            throw std::runtime_error("failed to open file: " + path);
+    std::optional<size_t> IO::getFileSize(const std::string& path) {
+        if (!std::filesystem::exists(path)) {
+            LogUtils::warn(ThreadName::Engine,
+                "Unable to Read File: File Doesn't Exist (" + path + ")");
+            return std::nullopt;
+        }
         try {
             auto& file = getFile(path, std::ios::in | std::ios::out | std::ios::binary);
             return file.getFileSize();
         } catch (const std::runtime_error&) {
-            throw std::runtime_error("failed to open file: " + path);
+            LogUtils::warn(ThreadName::Engine,
+                "Unable to Read File: File Doesn't Exist (" + path + ")");
+            return std::nullopt;
         }
     }
 
@@ -82,7 +111,7 @@ namespace kc {
 
         // 1. ensure directory exists
         std::filesystem::path filePath(path);
-        std::filesystem::create_directories(filePath.parent_path());
+        createDirectories(filePath.parent_path().string());
 
         // 2. write file
         std::ofstream file(path, std::ios::app);

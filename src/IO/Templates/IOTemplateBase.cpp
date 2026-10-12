@@ -5,11 +5,11 @@
 namespace kc {
     IOTemplateBase::IOTemplateBase(IO& io) : io_(io) {}
 
-    std::vector<char> IOTemplateBase::readBytes(const std::string& path) {
-        return io_.readFile(path);
+    std::optional<std::vector<char>> IOTemplateBase::readBytes(const std::string& path, MissingFile missing) {
+        return io_.readFile(path, missing);
     }
 
-    std::vector<char> IOTemplateBase::readBytes(const std::string& path, std::size_t offset, std::size_t size) {
+    std::optional<std::vector<char>> IOTemplateBase::readBytes(const std::string& path, std::size_t offset, std::size_t size) {
         return io_.readData(path, offset, size);
     }
 

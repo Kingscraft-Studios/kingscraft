@@ -3,7 +3,6 @@
 #include "IOTemplateBase.hpp"
 #include "Core/World/WorldMetadata.hpp"
 
-#include <filesystem>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -62,12 +61,11 @@ namespace kc {
 
         LoadOutcome load() {
             LoadOutcome outcome;
-            if (!std::filesystem::exists(worldPath)) return outcome;
+            // A missing world.kcw is a brand-new world, not an error — read quietly.
+            auto fileData = readBytes(worldPath, MissingFile::Ignore);
+            if (!fileData || fileData->empty()) return outcome;
 
-            auto fileData = readBytes(worldPath);
-            if (fileData.empty()) return outcome;
-
-            std::string text(fileData.begin(), fileData.end());
+            std::string text(fileData->begin(), fileData->end());
             if (text.find_first_not_of(" \t\r\n") == std::string::npos) return outcome;
 
             auto fail = [&outcome]() -> LoadOutcome {

@@ -19,9 +19,10 @@ namespace kc {
         std::vector<uint64_t> load(int gridX, int gridZ) {
             auto path = buildPath(gridX, gridZ);
             auto fileData = readBytes(path);
+            if (!fileData) return {};
 
             // Deserialize
-            auto formatted = deserialize(fileData);
+            auto formatted = deserialize(*fileData);
 
             return formatted;
         }

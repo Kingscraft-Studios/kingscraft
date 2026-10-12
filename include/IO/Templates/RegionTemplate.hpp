@@ -142,11 +142,11 @@ namespace kc {
             if (!s.loaded) {
                 int rX = static_cast<int>(k >> 32);
                 int rZ = static_cast<int>(k & 0xFFFFFFFF);
-                auto fileData = readBytes(builtPath(rX, rZ));
-                if (fileData.empty())
+                auto fileData = readBytes(builtPath(rX, rZ), MissingFile::Ignore);
+                if (!fileData || fileData->empty())
                     s.lines = {StringBuilder::build("#R ", rX, " ", rZ)};
                 else
-                    s.lines = splitLines(std::string(fileData.begin(), fileData.end()));
+                    s.lines = splitLines(std::string(fileData->begin(), fileData->end()));
                 rebuildTagIndex(s);
                 s.loaded = true;
             }

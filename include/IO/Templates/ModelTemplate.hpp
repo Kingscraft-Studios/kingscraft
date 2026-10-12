@@ -11,7 +11,9 @@ namespace kc {
 
         BlockModel load(const std::string& path) {
             auto jsonBytes = readBytes(path);
-            auto parsed = ModelParser::parse(jsonBytes);
+            if (!jsonBytes) return BlockModel{};
+
+            auto parsed = ModelParser::parse(*jsonBytes);
 
             // Decode textures in JSON order, skipping failures. TextureCache builds a
             // flat layer array and skips invalid textures (TextureCache.cpp:51), so the

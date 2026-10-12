@@ -80,7 +80,7 @@ namespace kc {
 
     void Bootstrapper::loadShaderFile(const std::string& path) {
         auto data = IO::Get().readFile(path);
-        shaders_[path] = std::move(data);
+        shaders_[path] = data ? std::move(*data) : std::vector<char>{};
     }
 
     std::vector<char> Bootstrapper::loadAndValidatePC() {
@@ -96,23 +96,28 @@ namespace kc {
         }
 
 
-        size_t fileSize = IO::Get().getFileSize("pipeline_cache.bin");
+        auto fileSize = IO::Get().getFileSize("pipeline_cache.bin");
 
-        if (fileSize < sizeof(PipelineCacheHeader)) {
+        if (!fileSize) {
+            LogUtils::error(ThreadName::Engine, "[PipelineCache] Failed to stat pipeline cache.");
+            return {};
+        }
+
+        if (*fileSize < sizeof(PipelineCacheHeader)) {
             LogUtils::error(ThreadName::Engine, "[PipelineCache] Cache file is smaller than the header size.");
             return {};
         }
 
-        size_t blobSize = fileSize - sizeof(PipelineCacheHeader);
+        size_t blobSize = *fileSize - sizeof(PipelineCacheHeader);
 
 
         auto cache = IO::Get().readData("pipeline_cache.bin", sizeof(PipelineCacheHeader), blobSize);
 
-        if (cache.empty()) {
+        if (!cache || cache->empty()) {
             LogUtils::error(ThreadName::Engine, "[PipelineCache] Failed to read pipeline cache data.");
             return {};
         }
 
-        return cache;
+        return *cache;
     }
 } // namespace kc
