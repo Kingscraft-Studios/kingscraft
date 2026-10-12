@@ -1,11 +1,11 @@
 #pragma once
 
-#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
+#include "Core/Observability/Metrics/MetricsTypes.hpp"
 #include "Event.hpp"
 
 namespace kc {
 
-    // Fired by Diagnostics once it has copied the latest game-logic and render
+    // Fired by Observability once it has copied the latest game-logic and render
     // thread metrics into a coherent snapshot. Dispatched fire-and-forget: the
     // carrier is a by-value copy, so listeners on other threads never race the
     // producers.

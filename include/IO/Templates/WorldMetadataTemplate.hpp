@@ -26,7 +26,7 @@ namespace kc {
     //   #RV <0|1>            rivers on/off                      (default 1)
     //   #RW <f>              river wavelength, in blocks         (default 384)
     //   #RC <f>              river channel half-width, in blocks (default 4.5)
-    //   #RK <f>              river bank width, in blocks         (default 8)
+    //   #RK <f>              river bank width (MINIMUM), blocks   (default 8)
     //   #RD <f>              river bed depth below sea, blocks   (default 5)
     //
     // #RC/#RK/#RD are typical values: the generated river breathes around them

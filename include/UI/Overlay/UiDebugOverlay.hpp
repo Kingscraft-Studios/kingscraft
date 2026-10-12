@@ -4,7 +4,7 @@
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiGroup.hpp"
 #include "Util/TimeUtil.hpp"
-#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
+#include "Core/Observability/Metrics/MetricsTypes.hpp"
 #include "Event/Events/MetricsUpdateEvent.hpp"
 #include "Event/KCEventHandler.hpp"
 #include "Event/Listener.hpp"
@@ -26,7 +26,7 @@ namespace kc {
 
         // Must be public: EventManager's generated dispatch lambda calls the
         // kcOnEvent helper from outside the class. Runs on the renderer thread
-        // (the event is posted there by Diagnostics).
+        // (the event is posted there by Observability).
         KC_EVENT_HANDLER(MetricsUpdateEvent, onMetricsUpdate, ThreadName::Renderer)
 
     private:

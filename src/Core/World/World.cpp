@@ -460,6 +460,21 @@ namespace kc {
         markNeighborsForBorder(gridX, gridZ);
     }
 
+    void World::dumpLoadedChunks() {
+        // Same shape as the shutdown dump: stage every in-memory grid so the
+        // RegionTemplate can flush it in one write per region. Called from the
+        // F5 handler so the area still in view is captured immediately instead
+        // of only when it streams out.
+        std::lock_guard<std::mutex> lock(cacheMutex_);
+        auto& regions = IO::Get().getBuiltinTemplates().getRegionTemplate();
+        for (const auto& [key, data] : blockCache_) {
+            if (!data) continue;
+            int gx = static_cast<int>(key >> 32);
+            int gz = static_cast<int>(static_cast<int32_t>(key & 0xFFFFFFFF));
+            regions.queueSave(gx, gz, *data);
+        }
+    }
+
     void World::flushPendingCleanup() {
         if (frameCount_ >= CLEANUP_DELAY) {
             int clearIdx = static_cast<int>((frameCount_ - CLEANUP_DELAY) % pendingCleanup_.size());

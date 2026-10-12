@@ -1,4 +1,4 @@
-#include "Core/Diagnostics/Metrics/Metrics.hpp"
+#include "Core/Observability/Metrics/Metrics.hpp"
 
 namespace kc {
 

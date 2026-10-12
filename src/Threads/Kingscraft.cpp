@@ -208,18 +208,21 @@ namespace kc {
         });
         MessageBus::Get().send(ThreadName::Input, []() {
             Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F5}, []() {
-                // Toggle the region-dump debug switch. ON starts recording every
-                // loaded chunk; a second press stops recording and flushes the
-                // staged regions to disk immediately.
+                // Region-dump debug switch. First press records every chunk:
+                // those already loaded are staged right away, and the rest are
+                // staged as they unload. A second press stops recording and
+                // flushes the staged regions to disk.
                 MessageBus::Get().send(ThreadName::GameLogic, []() {
                     auto& world = Runtime::get().kingscraft->getWorld();
                     if (world.getSaveAllChunks()) {
+                        world.dumpLoadedChunks();
                         world.setSaveAllChunks(false);
                         IO::Get().getBuiltinTemplates().getRegionTemplate().flush();
                         LogUtils::info(ThreadName::GameLogic, "SaveAllChunks: OFF (region dump flushed to disk)");
                     } else {
                         world.setSaveAllChunks(true);
-                        LogUtils::info(ThreadName::GameLogic, "SaveAllChunks: ON (recording every loaded chunk)");
+                        world.dumpLoadedChunks();
+                        LogUtils::info(ThreadName::GameLogic, "SaveAllChunks: ON (recording loaded + unloaded chunks)");
                     }
                 });
             });

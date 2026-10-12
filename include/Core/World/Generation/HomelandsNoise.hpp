@@ -39,6 +39,13 @@ namespace kc {
         static constexpr int height = 384;
         static constexpr int maxY = minY + height;  // 320 exclusive top
         static constexpr int seaLevel = 63;
+        // Minimum natural depth below sea for a bare sub-sea dip to be flooded
+        // as ocean. Without this, a terrain that dithers across the waterline
+        // (the inland floor sits AT sea level) turns every one-block dip into a
+        // puddle. Deeper basins, rivers and lakes carry their own water and are
+        // unaffected. Shared by the fill (TerrainGenerator) and the ocean
+        // classification (ClimateBiomeProvider) so the two cannot disagree.
+        static constexpr int oceanMinDepth = 2;
 
         struct Rngs {
             std::unique_ptr<RandomSource> root;
@@ -157,6 +164,31 @@ namespace kc {
                 return {1.0f, -6, 2, NormalNoise::Normalization::Enabled,
                         {1.0f, 0.35f}};
             }
+            if (id == "kingscraft_lake") {
+                // Not a vanilla noise: the pond SHAPE field. Thresholded at
+                // lakeOuter, the region above the threshold is the pond, so this
+                // wavelength (lakeWavelength) is the pond's size, not its
+                // spacing. It stays short so a pond is pond-sized rather than a
+                // continent; spacing comes from kingscraft_lake_gate, which
+                // raises this field's threshold wherever a pond should not exist.
+                //
+                // Two damped octaves, like the river field: enough shape to
+                // bend the shoreline, not enough high-frequency tail to fray it
+                // into the many tiny puddles this replaces.
+                return {1.0f, -6, 2, NormalNoise::Normalization::Enabled,
+                        {1.0f, 0.4f}};
+            }
+            if (id == "kingscraft_lake_gate") {
+                // Not vanilla: the low-frequency envelope that SPACES the ponds.
+                // A single thresholded field can only be many small ponds or few
+                // huge ones -- the blob size is the wavelength. The gate breaks
+                // that tie: the shape field above stays pond-sized, while this
+                // much longer period decides WHERE ponds may form at all. Where
+                // it is low a pond is scaled to nothing, so ponds arrive in loose
+                // clusters with empty ground between them instead of speckling
+                // the whole valley floor.
+                return {1.0f, -6, 2, NormalNoise::Normalization::Enabled, {1.0f, 0.35f}};
+            }
             return {1.0, 0, 1, NormalNoise::Normalization::Enabled, {}};
         }
 
@@ -183,6 +215,8 @@ namespace kc {
         int riverBedBump = -1;
         int riverWidthVar = -1;
         int riverExtentVar = -1;
+        int lake = -1;
+        int lakeGate = -1;
         int zero = -1;
 
         HomelandsNoise() = default;
@@ -214,15 +248,37 @@ namespace kc {
             // call. Reading the dials from a second copy of TerrainShape would
             // let the label drift away from the trench it is supposed to name.
             riverEnabled_ = shape.riversEnabled;
-            riverCorridorHalf_ = shape.riverChannelHalfWidth + shape.riverBankWidth;
+            riverChannelHalfWidth_ = shape.riverChannelHalfWidth;
+            // The bank dial is the MINIMUM (flat-ground) dry-slope width. On
+            // higher ground carveRiverTop widens the slope adaptively
+            // (riverBankSlope/riverBankMaxWidth), so the mask has to cover the
+            // WIDEST valley the carve can produce, not just the dial -- a column
+            // out on a hill's valley wall would otherwise never be reached and
+            // the carve would stop at the old width with a step. A bankWidth of 0
+            // disables the bank entirely: the corridor collapses into the channel
+            // exactly as before.
+            riverBankMin_ = std::max(0.0f, shape.riverBankWidth);
+            riverBankMax_ = riverBankMin_ > 0.0f ? riverBankMaxWidth : 0.0f;
+            riverCorridorHalf_ = riverChannelHalfWidth_ + riverBankMax_;
             // The mask is 1 - distance/corridor, so the channel edge
-            // (distance = channelHalf) sits at mask = bank/corridor. Dividing the
-            // widths the other way round gives channel/corridor, which is the
+            // (distance = channelHalf) sits at mask = bankMax/corridor. Dividing
+            // the widths the other way round gives channel/corridor, which is the
             // number that looks right and is not: it carves a channel as wide as
-            // the whole corridor.
+            // the whole corridor. This is a RATIO of the two widths, so it stays
+            // constant however the width field breathes the corridor, and the
+            // wet channel keeps its share wherever it is.
             riverChannelEdge_ = riverCorridorHalf_ > 0.0f
-                                    ? (riverCorridorHalf_ - shape.riverChannelHalfWidth) / riverCorridorHalf_
+                                    ? (riverCorridorHalf_ - riverChannelHalfWidth_) / riverCorridorHalf_
                                     : 0.0f;
+            // Mask where the RIVER biome stops: the same ~riverBiomeShore blocks
+            // of dry shore the old fixed 0.40 fraction gave at the defaults, but
+            // measured in blocks so it does not swell with the widened corridor.
+            // Clamped to >= 0 so the strictly-greater test in the biome provider
+            // never fires on a dry column (mask 0): with the bank disabled the
+            // shore band would otherwise go negative and label everything river.
+            riverBiomeMask_ = riverCorridorHalf_ > 0.0f
+                                  ? std::max(0.0f, 1.0f - (riverChannelHalfWidth_ + riverBiomeShore) / riverCorridorHalf_)
+                                  : 0.0f;
             riverDepth_ = shape.riverDepthBlocks;
             // The width field scales the corridor per column, so the corridor
             // can be at most the dial times the widest swing the width field
@@ -252,6 +308,9 @@ namespace kc {
             const int riverDepthNoise = addNoise(rootFactory, "kingscraft_river_depth");
             const int riverWidthNoise = addNoise(rootFactory, "kingscraft_river_width");
             const int riverExtentNoise = addNoise(rootFactory, "kingscraft_river_extent");
+            // Not vanilla: the lake-footprint field (see kingscraft_lake).
+            const int lakeNoise = addNoise(rootFactory, "kingscraft_lake");
+            const int lakeGateNoise = addNoise(rootFactory, "kingscraft_lake_gate");
 
             const int shiftX = graph.shiftA(shiftNoise);
             const int shiftZ = graph.shiftB(shiftNoise);
@@ -322,6 +381,16 @@ namespace kc {
             // is a literal period rather than an octave index to decode.
             const double riverScale = 64.0 / static_cast<double>(shape.riverWavelengthBlocks);
             river = graph.noise2d(shiftX, shiftZ, riverScale, riverNoise);
+
+            // Lake shape and gate, scaled exactly like the river field so ponds
+            // bend with the same domain warp. The shape's period (lakeWavelength)
+            // is the pond SIZE -- being thresholded, the region above the
+            // threshold is one pond. The gate's much longer period
+            // (lakeGateWavelength) sets the SPACING; see kingscraft_lake_gate.
+            const double lakeScale = 64.0 / static_cast<double>(lakeWavelength);
+            lake = graph.noise2d(shiftX, shiftZ, lakeScale, lakeNoise);
+            const double lakeGateScale = 64.0 / static_cast<double>(lakeGateWavelength);
+            lakeGate = graph.noise2d(shiftX, shiftZ, lakeGateScale, lakeGateNoise);
 
             // The river's own shape fields, shifted and scaled exactly like the
             // river field above so they wind along the same bends: a deep run
@@ -456,12 +525,13 @@ namespace kc {
         // keeps "4.5 blocks" meaning 4.5 blocks, on average: the corridor
         // itself breathes 0.7x..1.3x with the width field (~240-block period)
         // and is scaled once more by the extent envelope (0 in the gaps
-        // between rivers, 1 where one runs full width), so a river narrows,
-        // widens and -- at its two ends -- tapers to nothing along its length
-        // while every column still measures itself the same way. The
-        // channel/bank split (riverChannelEdge_) is a RATIO of the two widths,
-        // so it rides the same scaling for free and the wet channel keeps its
-        // share of the corridor wherever it is.
+        // between rivers, 1 where one runs full width), FLOORED at
+        // riverEndWidthFloor so a river narrows with the envelope but never
+        // pinches to a sub-block slot before riverEndTaper lifts it back into
+        // the land at its ends -- while every column still measures itself the
+        // same way. The channel/bank split (riverChannelEdge_) is a RATIO of
+        // the two widths, so it rides the same scaling for free and the wet
+        // channel keeps its share of the corridor wherever it is.
         //
         // The gradient is a CENTRAL difference over ±riverStencil_ blocks, a
         // stencil as wide as the WIDEST corridor, and that width is the whole point.
@@ -483,7 +553,7 @@ namespace kc {
         // evaluation already computed, and only the four stencil points retire
         // the cache. Those four retirements are what the next 2D consumer (the
         // climate tree) pays for; the alternative is a river of the wrong width.
-        float sampleRiverMask(int x, int z) const {
+        float riverMaskRaw(int x, int z) const {
             if (!riverEnabled_ || river < 0 || !(riverCorridorHalf_ > 0.0f)) return 0.0f;
 
             // Extent gate FIRST, before the gradient: in the gaps between
@@ -520,11 +590,20 @@ namespace kc {
             if (dist > riverCorridorMax_) return 0.0f;
 
             const float corridor =
-                riverCorridorHalf_ * riverWidthFactor(x, z) * extent;
+                riverCorridorHalf_ * riverWidthFactor(x, z) *
+                (riverEndWidthFloor + (1.0f - riverEndWidthFloor) * extent);
             if (dist > corridor) return 0.0f;
 
             const float mask = 1.0f - dist / corridor;
             return mask < 0.0f ? 0.0f : (mask > 1.0f ? 1.0f : mask);
+        }
+
+        // River membership as the LABEL sees it: the raw footprint above, faded
+        // by the end blend so the biome stops calling a column river exactly
+        // where carveRiverTop stops cutting one. Geometry uses riverMaskRaw and
+        // riverEndTaper separately (see carveRiverTop).
+        float sampleRiverMask(int x, int z) const {
+            return riverMaskRaw(x, z) * riverEndTaper(x, z);
         }
 
         // Corridor half-width at this column, as a multiple of the dial. The
@@ -539,15 +618,26 @@ namespace kc {
         }
 
         // Extent envelope at this column: 0 in the gap where no river exists,
-        // 1 where one runs full width, smoothstep in between so each end of a
-        // river narrows AND shoals into dry land instead of stopping against
-        // a wall. The mask scales the corridor by it (a dying river is a
-        // creek) and carveRiverTop scales the bed depth by it (a dying river
-        // is a SHALLOW creek), so by the time the factor reaches 0 the river
-        // has already faded into the terrain over ~100-150 blocks.
+        // 1 where one runs full width, smoothstep in between. riverMaskRaw
+        // floors the corridor it scales at riverEndWidthFloor (a dying river is
+        // a wide, shallow creek, not a slot) and carveRiverTop uses it a second
+        // time, through riverEndTaper, to lift the whole bed back into the
+        // terrain at the ends.
         float riverExtentFactor(int x, int z) const {
             const float e = graph.eval(riverExtentVar, x, 0, z);
             float t = (e - riverExtentLo) / (riverExtentHi - riverExtentLo);
+            t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+            return t * t * (3.0f - 2.0f * t);
+        }
+
+        // End-of-river blend weight: 1 along the river, smoothly falling to 0 as
+        // the extent envelope drops below riverEndBlend. carveRiverTop lifts the
+        // whole carved profile by it (the riverbed rises into the land) and
+        // sampleRiverMask fades the label by it, so carve and biome agree that
+        // the river is over rather than leaving a slot in the terrain.
+        float riverEndTaper(int x, int z) const {
+            const float e = riverExtentFactor(x, z);
+            float t = e / riverEndBlend;
             t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
             return t * t * (3.0f - 2.0f * t);
         }
@@ -577,7 +667,7 @@ namespace kc {
         int carveRiverTop(int x, int z, int topLocal, int seaLocal) const {
             if (!riverEnabled_ || topLocal < 0) return topLocal;
 
-            const float mask = sampleRiverMask(x, z);
+            const float mask = riverMaskRaw(x, z);
             if (!(mask > 0.0f)) return topLocal;
 
             // Channel: a U-shaped bed rather than a flat shelf. t runs from 0 at
@@ -586,14 +676,16 @@ namespace kc {
             // with it), and f(t) = 2t - t^2 is the cross-section: steep where
             // the shore meets the water, flat along the bottom. The bed is
             //
-            //     sea - extent(x,z) * max(depth(x,z) + roughness(x,z), 1) * f(t)
+            //     sea - max(depth(x,z) + roughness(x,z), 1) * f(t)
             //
             // where depth is the dial scaled 0.45x..1.55x by a ~160-block noise
-            // (long deep runs and shallow pools along the river), roughness is
-            // a +-0.75-block ~24-block wobble on the bottom, and extent is the
-            // fixed envelope that gives every river its two ends: it multiplies
-            // the whole depth, so the last stretch of a river is a shallow
-            // creek before it is nothing. depth and roughness are multiplied by
+            // (long deep runs and shallow pools along the river) and roughness
+            // is a +-0.75-block ~24-block wobble on the bottom. The clamp holds
+            // a full-width river at a block of water; the extent envelope is NOT
+            // applied here -- it is applied afterwards as a blend of the whole
+            // profile back to the untouched top (see riverEndTaper), so a river
+            // ends by its bed rising into the land rather than by pinching to a
+            // sub-block slot. depth and roughness are multiplied by
             // f(t) as well, so they vanish exactly at the channel edge: the bed
             // meets the bank AT the waterline, continuous, with no wall and no
             // shelf -- and the wet width stays a distance (the channel width)
@@ -604,6 +696,7 @@ namespace kc {
             // bank == 0 collapses the corridor into the channel and leaves
             // riverChannelEdge_ == 0; the same formula gives t = mask there, so
             // the all-channel case needs no branch of its own.
+            int carved;
             if (riverChannelEdge_ <= 0.0f || mask >= riverChannelEdge_) {
                 const float t = (mask - riverChannelEdge_) / (1.0f - riverChannelEdge_);
                 const float f = t * (2.0f - t);
@@ -612,46 +705,162 @@ namespace kc {
                 float total =
                     riverDepth_ * vary + riverBumpAmp * graph.eval(riverBedBump, x, 0, z);
                 if (total < 1.0f) total = 1.0f; // full-width rivers hold a block of water
-                // Extent LAST, after the clamp: the clamp is the guarantee for
-                // a full-width river, and the envelope deliberately takes the
-                // water away again at the tips -- total < 1 there is what
-                // shoals the end out to dry ground instead of keeping a
-                // one-block slot in the terrain. At the tip the rounded bed
-                // lands ON the waterline, so the sea-level fill finds nothing
-                // under sea level and the river is simply over.
-                total *= riverExtentFactor(x, z);
                 const float bedY =
                     std::max(0.0f, static_cast<float>(seaLocal) - total * f);
-                return std::min(topLocal, static_cast<int>(std::lround(bedY)));
+                carved = std::min(topLocal, static_cast<int>(std::lround(bedY)));
+            } else {
+                // Bank: smoothstep from the WATERLINE at the channel edge back
+                // up to the untouched height at the adaptive valley rim. Both
+                // ends agree with their neighbours (waterline at the channel
+                // edge, topLocal beyond the rim) so the land profile is
+                // continuous in x/z.
+                //
+                // The inner end is the waterline, and that is load-bearing.
+                // Blending up from some other height would leave part of the
+                // bank below sea level as well, so the WET width would stop
+                // being a distance and start being a function of how high the
+                // ground happened to be: flat land near sea level would come out
+                // with a river twice riverChannelHalfWidth wide, steep land with
+                // a sliver. Ending the bank exactly at the waterline makes
+                // riverChannelHalfWidth the width of the water, whatever the
+                // terrain underneath was doing -- and it is the same point the
+                // channel profile starts from, so bank and bed meet without a
+                // step.
+                //
+                // The OUTER end, though, is adaptive. The dry slope width scales
+                // with the rise above the water (riverBankSlope blocks of run per
+                // block of drop, floored at the riverBankWidth dial and capped at
+                // riverBankMaxWidth), so a tall valley wall spreads out instead
+                // of stacking the whole rise into a fixed eight blocks. Columns
+                // past that rim are returned untouched, and the rim lands exactly
+                // on topLocal with zero derivative (smoothstep), so the valley
+                // melts into the natural terrain with no step.
+                const float rise = static_cast<float>(topLocal) - static_cast<float>(seaLocal);
+                const float bankW =
+                    std::clamp(riverBankSlope * std::max(0.0f, rise), riverBankMin_, riverBankMax_);
+                const float bankOuter = riverChannelEdge_ - bankW / riverCorridorHalf_;
+                if (mask <= bankOuter) return topLocal;
+
+                const float t = (mask - bankOuter) / (riverChannelEdge_ - bankOuter);
+                const float s = t * t * (3.0f - 2.0f * t);
+                const float blended = static_cast<float>(topLocal) +
+                                      (static_cast<float>(seaLocal) - static_cast<float>(topLocal)) * s;
+                carved = std::min(topLocal, static_cast<int>(std::lround(blended)));
             }
 
-            // Bank: smoothstep from the WATERLINE at the channel edge back to
-            // the untouched height at the corridor edge. The two ends agree with
-            // their neighbours (waterline at the edge, topLocal beyond the
-            // corridor) so the land profile is continuous in x/z.
-            //
-            // The inner end is the waterline, and that is load-bearing. Blending
-            // up from some other height would leave part of the bank below sea
-            // level as well, so the WET width would stop being a distance and
-            // start being a function of how high the ground happened to be: flat
-            // land near sea level would come out with a river twice
-            // riverChannelHalfWidth wide, steep land with a sliver. Ending the
-            // bank exactly at the waterline makes riverChannelHalfWidth the
-            // width of the water and riverBankWidth the width of dry slope,
-            // whatever the terrain underneath was doing -- and it is the same
-            // point the channel profile starts from, so bank and bed meet
-            // without a step.
-            const float bankY = static_cast<float>(seaLocal);
-            const float t = mask / riverChannelEdge_;
-            const float s = t * t * (3.0f - 2.0f * t);
-            const float blended = static_cast<float>(topLocal) + (bankY - static_cast<float>(topLocal)) * s;
-            return std::min(topLocal, static_cast<int>(std::lround(blended)));
+            // End of river: lift the whole carved profile back toward the
+            // untouched top as the extent envelope falls. At end == 1 this is
+            // exactly `carved`; as end -> 0 the bed rises into the land and the
+            // channel disappears smoothly over the ~100-block taper, instead of
+            // narrowing to a one-block crack and stopping against a wall. The
+            // corridor width is floored (riverEndWidthFloor) so what fades is a
+            // visibly wide riverbed, not a slot; the sea-level fill then simply
+            // finds nothing under sea level and the river is over.
+            const float end = riverEndTaper(x, z);
+            if (end >= 1.0f) return carved;
+            const float lifted =
+                static_cast<float>(topLocal) +
+                (static_cast<float>(carved) - static_cast<float>(topLocal)) * end;
+            return std::min(topLocal, static_cast<int>(std::lround(lifted)));
+        }
+
+        // Lake footprint membership, normalised to 0 (outside) .. 1 (core).
+        //
+        // Two fields compose here. The SHAPE field (kingscraft_lake) is a
+        // pond-sized wavelength: on its own, thresholded at lakeOuter, it makes
+        // a pond of the right size but sprinkles them everywhere. The GATE
+        // (kingscraft_lake_gate) is a much longer period; where it is high the
+        // shape is used as-is, and where it is low the threshold is pushed up to
+        // lakeCore so the pond is simply absent. Doing it by raising the
+        // threshold rather than scaling the mask keeps each pond full-shape
+        // (round, full depth) instead of tapering it to a sliver near the gate
+        // edge -- so the ponds stay whole and the SPACING comes from the gate.
+        //
+        // 0 is exactly the pond's rim: a column with mask 0 has no lake over it
+        // and is left untouched.
+        //
+        // Pure 2D, so the evals a column makes (carve, then fill) share the
+        // graph memo.
+        float lakeMask(int x, int z) const {
+            if (lake < 0) return 0.0f;
+            const float v = graph.eval(lake, x, 0, z);
+            const float gate = lakeGateFactor(x, z);
+            const float threshold = lakeOuter + (1.0f - gate) * (lakeCore - lakeOuter);
+            float t = (v - threshold) / (lakeCore - lakeOuter);
+            return t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+        }
+
+        // Raw lake shape field, for diagnostics. Not a dial read at generation.
+        float lakeShapeField(int x, int z) const {
+            return lake < 0 ? 0.0f : graph.eval(lake, x, 0, z);
+        }
+
+        // Raw lake gate field, for diagnostics.
+        float lakeGateField(int x, int z) const {
+            return lakeGate < 0 ? 0.0f : graph.eval(lakeGate, x, 0, z);
+        }
+
+        // Where ponds may form, 0..1. A smoothstep over the gate field so the
+        // pond's depth and width both fade to nothing at the edge of an enabled
+        // stretch rather than stopping against a wall; see kingscraft_lake_gate.
+        float lakeGateFactor(int x, int z) const {
+            if (lakeGate < 0) return 0.0f;
+            const float w = graph.eval(lakeGate, x, 0, z);
+            float t = (w - lakeGateLo) / (lakeGateHi - lakeGateLo);
+            t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+            return t * t * (3.0f - 2.0f * t);
+        }
+
+        // One pond carved into a single column. Mirrors carveRiverTop's
+        // channel/bank split, with the normalised field value standing in for
+        // the inverse distance:
+        //
+        //   bank  (mask < lakeShoreFrac)  the natural top is blended down to the
+        //         waterline with a smoothstep, so ground beside a pond -- which
+        //         on a hillside can stand ten blocks up -- runs out into the
+        //         water instead of dropping off a lip. This is the same gentle
+        //         grade the river valleys get.
+        //   basin (mask >= lakeShoreFrac) the floor deepens from the waterline at
+        //         the shore to lakeDepth at the core, min()'d against the top so
+        //         a natural dip survives rather than being filled.
+        //
+        // A lake never raises ground: both branches min() against topLocal, so a
+        // column already below the waterline is left exactly where it is.
+        int carveLakeTop(int x, int z, int topLocal, int seaLocal) const {
+            if (lake < 0 || topLocal < 0) return topLocal;
+            const float t = lakeMask(x, z);
+            if (!(t > 0.0f)) return topLocal;
+
+            int carved;
+            if (t < lakeShoreFrac) {
+                const float u = t / lakeShoreFrac;
+                const float s = u * u * (3.0f - 2.0f * u);
+                const float blended = static_cast<float>(topLocal) +
+                                      (static_cast<float>(seaLocal) - static_cast<float>(topLocal)) * s;
+                carved = std::min(topLocal, static_cast<int>(std::lround(blended)));
+            } else {
+                const float u = (t - lakeShoreFrac) / (1.0f - lakeShoreFrac);
+                const float bedY = static_cast<float>(seaLocal) - lakeDepth * u;
+                carved = std::min(topLocal, static_cast<int>(std::lround(bedY)));
+            }
+            return carved;
+        }
+
+        // The ONE carve both the generator and the biome label call: rivers
+        // first, then lakes, each only lowering the column, so the two compose
+        // by min and a river running into a pond keeps whichever is deeper.
+        // Keeping this the single entry point is what stops the label from
+        // naming a column the built terrain does not actually hold.
+        int carveWaterTop(int x, int z, int topLocal, int seaLocal) const {
+            return carveLakeTop(x, z, carveRiverTop(x, z, topLocal, seaLocal), seaLocal);
         }
 
         bool riversEnabled() const { return riverEnabled_; }
         // Mask value at the channel edge; below this a column is bank, above it
         // a column is channel.
         float riverChannelEdge() const { return riverChannelEdge_; }
+        // Mask value at which the RIVER biome stops (see riverBiomeMask_).
+        float riverBiomeMask() const { return riverBiomeMask_; }
         // Typical channel depth, in blocks below sea level. The local bed
         // varies 0.45x..1.55x this along the river and is scaled to zero at
         // each end by the fixed extent envelope; see carveRiverTop.
@@ -691,10 +900,56 @@ namespace kc {
         static constexpr float riverExtentWavelength = 768.0f;
         static constexpr float riverExtentLo = -0.05f;  // factor reaches 0 here
         static constexpr float riverExtentHi = 0.35f;   // factor reaches 1 here
+        // End-of-river shaping, fixed like the extent envelope. riverEndWidthFloor
+        // stops the corridor pinching to a sub-block slot at the tips: the
+        // envelope scales the width only down to this fraction of the dial, so a
+        // fading river stays visibly wide. riverEndBlend is the extent factor at
+        // and below which the whole carve is lifted back into the terrain (see
+        // riverEndTaper), so a river ends as a smooth rise rather than a crack.
+        static constexpr float riverEndWidthFloor = 0.6f;
+        static constexpr float riverEndBlend = 0.35f;
+        // Adaptive dry-bank shaping, fixed like the extent envelope. The
+        // riverBankWidth dial is only the MINIMUM (flat-ground) bank; on higher
+        // ground carveRiverTop spreads the slope over bankSlope * rise blocks so
+        // the valley wall keeps a roughly constant, gentle gradient instead of
+        // cramming the whole rise into a fixed width -- which is what read as a
+        // steep V-canyon. riverBankMaxWidth caps that spread (a 48-block wall is
+        // ~23 degrees at the 20-block rise the old fixed 8 turned into a cliff),
+        // and it sizes the corridor so every column of the valley is reachable.
+        // riverBiomeShore is the dry band past the water the RIVER label keeps,
+        // replacing the old fixed 0.40 mask fraction now that the corridor
+        // covers the whole valley (see ClimateBiomeProvider).
+        static constexpr float riverBankMaxWidth = 48.0f;
+        static constexpr float riverBankSlope = 2.5f;
+        static constexpr float riverBiomeShore = 3.0f;
+        // Lake shaping, fixed like the extent envelope: no dial, no metadata,
+        // GENERATOR_VERSION stays put. Two fields make a pond. lakeWavelength is
+        // the pond SIZE (the shape field is thresholded, so its period is how
+        // big a pond comes out); lakeOuter..lakeCore is the band that ramps a
+        // pond from its rim to its core; lakeShoreFrac is the fraction of that
+        // ramp spent as a dry BANK (blended from the natural ground down to the
+        // waterline) before the basin proper begins; lakeDepth is how far the
+        // core floor sits below sea. lakeGateWavelength/lakeGateLo/Hi are the
+        // long-period envelope that sets the pond SPACING: where the gate is low
+        // the shape field's threshold is pushed to lakeCore and no pond forms.
+        // The bank reuses riverBankSlope/MaxWidth so a pond cuts the same gentle
+        // grade a river valley does.
+        static constexpr float lakeWavelength = 160.0f;
+        static constexpr float lakeOuter = 0.52f;
+        static constexpr float lakeCore = 0.62f;
+        static constexpr float lakeShoreFrac = 0.30f;
+        static constexpr float lakeDepth = 4.0f;
+        static constexpr float lakeGateWavelength = 1024.0f;
+        static constexpr float lakeGateLo = 0.28f;  // gate reaches 0 here
+        static constexpr float lakeGateHi = 0.44f;  // gate reaches 1 here
         bool riverEnabled_ = false;
         float riverCorridorHalf_ = 0.0f;
         float riverCorridorMax_ = 0.0f;
         float riverChannelEdge_ = 0.0f;
+        float riverChannelHalfWidth_ = 0.0f;
+        float riverBankMin_ = 0.0f;
+        float riverBankMax_ = 0.0f;
+        float riverBiomeMask_ = 0.0f;
         float riverDepth_ = 5.0f;
         int riverStencil_ = 4;
 

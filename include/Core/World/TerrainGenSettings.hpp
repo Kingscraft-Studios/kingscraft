@@ -60,10 +60,12 @@ namespace kc {
         //
         // A river is the zero-contour network of one extra 2D noise: the set of
         // columns where that noise crosses zero forms branching lines across the
-        // map, and every column within `channelHalfWidth + bankWidth` blocks of
-        // one is carved down towards a bed just below sea level. The global
-        // sea-level fill then holds the water, so a river surface ends up at the
-        // same Y as the ocean and the two join seamlessly.
+        // map, and the nearby columns are carved down towards a bed just below
+        // sea level -- a wetted channel `channelHalfWidth` wide, then a dry bank
+        // that widens with how far the land rises, so hilly rivers sit in broad
+        // gentle valleys rather than narrow V-canyons. The global sea-level fill
+        // then holds the water, so a river surface ends up at the same Y as the
+        // ocean and the two join seamlessly.
         //
         // The three width/depth dials are TYPICAL values, not fixed ones: two
         // extra noises scale them per column so rivers breathe -- the corridor
@@ -89,8 +91,14 @@ namespace kc {
         //                    is the spacing dial: bigger = fewer, longer rivers.
         // riverChannelHalf   TYPICAL half-width of the wetted channel, in blocks
         //                    (9 wide at the default 4.5, 6.3..11.7 as it breathes)
-        // riverBankWidth     TYPICAL blend from the channel edge back up to
-        //                    whatever height the terrain had, in blocks
+        // riverBankWidth     MINIMUM (flat-ground) blend from the channel edge
+        //                    back up to whatever height the terrain had, in blocks.
+        //                    On higher ground the carve widens this slope
+        //                    adaptively -- riverBankSlope blocks of run per block
+        //                    of rise, capped at riverBankMaxWidth -- so a valley
+        //                    wall is a gentle grade instead of a fixed-width
+        //                    V-canyon. Both are fixed constants in HomelandsNoise,
+        //                    not dials; 0 disables the bank (channel only).
         // riverDepthBlocks   TYPICAL depth of the bed below sea level, so 5 =
         //                    five blocks of water at the surface at Y63, level
         //                    with the sea, on average: the local bed runs

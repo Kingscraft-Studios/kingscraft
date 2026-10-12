@@ -7,8 +7,8 @@
 #include <thread>
 
 #include "Bus/Mailbox.hpp"
-#include "Core/Diagnostics/Observability.hpp"
-#include "Core/Diagnostics/MetricsExchange.hpp"
+#include "Core/Observability/Observability.hpp"
+#include "Core/Observability/MetricsExchange.hpp"
 #include "Renderer/FrameExchange.hpp"
 #include "Threads/RenderThread.hpp"
 #include "Threads/Kingscraft.hpp"

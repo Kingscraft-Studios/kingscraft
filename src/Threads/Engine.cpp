@@ -73,7 +73,7 @@ namespace kc {
 
     void Engine::run() {
         detail::setCurrentThread(ThreadName::Engine);
-        // The GameLogic thread updates Diagnostics every tick (reading the
+        // The GameLogic thread updates Observability every tick (reading the
         // render metrics from the exchange), so this thread only waits for
         // shutdown instead of pumping a metrics loop.
         std::unique_lock lock(runMtx_);

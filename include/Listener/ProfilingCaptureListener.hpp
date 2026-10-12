@@ -8,7 +8,7 @@
 namespace kc {
 
     // Feeds the on-demand profiler capture from the GameLogic thread.
-    // Diagnostics fires MetricsUpdateEvent from the engine thread; the
+    // Observability fires MetricsUpdateEvent from the engine thread; the
     // dispatcher routes it here, so the capture is fed on the same thread it
     // always was (previously WorldScreen::render).
     class ProfilingCaptureListener : public Listener {

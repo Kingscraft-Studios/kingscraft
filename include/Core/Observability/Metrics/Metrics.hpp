@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
+#include "Core/Observability/Metrics/MetricsTypes.hpp"
 
 namespace kc {
 

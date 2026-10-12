@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <limits>
 
-#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
+#include "Core/Observability/Metrics/MetricsTypes.hpp"
 
 namespace kc {
 

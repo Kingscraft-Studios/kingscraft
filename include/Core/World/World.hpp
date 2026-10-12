@@ -68,9 +68,18 @@ namespace kc {
         PlayerController& getPlayerController() { return playerController_; }
 
         // Debug switch: when false only edited chunks are saved to regions;
-        // when true every loaded chunk is serialized. Toggled at runtime (F5).
+        // when true every loaded chunk is recorded -- immediately on enable and
+        // again as each one unloads. Toggled at runtime (F5): the first press
+        // starts recording, the second stops and flushes the region dump.
         bool getSaveAllChunks() const { return saveAllChunks_.load(std::memory_order_relaxed); }
         void setSaveAllChunks(bool on) { saveAllChunks_.store(on, std::memory_order_relaxed); }
+
+        // Stages every chunk currently held in memory for the region dump,
+        // regardless of the saveAllChunks switch. Unedited chunks are otherwise
+        // only written when they unload, so a chunk still in view would never be
+        // captured; the F5 handler calls this so "record" includes the loaded
+        // area immediately rather than only what streams out afterwards.
+        void dumpLoadedChunks();
 
     private:
         struct ChunkGenResult {

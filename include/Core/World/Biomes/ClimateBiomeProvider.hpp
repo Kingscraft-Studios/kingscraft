@@ -56,7 +56,7 @@ namespace kc {
 
         // Climate-only resolution. Cannot return OCEAN and cannot use the height
         // term, so it is only correct for queries that have no column to measure.
-        static RegistryKey<Biome> biomeFor(const kc::Climate& c) {
+        RegistryKey<Biome> biomeFor(const kc::Climate& c) const {
             return biomeFor(c, unknownSurfaceY, unknownSurfaceY, 0);
         }
 
@@ -97,15 +97,36 @@ namespace kc {
         //          because natural >= sea sits above the carved floor, which is
         //          what keeps the centreline depth contract in chunk_probe true:
         //          only these columns wear the label, at any riverDepth setting.
-        //   RIVER  mask >= riverBiomeMask: the dry part of the corridor, so the
+        //   RIVER  mask > riverBiomeMask(): the dry part of the corridor, so the
         //          bank is called river too. Cosmetic only -- the rules above
         //          have already caught everything that is wet.
         //   then   the climate argmax.
-        static RegistryKey<Biome> biomeFor(const kc::Climate& c, int naturalSurfaceY, int surfaceY,
-                                           int seaLevel) {
-            if (naturalSurfaceY != unknownSurfaceY && naturalSurfaceY < seaLevel) return Biomes::OCEAN;
-            if (surfaceY != unknownSurfaceY && surfaceY < seaLevel) return Biomes::RIVER;
-            if (c.river >= riverBiomeMask) return Biomes::RIVER;
+        RegistryKey<Biome> biomeFor(const kc::Climate& c, int naturalSurfaceY, int surfaceY,
+                                    int seaLevel, bool lakeWater = false) const {
+            // A lake floor reads ocean: standing water over ground below the
+            // waterline, wanting the same clean sand the sea floor gets. Checked
+            // first because a lake is CARVED into land, so the natural-height
+            // river test below would otherwise claim it.
+            if (lakeWater) return Biomes::OCEAN;
+            // OCEAN only when the ground itself sits DEEP enough below sea.
+            // oceanMinDepth stops a terrain that dithers across the waterline
+            // from turning every one-block dip into a puddle: the shallow dips
+            // that fail this test fall through to the climate argmax and are
+            // built as dry land. The same constant gates the water fill, so the
+            // label and the water can never disagree.
+            if (naturalSurfaceY != unknownSurfaceY &&
+                naturalSurfaceY <= seaLevel - HomelandsNoise::oceanMinDepth) {
+                return Biomes::OCEAN;
+            }
+            // RIVER when the carve ACTED -- it pushed a column that stood at or
+            // above sea down under it. The naturalSurfaceY guard is load-bearing
+            // now that the ocean test lets shallow natural dips through: without
+            // it, a one-block natural dip would be mislabelled river.
+            if (surfaceY != unknownSurfaceY && surfaceY < seaLevel &&
+                naturalSurfaceY != unknownSurfaceY && naturalSurfaceY >= seaLevel) {
+                return Biomes::RIVER;
+            }
+            if (c.river > riverBiomeMask()) return Biomes::RIVER;
             if (c.mountain >= std::max({c.desert, c.grassland, c.forest})) return Biomes::MOUNTAINS;
             if (c.forest >= c.grassland && c.forest >= c.desert) return Biomes::FOREST;
             if (c.grassland >= c.desert) return Biomes::GRASSLANDS;
@@ -125,10 +146,12 @@ namespace kc {
             if (surfaceY == unknownSurfaceY) {
                 return biomeFor(climateAt(worldX, worldZ), unknownSurfaceY, unknownSurfaceY, seaLevel);
             }
-            const int carved = noise_.carveRiverTop(worldX, worldZ, surfaceY - HomelandsNoise::minY,
-                                                    seaLevel - HomelandsNoise::minY);
+            const int seaLocal = seaLevel - HomelandsNoise::minY;
+            const int carved = noise_.carveWaterTop(worldX, worldZ, surfaceY - HomelandsNoise::minY,
+                                                    seaLocal);
+            const bool lakeWater = carved < seaLocal && noise_.lakeMask(worldX, worldZ) > 0.0f;
             return biomeFor(climateAt(worldX, worldZ, surfaceY), surfaceY,
-                            carved + HomelandsNoise::minY, seaLevel);
+                            carved + HomelandsNoise::minY, seaLevel, lakeWater);
         }
 
         void applySettings(const TerrainGenSettings&) override {
@@ -222,11 +245,12 @@ namespace kc {
         static constexpr float treelineBiome = 0.30f;
 
         // River mask at which a column stops being the land biome underneath and
-        // becomes RIVER. The mask is distance-based and linear (1 at the
-        // centreline, 0 at the corridor edge), so this reads as "60% of the way
-        // out from the water" and lands a little beyond the channel edge, whose
-        // mask value is HomelandsNoise::riverChannelEdge() (bank/corridor, 0.64
-        // at the defaults).
+        // becomes RIVER. Computed by HomelandsNoise: it is the mask that lands a
+        // few blocks past the channel edge (riverBiomeShore), measured in blocks
+        // so it does not swell now that the corridor is sized to the widest
+        // adaptive valley. Exposed so TerrainGenerator's direct biomeFor calls
+        // pass the same cutoff. Always 0 when rivers are off, so the test below
+        // never fires then.
         //
         // This rule is the COSMETIC half of the label: the wetted channel
         // (the parts the trench cut through land) is named by the carve
@@ -236,7 +260,7 @@ namespace kc {
         // set too high and the F3 label reverts to grasslands while you are
         // still standing on the bank, too low and the corridor claims a band of
         // ordinary grassland as river.
-        static constexpr float riverBiomeMask = 0.40f;
+        float riverBiomeMask() const { return noise_.riverBiomeMask(); }
 
         static float ramp(float v, float lo, float hi) {
             float t = (v - lo) / (hi - lo);

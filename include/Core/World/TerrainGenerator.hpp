@@ -82,7 +82,7 @@ namespace kc {
             const int topLimit = HomelandsNoise::height - 1;
             const int local = columnTop(worldX, worldZ, topLimit, settings_.solidThreshold);
             if (local < 0) return unknownSurfaceY;
-            return noise_->carveRiverTop(worldX, worldZ, local, seaLocalY()) + HomelandsNoise::minY;
+            return noise_->carveWaterTop(worldX, worldZ, local, seaLocalY()) + HomelandsNoise::minY;
         }
 
         // The biome the terrain at this column was actually built with. Preferred
@@ -97,15 +97,16 @@ namespace kc {
                 // Open water with no solid cell anywhere in the column: no height
                 // to offer, so biomeFor falls back to the climate-only answer,
                 // exactly as it did before rivers existed.
-                return ClimateBiomeProvider::biomeFor(biomes_->climateAt(worldX, worldZ),
-                                                      unknownSurfaceY, unknownSurfaceY, sea);
+                return biomes_->biomeFor(biomes_->climateAt(worldX, worldZ),
+                                         unknownSurfaceY, unknownSurfaceY, sea);
             }
             const int naturalY = local + HomelandsNoise::minY;
-            const int surfaceY =
-                noise_->carveRiverTop(worldX, worldZ, local, sea - HomelandsNoise::minY) +
-                HomelandsNoise::minY;
-            return ClimateBiomeProvider::biomeFor(biomes_->climateAt(worldX, worldZ, naturalY), naturalY,
-                                                  surfaceY, sea);
+            const int seaLocal = sea - HomelandsNoise::minY;
+            const int carved = noise_->carveWaterTop(worldX, worldZ, local, seaLocal);
+            const int surfaceY = carved + HomelandsNoise::minY;
+            const bool lakeWater = carved < seaLocal && noise_->lakeMask(worldX, worldZ) > 0.0f;
+            return biomes_->biomeFor(biomes_->climateAt(worldX, worldZ, naturalY), naturalY,
+                                     surfaceY, sea, lakeWater);
         }
 
         std::vector<uint64_t> generateBlocks(int gridX, int gridZ, int chunkSize, int height) override {
@@ -200,7 +201,7 @@ namespace kc {
                     // made before generation and the chunk that generation
                     // produces cannot disagree about a column.
                     const int naturalTop = columnTop(wx, wz, topLimit, solid);
-                    const int top = noise_->carveRiverTop(wx, wz, naturalTop, seaLocal);
+                    const int top = noise_->carveWaterTop(wx, wz, naturalTop, seaLocal);
                     if (top >= 0) {
                         const float surfaceNoise = noise_->sampleSurfaceNoise(wx, wz);
                         // Biome selection needs the height we just measured: it is
@@ -217,8 +218,10 @@ namespace kc {
                         const int surfaceY = top + HomelandsNoise::minY;
                         const int naturalY = naturalTop + HomelandsNoise::minY;
                         const kc::Climate climate = biomes_->climateAt(wx, wz, naturalY);
+                        const bool lakeWater =
+                            top < seaLocal && noise_->lakeMask(wx, wz) > 0.0f;
                         const auto biomeKey =
-                            ClimateBiomeProvider::biomeFor(climate, naturalY, surfaceY, sea);
+                            biomes_->biomeFor(climate, naturalY, surfaceY, sea, lakeWater);
                         if (const Biome* biome = resolveBiome(biomeKey)) {
                             biome->postGenerateColumn(ctx, x, z, wx, wz, top, top + HomelandsNoise::minY, surfaceNoise, climate, ClimateWeights{climate.desert, climate.grassland, climate.forest, climate.mountain}, blocks);
                         } else {
@@ -233,8 +236,23 @@ namespace kc {
                     // different Y from the sea it eventually runs into. It runs
                     // from the CARVED top, which is the whole reason the carve
                     // happens above this line.
-                    for (int y = std::max(0, top + 1); y <= seaLocal && y < height; ++y) {
-                        blocks[(static_cast<size_t>(y) * chunkSize + z) * chunkSize + x] = waterId;
+                    // Aquifer: only WET columns get water. A column is wet when
+                    // the carve acted (river or lake), when its ground really is
+                    // deep enough below sea to be ocean, or when it lies inside
+                    // a lake footprint (so a natural dip in the shallows still
+                    // joins the pond). A bare one-block dip in the near-sea
+                    // inland floor is none of those and stays dry -- which is
+                    // what stops every dither across the waterline from becoming
+                    // a puddle. The depth test shares oceanMinDepth with the
+                    // ocean label, so fill and label cannot disagree.
+                    const bool carvedActed = top < naturalTop;
+                    const bool deepEnough =
+                        (seaLocal - naturalTop) >= HomelandsNoise::oceanMinDepth;
+                    const bool inLake = noise_->lakeMask(wx, wz) > 0.0f;
+                    if (carvedActed || deepEnough || inLake) {
+                        for (int y = std::max(0, top + 1); y <= seaLocal && y < height; ++y) {
+                            blocks[(static_cast<size_t>(y) * chunkSize + z) * chunkSize + x] = waterId;
+                        }
                     }
                 }
             }
@@ -287,7 +305,7 @@ namespace kc {
             const auto surfaceY = [&](int wx, int wz) {
                 const int local = columnTop(wx, wz, topLimit, solid);
                 if (local < 0) return HomelandsNoise::minY - 1;
-                return noise_->carveRiverTop(wx, wz, local, seaLocalY()) + HomelandsNoise::minY;
+                return noise_->carveWaterTop(wx, wz, local, seaLocalY()) + HomelandsNoise::minY;
             };
             // A candidate also has to be part of a small flat dry pad, not just a
             // single dry column. The player is 0.6 blocks wide and centred on the

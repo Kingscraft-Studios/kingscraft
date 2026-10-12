@@ -10,7 +10,7 @@
 #include <memory>
 
 #include "Core/Runtime.hpp"
-#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
+#include "Core/Observability/Metrics/MetricsTypes.hpp"
 #include "Core/World/ChunkUploadProcessor.hpp"
 #include "Renderer/WorldRenderer.hpp"
 #include "Threads/InputThread.hpp"

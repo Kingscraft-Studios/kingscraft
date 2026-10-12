@@ -62,7 +62,7 @@ namespace kc {
         lastTime_ = TimeUtil::uptimeSeconds();
 
         // Metrics arrive via MetricsUpdateEvent (posted to the renderer thread
-        // by Diagnostics). The listener is registered by the owning screen with
+        // by Observability). The listener is registered by the owning screen with
         // a scoped subscription, so it detaches on teardown.
         ui_ = &ui;
         active_.store(true, std::memory_order_release);

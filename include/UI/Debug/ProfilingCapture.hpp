@@ -3,7 +3,7 @@
 #include <vector>
 #include <cstdint>
 
-#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
+#include "Core/Observability/Metrics/MetricsTypes.hpp"
 
 namespace kc {
 

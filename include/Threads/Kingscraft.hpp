@@ -6,7 +6,7 @@
 
 #include "BaseThread.hpp"
 #include "Bus/Mailbox.hpp"
-#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
+#include "Core/Observability/Metrics/MetricsTypes.hpp"
 #include "Core/ScreenManager.hpp"
 #include "Core/World/Biomes/BiomeProvider.hpp"
 #include "Core/World/TerrainGenerator.hpp"
@@ -35,7 +35,7 @@ public:
     double getDelta() { return dt_; }
 
     // Game-logic metrics for the current tick. Written by tick()/WorldScreen and
-    // handed to Diagnostics at the end of the tick; kept here so the render
+    // handed to Observability at the end of the tick; kept here so the render
     // thread never touches it directly.
     GameLogicMetrics& getCPUMetrics() { return cpu_; }
 
