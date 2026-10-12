@@ -5,6 +5,10 @@
 #include "UI/Elements/UiGroup.hpp"
 #include "Util/TimeUtil.hpp"
 #include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
+#include "Event/Events/MetricsUpdateEvent.hpp"
+#include "Event/KCEventHandler.hpp"
+#include "Event/Listener.hpp"
+#include "Event/detail/EventRegistrar.hpp"
 
 #include <atomic>
 #include <memory>
@@ -13,19 +17,26 @@ namespace kc {
 
     class UiWrapper;
 
-    class UiDebugOverlay : public UiOverlay {
+    class UiDebugOverlay : public UiOverlay, public Listener {
     public:
         void init(UiWrapper& ui, float screenW, float screenH) override;
         void update(UiWrapper& ui);
         void setFrame(const FrameMetrics& frame);
         void cleanup(UiWrapper& ui) override;
 
+        // Must be public: EventManager's generated dispatch lambda calls the
+        // kcOnEvent helper from outside the class. Runs on the renderer thread
+        // (the event is posted there by Diagnostics).
+        KC_EVENT_HANDLER(MetricsUpdateEvent, onMetricsUpdate, ThreadName::Renderer)
+
     private:
-        // Shared-alive token for the render-thread diagnostics dispatcher. The
-        // dispatcher lambda captures a copy of this shared_ptr; cleanup() flips
-        // it to false BEFORE freeing the overlay so a queued/in-flight callback
-        // becomes a no-op instead of touching a destroyed overlay at shutdown.
-        std::shared_ptr<std::atomic<bool>> alive_;
+        void onMetricsUpdate(MetricsUpdateEvent& event);
+
+        // Flipped false in cleanup() BEFORE the elements are detached, so an
+        // event already queued to the renderer thread becomes a no-op instead of
+        // touching a torn-down overlay.
+        std::atomic<bool> active_{false};
+        UiWrapper* ui_ = nullptr;
 
         UiGroup group_;
         UiTextBlock line1_;

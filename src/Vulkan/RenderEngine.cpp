@@ -76,6 +76,15 @@ namespace kc {
                 }
             }
             Engine::Get().getFrameExchange().endRead();
+
+            // Hand this frame's render metrics to the engine thread. If the
+            // reader is mid-copy and no buffer is free, skip this frame; the
+            // next one will publish.
+            MetricsExchange& metricsExchange = Engine::Get().getMetricsExchange();
+            if (RenderThreadMetrics* gpu = metricsExchange.writeMetrics()) {
+                *gpu = gpuMetrics_;
+                metricsExchange.publish();
+            }
         }
     }
 
@@ -140,7 +149,7 @@ namespace kc {
             return;
         }
         double cpuStart = TimeUtil::uptimeSeconds();
-        Engine::Get().getDiagnostics().getGPUMetrics().frames++;
+        gpuMetrics_.frames++;
         VkCommandBuffer cmd = renderer->getActiveCommandBuffer();
         VkExtent2D extent = renderer->getExtent();
         uint32_t imageIndex = renderer->getCurrentImageIndex();
@@ -212,7 +221,7 @@ namespace kc {
         }
         cpuSubmitMs_ = (TimeUtil::uptimeSeconds() - submitStart) * 1000.0;
 
-        auto& gpuMetrics = Engine::Get().getDiagnostics().getGPUMetrics();
+        RenderThreadMetrics& gpuMetrics = gpuMetrics_;
         gpuMetrics.cpuFrameMs = cpuFrameTimeMs_;
         gpuMetrics.cpuSubmitMs = cpuSubmitMs_;
         gpuMetrics.cmdRecordMs = renderer->getCmdRecordMs();

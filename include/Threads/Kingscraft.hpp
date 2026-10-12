@@ -6,6 +6,7 @@
 
 #include "BaseThread.hpp"
 #include "Bus/Mailbox.hpp"
+#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
 #include "Core/ScreenManager.hpp"
 #include "Core/World/Biomes/BiomeProvider.hpp"
 #include "Core/World/TerrainGenerator.hpp"
@@ -32,6 +33,11 @@ public:
     }
 
     double getDelta() { return dt_; }
+
+    // Game-logic metrics for the current tick. Written by tick()/WorldScreen and
+    // handed to Diagnostics at the end of the tick; kept here so the render
+    // thread never touches it directly.
+    GameLogicMetrics& getCPUMetrics() { return cpu_; }
 
     // Biome encoding at the player's feet, updated each tick on this thread,
     // read atomically from the renderer thread (UiDebugOverlay).
@@ -69,6 +75,8 @@ private:
 
     std::atomic<uint64_t> currentBiomeEncoded_{0};
     std::atomic<bool> playerFlying_{false};
+
+    GameLogicMetrics cpu_;
 };
 
 }

@@ -50,8 +50,10 @@ namespace kc {
         MessageBus::Get().send(ThreadName::Input, []() {
             Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
         });
-        debugOverlay_.init(Runtime::get().renderThread->getUI(),
+        debugOverlay_ = std::make_shared<UiDebugOverlay>();
+        debugOverlay_->init(Runtime::get().renderThread->getUI(),
             static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+        debugOverlaySub_ = EventManager::get().registerScopedListener(debugOverlay_);
         hotbar_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         deathScreen_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
 
@@ -189,24 +191,22 @@ void WorldScreen::render(FrameScene& scene) {
                                 &visibleSubChunks, &occlusionTested,
                                 &occlusionRemoved);
 
-        auto& cpuMetrics = Engine::Get().getDiagnostics().getCPUMetrics();
+        auto& cpuMetrics = Runtime::get().kingscraft->getCPUMetrics();
         cpuMetrics.frustumMs = frustumMs;
         cpuMetrics.drawMs = drawMs;
         cpuMetrics.visibleChunks = visibleChunks;
         cpuMetrics.visibleSubChunks = visibleSubChunks;
         cpuMetrics.occlusionTested = occlusionTested;
         cpuMetrics.occlusionRemoved = occlusionRemoved;
-
-        if (Runtime::get().renderThread->getProfilerCapture().isActive()) {
-            Runtime::get().renderThread->getProfilerCapture().feedFrame(
-                Engine::Get().getDiagnostics().snapshot());
-            scene.ui.enabled = true;
-        }
     }
+
     void WorldScreen::cleanup() {
         Runtime::get().renderThread->getUI().setScrollCallback(nullptr);
         hotbar_.cleanup(Runtime::get().renderThread->getUI());
-        debugOverlay_.cleanup(Runtime::get().renderThread->getUI());
+        if (debugOverlay_) {
+            debugOverlay_->cleanup(Runtime::get().renderThread->getUI());
+            debugOverlaySub_.unsubscribe();
+        }
         deathScreen_.cleanup(Runtime::get().renderThread->getUI());
         Runtime::get().renderThread->getUI().removeElement(&crosshairH_);
         Runtime::get().renderThread->getUI().removeElement(&crosshairV_);

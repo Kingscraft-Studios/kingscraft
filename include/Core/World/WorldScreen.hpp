@@ -7,6 +7,7 @@
 #include "UI/Overlay/UiHotbarOverlay.hpp"
 #include "UI/Overlay/UiDeathScreenOverlay.hpp"
 #include "UI/Elements/UiRect.hpp"
+#include "Event/EventSubscription.hpp"
 #include <memory>
 #include <glm/glm.hpp>
 
@@ -35,7 +36,11 @@ namespace kc {
         VkExtent2D extent_{};
 
         TerrainRenderer terrainRenderer_;
-        UiDebugOverlay debugOverlay_;
+        // Shared: the MetricsUpdateEvent listener keeps it alive while an event
+        // is in flight to the renderer thread, even after this screen is torn
+        // down (cleanup() flips it inactive so late events are no-ops).
+        std::shared_ptr<UiDebugOverlay> debugOverlay_;
+        EventSubscription debugOverlaySub_;
         bool wasDebugOn_ = false;
         UiHotbarOverlay hotbar_;
         UiDeathScreenOverlay deathScreen_;

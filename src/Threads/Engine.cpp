@@ -73,17 +73,11 @@ namespace kc {
 
     void Engine::run() {
         detail::setCurrentThread(ThreadName::Engine);
-        while (running_) {
-            {
-                std::unique_lock lock(runMtx_);
-                runCV_.wait_for(lock, std::chrono::duration<double>(diagnostics.nextDispatchIn()),
-                                [this]() { return !running_.load(); });
-            }
-            if (!running_) break;
-
-            diagnostics.update();
-            diagnostics.send();
-        }
+        // The GameLogic thread updates Diagnostics every tick (reading the
+        // render metrics from the exchange), so this thread only waits for
+        // shutdown instead of pumping a metrics loop.
+        std::unique_lock lock(runMtx_);
+        runCV_.wait(lock, [this]() { return !running_.load(); });
     }
 
 } // namespace kc

@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "Core/Runtime.hpp"
+#include "Core/Diagnostics/Metrics/MetricsTypes.hpp"
 #include "Core/World/ChunkUploadProcessor.hpp"
 #include "Renderer/WorldRenderer.hpp"
 #include "Threads/InputThread.hpp"
@@ -81,6 +82,7 @@ namespace kc {
         double cpuFrameTimeMs_ = 0.0;
         double cpuSubmitMs_ = 0.0;
         double sleepIdleMs_ = 0.0;
+        RenderThreadMetrics gpuMetrics_;
         VkExtent2D lastExtent{0, 0};
         RenderState renderState = RenderState::Running;
 

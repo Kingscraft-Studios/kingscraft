@@ -136,6 +136,16 @@ namespace kc {
         }
 
         cpuTickMs_ = (TimeUtil::uptimeSeconds() - tickStart) * 1000.0;
+
+        // Publish diagnostics from the LAST tick's CPU metrics (cpu_ still holds
+        // them) plus the renderer's latest GPU sample, before this tick mutates
+        // cpu_. Fires MetricsUpdateEvent for the listeners (profiler fed every
+        // tick, overlay self-throttles).
+        MetricsExchange& metricsExchange = Engine::Get().getMetricsExchange();
+        const RenderThreadMetrics& gpu = metricsExchange.readMetrics();
+        Engine::Get().getDiagnostics().update(getCPUMetrics(), gpu);
+        metricsExchange.endRead();
+
         FrameExchange& exchange = Engine::Get().getFrameExchange();
         FrameScene* scene = exchange.writeFrame();
         if (!scene) {
@@ -148,7 +158,7 @@ namespace kc {
         scene->stats.delta = dt_;
         scene->stats.cpuTickMs = cpuTickMs_;
 
-        auto& cpuMetrics = Engine::Get().getDiagnostics().getCPUMetrics();
+        GameLogicMetrics& cpuMetrics = getCPUMetrics();
         cpuMetrics.delta = dt_;
         cpuMetrics.tickMs = cpuTickMs_;
         exchange.publish();

@@ -61,17 +61,17 @@ namespace kc {
 
         lastTime_ = TimeUtil::uptimeSeconds();
 
-        // Per-frame metrics feed (Renderer thread). Stays registered for the
-        // lifetime of this overlay and is released in cleanup(). The lambda
-        // captures the shared-alive token so a callback already queued in the
-        // renderer mailbox cannot touch the overlay after it is torn down.
-        alive_ = std::make_shared<std::atomic<bool>>(true);
-        Engine::Get().getDiagnostics().setDispatcher(ThreadName::Renderer, 4.0,
-            [this, &ui, alive = alive_](const FrameMetrics& frame) {
-                if (!alive->load(std::memory_order_acquire)) return;
-                setFrame(frame);
-                update(ui);
-            });
+        // Metrics arrive via MetricsUpdateEvent (posted to the renderer thread
+        // by Diagnostics). The listener is registered by the owning screen with
+        // a scoped subscription, so it detaches on teardown.
+        ui_ = &ui;
+        active_.store(true, std::memory_order_release);
+    }
+
+    void UiDebugOverlay::onMetricsUpdate(MetricsUpdateEvent& event) {
+        if (!active_.load(std::memory_order_acquire)) return;
+        setFrame(event.getMetrics());
+        if (ui_) update(*ui_);
     }
 
     void UiDebugOverlay::update(UiWrapper& ui) {
@@ -157,11 +157,9 @@ namespace kc {
     }
 
     void UiDebugOverlay::cleanup(UiWrapper& ui) {
-        // Invalidate the render-thread dispatch token FIRST so any callback
-        // already queued in the renderer mailbox becomes a no-op before this
-        // overlay (and its elements) are freed.
-        if (alive_) alive_->store(false, std::memory_order_release);
-        Engine::Get().getDiagnostics().clearDispatcher(ThreadName::Renderer);
+        // Flip inactive BEFORE detaching the group, so an event already queued
+        // to the renderer thread no-ops instead of touching detached elements.
+        active_.store(false, std::memory_order_release);
         group_.removeFromWrapper(ui);
     }
 

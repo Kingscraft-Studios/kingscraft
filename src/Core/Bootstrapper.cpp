@@ -10,6 +10,7 @@
 #include "Listener/ChunkLifecycleListener.hpp"
 #include "Listener/PlayerBlockInteractionListener.hpp"
 #include "Listener/PlayerLifecycleListener.hpp"
+#include "Listener/ProfilingCaptureListener.hpp"
 #include "Listener/RenderRegistryReloadListener.hpp"
 #include "Listener/WorldRegistryReloadListener.hpp"
 #include "Util/LogUtils.hpp"
@@ -62,6 +63,7 @@ namespace kc {
         EventManager::get().registerListener<PlayerBlockInteractionListener>();
         EventManager::get().registerListener<PlayerLifecycleListener>();
         EventManager::get().registerListener<ChunkLifecycleListener>();
+        EventManager::get().registerListener<ProfilingCaptureListener>();
     }
 
     const std::vector<char>& Bootstrapper::getShader(const std::string& path) const {

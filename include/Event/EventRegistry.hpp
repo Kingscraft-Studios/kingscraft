@@ -7,6 +7,7 @@
 #include "Events/BlockPlaceEvent.hpp"
 #include "Events/ChunkLoadedEvent.hpp"
 #include "Events/ChunkUnloadedEvent.hpp"
+#include "Events/MetricsUpdateEvent.hpp"
 #include "Events/PlayerDeathEvent.hpp"
 #include "Events/PlayerRespawnEvent.hpp"
 #include "Events/RegistryReloadEvent.hpp"
@@ -45,7 +46,8 @@ namespace kc {
         PlayerDeathEvent,
         PlayerRespawnEvent,
         ChunkLoadedEvent,
-        ChunkUnloadedEvent
+        ChunkUnloadedEvent,
+        MetricsUpdateEvent
     >;
 
     // Runtime, auto-populated "which types have been seen/fired" directory.
