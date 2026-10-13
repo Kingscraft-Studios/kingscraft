@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <memory>
 
-#include "Validators/PipelineCacheValidator.hpp"
+#include "Cache/Storage/PipelineCacheStorage.hpp"
 
 namespace kc {
 
@@ -18,20 +18,15 @@ public:
     void load();
 
     const std::vector<char>& getShader(const std::string& path) const;
-    const std::vector<char>& getPipelineCacheData() const;
 
-    PipelineCacheValidator& getPipelineValidator() { return validator; }
-    PipelineCacheHeader getPipelineCacheHeader() { return header; }
+    PipelineCacheStorage& getPipelineCacheStorage() { return pipelineCacheStorage_; }
 
 private:
 
     void loadShaderFile(const std::string& path);
-    std::vector<char> loadAndValidatePC();
 
-    PipelineCacheValidator validator;
+    PipelineCacheStorage pipelineCacheStorage_;
     std::unordered_map<std::string, std::vector<char>> shaders_;
-    PipelineCacheHeader header{};
-    std::vector<char> pipelineCacheData_;
 
     static std::unique_ptr<Bootstrapper> instance_;
 };

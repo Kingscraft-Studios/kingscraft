@@ -1,5 +1,6 @@
-#include "Core/Validators/PipelineCacheValidator.hpp"
+#include "Cache/Validators/PipelineCacheValidator.hpp"
 
+#include "Cache/Constants/PipelineCacheConstants.hpp"
 #include "Util/LogUtils.hpp"
 
 namespace kc {
@@ -17,10 +18,8 @@ namespace kc {
             return false;
         }
 
-        // validate Engine Version
-        // FIXME:
-        if (header.engineVersion != 1) {
-            LogUtils::error(ThreadName::Engine, StringBuilder::build("[PCV] Failed: Engine Version Mismatch. Expected: ", 1));
+        if (header.engineVersion != ENGINE_CACHE_VERSION) {
+            LogUtils::error(ThreadName::Engine, StringBuilder::build("[PCV] Failed: Engine Version Mismatch. Expected: ", ENGINE_CACHE_VERSION));
             return false;
         }
 

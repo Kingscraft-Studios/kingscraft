@@ -265,30 +265,11 @@ namespace kc {
             }
         }
 
-        static std::vector<std::string> splitLines(const std::string& text) {
-            std::vector<std::string> lines;
-            size_t pos = 0;
-            while (pos <= text.size()) {
-                size_t eol = text.find('\n', pos);
-                std::string line = (eol == std::string::npos)
-                    ? text.substr(pos)
-                    : text.substr(pos, eol - pos);
-                if (!line.empty()) lines.push_back(line);
-                if (eol == std::string::npos) break;
-                pos = eol + 1;
-            }
-            return lines;
-        }
-
         static bool parseChunkTag(const std::string& line, int& gx, int& gz) {
             std::istringstream iss(line);
             std::string tag;
             if (!(iss >> tag >> gx >> gz)) return false;
             return tag == "#C";
-        }
-
-        static bool isDirective(const std::string& line) {
-            return !line.empty() && line[0] == '#';
         }
     };
 }

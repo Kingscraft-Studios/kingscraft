@@ -34,7 +34,8 @@ namespace kc {
     //     O(volume). Caves, when they land, break this and the fill has to sample
     //     per block. columnTop() leans on it directly to bisect for the crossing.
     //  2. That makes water a fill rather than a feature: air above the terrain
-    //     height and at or below sea level becomes water. This is exactly
+    //     height and below sea level becomes water (the top water block is
+    //     sea - 1, so the visible surface sits at sea level). This is exactly
     //     vanilla's behaviour for the overworld, because overworld.json declares
     //     no aquifer_density_functions and so relies on the sea-level fallback
     //     aquifer. Caves and the real Aquifer (lava below y -54/drowned caves) are
@@ -229,13 +230,15 @@ namespace kc {
                         }
                     }
 
-                    // Aquifer fill: air at or below sea level is water. This is
-                    // also what fills a carved river -- the carve only digs the
-                    // trench, the fill is the same unconditional sea-level table
-                    // the ocean gets, so a river surface cannot end up at a
-                    // different Y from the sea it eventually runs into. It runs
-                    // from the CARVED top, which is the whole reason the carve
-                    // happens above this line.
+                    // Aquifer fill: air BELOW sea level is water, so the topmost
+                    // water block is sea - 1 and the water surface plane is sea
+                    // itself (vanilla: air at Y62 and below floods). This is also
+                    // what fills a carved river -- the carve only digs the trench,
+                    // the fill is the same unconditional sub-sea-level table the
+                    // ocean gets, so a river surface cannot end up at a different
+                    // Y from the sea it eventually runs into. It runs from the
+                    // CARVED top, which is the whole reason the carve happens
+                    // above this line.
                     // Aquifer: only WET columns get water. A column is wet when
                     // the carve acted (river or lake), when its ground really is
                     // deep enough below sea to be ocean, or when it lies inside
@@ -250,7 +253,7 @@ namespace kc {
                         (seaLocal - naturalTop) >= HomelandsNoise::oceanMinDepth;
                     const bool inLake = noise_->lakeMask(wx, wz) > 0.0f;
                     if (carvedActed || deepEnough || inLake) {
-                        for (int y = std::max(0, top + 1); y <= seaLocal && y < height; ++y) {
+                        for (int y = std::max(0, top + 1); y < seaLocal && y < height; ++y) {
                             blocks[(static_cast<size_t>(y) * chunkSize + z) * chunkSize + x] = waterId;
                         }
                     }

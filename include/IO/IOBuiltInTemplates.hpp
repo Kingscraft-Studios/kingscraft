@@ -1,5 +1,6 @@
 #pragma once
 #include "Templates/ChunkTemplate.hpp"
+#include "Templates/GenericCacheTemplate.hpp"
 #include "Templates/ModelTemplate.hpp"
 #include "Templates/RegionTemplate.hpp"
 #include "Templates/TextureTemplate.hpp"
@@ -12,8 +13,8 @@ namespace kc {
     class IOBuiltInTemplates {
     public:
         explicit IOBuiltInTemplates(IO& io) : chunkTemplate(io), regionTemplate(io, chunkTemplate),
-                                        worldMetadataTemplate(io),
-                                        textureTemplate(io), modelTemplate(io, textureTemplate) {}
+                                        worldMetadataTemplate(io), textureTemplate(io),
+                                        modelTemplate(io, textureTemplate), cacheTemplate(io) {}
 
         ChunkTemplate& getChunkTemplate() { return chunkTemplate; }
         RegionTemplate& getRegionTemplate() { return regionTemplate; }
@@ -23,6 +24,8 @@ namespace kc {
         ModelTemplate& getModelTemplate() { return modelTemplate; }
         TextureTemplate& getTextureTemplate() { return textureTemplate; }
 
+        GenericCacheTemplate& getCacheTemplate() { return cacheTemplate; }
+
     private:
         ChunkTemplate chunkTemplate;
         RegionTemplate regionTemplate;
@@ -31,5 +34,6 @@ namespace kc {
         TextureTemplate textureTemplate;
         ModelTemplate modelTemplate;
 
+        GenericCacheTemplate cacheTemplate;
     };
 }

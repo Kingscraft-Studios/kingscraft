@@ -1,6 +1,7 @@
 #include "Vulkan/Device.hpp"
 #include "Vulkan/Buffer.hpp"
-#include "../../include/Core/Bootstrapper.hpp"
+#include "Core/Bootstrapper.hpp"
+#include "Cache/Constants/PipelineCacheConstants.hpp"
 
 // std headers
 #include <cstring>
@@ -101,7 +102,7 @@ namespace kc {
     void Device::createPipelineCache() {
         VkPipelineCacheCreateInfo cacheInfo{};
         cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-        auto& preloadData = Bootstrapper::Get().getPipelineCacheData();
+        const auto& preloadData = Bootstrapper::Get().getPipelineCacheStorage().getPipelineCache();
         if (!preloadData.empty()) {
             cacheInfo.initialDataSize = preloadData.size();
             cacheInfo.pInitialData = preloadData.data();
@@ -112,70 +113,34 @@ namespace kc {
     }
 
     void Device::writePipelineCache() {
-        // TODO: add Logging
-        if (pipelineCache_ != VK_NULL_HANDLE) {
-            size_t dataSize = 0;
+        if (pipelineCache_ == VK_NULL_HANDLE) return;
 
-            vkGetPipelineCacheData(
-                device_,
-                pipelineCache_,
-                &dataSize,
-                nullptr
-            );
+        size_t dataSize = 0;
+        vkGetPipelineCacheData(device_, pipelineCache_, &dataSize, nullptr);
+        if (dataSize == 0) return;
 
-            if (dataSize > 0) {
-                auto fileData = std::make_shared<std::vector<char>>();
+        std::vector<char> blob(dataSize);
+        vkGetPipelineCacheData(device_, pipelineCache_, &dataSize, blob.data());
 
-                PipelineCacheHeader header{};
+        PipelineCacheHeader header{};
+        header.magic = PIPELINE_CACHE_MAGIC;
+        header.version = PIPELINE_CACHE_VERSION;
 
-                header.magic = PIPELINE_CACHE_MAGIC;
-                header.version = PIPELINE_CACHE_VERSION;
+        header.vendorID = properties.vendorID;
+        header.deviceID = properties.deviceID;
+        header.driverVersion = properties.driverVersion;
 
-                header.vendorID = properties.vendorID;
-                header.deviceID = properties.deviceID;
-                header.driverVersion = properties.driverVersion;
+        std::copy(properties.pipelineCacheUUID, properties.pipelineCacheUUID + VK_UUID_SIZE, header.pipelineCacheUUID.begin());
 
-                std::copy(properties.pipelineCacheUUID, properties.pipelineCacheUUID + VK_UUID_SIZE, header.pipelineCacheUUID.begin());
+        header.engineVersion = ENGINE_CACHE_VERSION;
 
-                // FIXME:
-                header.engineVersion = 1;
-
-
-                // Reserve header + Vulkan blob
-                fileData->resize(
-                    sizeof(PipelineCacheHeader) + dataSize
-                );
-
-
-                // Write header
-                std::memcpy(
-                    fileData->data(),
-                    &header,
-                    sizeof(PipelineCacheHeader)
-                );
-
-
-                // Write Vulkan blob after header
-                vkGetPipelineCacheData(
-                    device_,
-                    pipelineCache_,
-                    &dataSize,
-                    fileData->data() + sizeof(PipelineCacheHeader)
-                );
-
-
-                MessageBus::Get().send(
-                    ThreadName::Engine,
-                    [fileData]()
-                    {
-                        IO::Get().writeFile(
-                            "pipeline_cache.bin",
-                            *fileData
-                        );
-                    }
-                );
+        MessageBus::Get().send(
+            ThreadName::Engine,
+            [header, blob = std::move(blob)]()
+            {
+                Bootstrapper::Get().getPipelineCacheStorage().save(header, blob);
             }
-        }
+        );
     }
 
     Device::~Device() {
@@ -276,7 +241,7 @@ namespace kc {
 
         std::copy(properties.pipelineCacheUUID, properties.pipelineCacheUUID + VK_UUID_SIZE, info.pipelineCacheUUID.begin());
 
-        Bootstrapper::Get().getPipelineValidator().validateVulkan(info, Bootstrapper::Get().getPipelineCacheHeader());
+        Bootstrapper::Get().getPipelineCacheStorage().validateDevice(info);
 
         // Continue
 

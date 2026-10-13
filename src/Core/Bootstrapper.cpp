@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <fstream>
 
-#include "Core/Validators/PipelineCacheValidator.hpp"
 #include "Event/EventManager.hpp"
 #include "Listener/ChunkLifecycleListener.hpp"
 #include "Listener/PlayerBlockInteractionListener.hpp"
@@ -48,11 +47,7 @@ namespace kc {
         loadShaderFile("resources/shaders/PostProcess/bloom/colorpass.frag.spv");
 
         // Pipeline cache
-        try {
-            pipelineCacheData_ = loadAndValidatePC();
-        } catch (std::runtime_error& e) {
-            LogUtils::error(ThreadName::Renderer, StringBuilder::build("Error: ", e.what()));
-        }
+        pipelineCacheStorage_.load();
 
         // Engine-wide event listeners. Bukkit style: each listener observes the
         // events it cares about and does everything itself inside its handler;
@@ -74,50 +69,8 @@ namespace kc {
         return it->second;
     }
 
-    const std::vector<char>& Bootstrapper::getPipelineCacheData() const {
-        return pipelineCacheData_;
-    }
-
     void Bootstrapper::loadShaderFile(const std::string& path) {
         auto data = IO::Get().readFile(path);
         shaders_[path] = data ? std::move(*data) : std::vector<char>{};
-    }
-
-    std::vector<char> Bootstrapper::loadAndValidatePC() {
-
-        if (!IO::Get().readHeader("pipeline_cache.bin", &header, sizeof(PipelineCacheHeader))) {
-            LogUtils::info(ThreadName::Engine, "[PipelineCache] No pipeline cache found or failed to read header.");
-            return {};
-        }
-
-
-        if (!validator.validate(header)) {
-            return {};
-        }
-
-
-        auto fileSize = IO::Get().getFileSize("pipeline_cache.bin");
-
-        if (!fileSize) {
-            LogUtils::error(ThreadName::Engine, "[PipelineCache] Failed to stat pipeline cache.");
-            return {};
-        }
-
-        if (*fileSize < sizeof(PipelineCacheHeader)) {
-            LogUtils::error(ThreadName::Engine, "[PipelineCache] Cache file is smaller than the header size.");
-            return {};
-        }
-
-        size_t blobSize = *fileSize - sizeof(PipelineCacheHeader);
-
-
-        auto cache = IO::Get().readData("pipeline_cache.bin", sizeof(PipelineCacheHeader), blobSize);
-
-        if (!cache || cache->empty()) {
-            LogUtils::error(ThreadName::Engine, "[PipelineCache] Failed to read pipeline cache data.");
-            return {};
-        }
-
-        return *cache;
     }
 } // namespace kc

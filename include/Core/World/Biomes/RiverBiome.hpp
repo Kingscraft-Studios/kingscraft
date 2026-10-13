@@ -28,9 +28,10 @@ namespace kc {
     class RiverBiome : public Biome {
     public:
         // How far above the waterline the sand shore still reaches. One block:
-        // the column whose top sits at seaLevel is dry (the fill starts at
-        // top + 1) and the one above it is the step out of the water, so both
-        // are shore; anything wider starts eating into the bank's grass.
+        // the column whose top sits at the water surface (sea - 1, the topmost
+        // water block) is the waterline and the one above it (seaLevel) is the
+        // step out of the water, so both are shore; anything wider starts
+        // eating into the bank's grass.
         static constexpr int shoreBand = 1;
 
         SurfaceLayers resolveSurface(

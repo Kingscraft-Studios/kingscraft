@@ -99,10 +99,11 @@ namespace kc {
         //                    wall is a gentle grade instead of a fixed-width
         //                    V-canyon. Both are fixed constants in HomelandsNoise,
         //                    not dials; 0 disables the bank (channel only).
-        // riverDepthBlocks   TYPICAL depth of the bed below sea level, so 5 =
-        //                    five blocks of water at the surface at Y63, level
-        //                    with the sea, on average: the local bed runs
-        //                    roughly 2..8 blocks deep at this default
+        // riverDepthBlocks   TYPICAL depth of the bed below the sea surface,
+        //                    so 5 = a bed around Y58 holding four blocks of
+        //                    water up to the Y62 surface (the Y63 plane itself
+        //                    is air), on average: the local bed runs roughly
+        //                    2..8 blocks deep at this default
         bool riversEnabled = true;
         float riverWavelengthBlocks = 384.0f;
         float riverChannelHalfWidth = 4.5f;

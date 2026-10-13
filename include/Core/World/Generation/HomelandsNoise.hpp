@@ -670,15 +670,21 @@ namespace kc {
             const float mask = riverMaskRaw(x, z);
             if (!(mask > 0.0f)) return topLocal;
 
+            // seaLocal is the sea-level SURFACE plane (world Y63). The fill loop
+            // writes water strictly below it, so the topmost water block -- the
+            // waterline the bed and banks anchor to -- is one block down.
+            const int waterTop = seaLocal - 1;
+
             // Channel: a U-shaped bed rather than a flat shelf. t runs from 0 at
             // the channel edge to 1 on the centreline (both are distances from
             // the same contour, so the ratio survives the width field scaling
             // with it), and f(t) = 2t - t^2 is the cross-section: steep where
             // the shore meets the water, flat along the bottom. The bed is
             //
-            //     sea - max(depth(x,z) + roughness(x,z), 1) * f(t)
+            //     waterTop - max(depth(x,z) + roughness(x,z), 1) * f(t)
             //
-            // where depth is the dial scaled 0.45x..1.55x by a ~160-block noise
+            // where waterTop is the topmost water block (sea - 1) and depth is
+            // the dial scaled 0.45x..1.55x by a ~160-block noise
             // (long deep runs and shallow pools along the river) and roughness
             // is a +-0.75-block ~24-block wobble on the bottom. The clamp holds
             // a full-width river at a block of water; the extent envelope is NOT
@@ -706,7 +712,7 @@ namespace kc {
                     riverDepth_ * vary + riverBumpAmp * graph.eval(riverBedBump, x, 0, z);
                 if (total < 1.0f) total = 1.0f; // full-width rivers hold a block of water
                 const float bedY =
-                    std::max(0.0f, static_cast<float>(seaLocal) - total * f);
+                    std::max(0.0f, static_cast<float>(waterTop) - total * f);
                 carved = std::min(topLocal, static_cast<int>(std::lround(bedY)));
             } else {
                 // Bank: smoothstep from the WATERLINE at the channel edge back
@@ -735,7 +741,7 @@ namespace kc {
                 // past that rim are returned untouched, and the rim lands exactly
                 // on topLocal with zero derivative (smoothstep), so the valley
                 // melts into the natural terrain with no step.
-                const float rise = static_cast<float>(topLocal) - static_cast<float>(seaLocal);
+                const float rise = static_cast<float>(topLocal) - static_cast<float>(waterTop);
                 const float bankW =
                     std::clamp(riverBankSlope * std::max(0.0f, rise), riverBankMin_, riverBankMax_);
                 const float bankOuter = riverChannelEdge_ - bankW / riverCorridorHalf_;
@@ -744,7 +750,7 @@ namespace kc {
                 const float t = (mask - bankOuter) / (riverChannelEdge_ - bankOuter);
                 const float s = t * t * (3.0f - 2.0f * t);
                 const float blended = static_cast<float>(topLocal) +
-                                      (static_cast<float>(seaLocal) - static_cast<float>(topLocal)) * s;
+                                      (static_cast<float>(waterTop) - static_cast<float>(topLocal)) * s;
                 carved = std::min(topLocal, static_cast<int>(std::lround(blended)));
             }
 
@@ -831,16 +837,20 @@ namespace kc {
             const float t = lakeMask(x, z);
             if (!(t > 0.0f)) return topLocal;
 
+            // Topmost water block; see carveRiverTop. seaLocal is the surface
+            // plane, water is written strictly below it.
+            const int waterTop = seaLocal - 1;
+
             int carved;
             if (t < lakeShoreFrac) {
                 const float u = t / lakeShoreFrac;
                 const float s = u * u * (3.0f - 2.0f * u);
                 const float blended = static_cast<float>(topLocal) +
-                                      (static_cast<float>(seaLocal) - static_cast<float>(topLocal)) * s;
+                                      (static_cast<float>(waterTop) - static_cast<float>(topLocal)) * s;
                 carved = std::min(topLocal, static_cast<int>(std::lround(blended)));
             } else {
                 const float u = (t - lakeShoreFrac) / (1.0f - lakeShoreFrac);
-                const float bedY = static_cast<float>(seaLocal) - lakeDepth * u;
+                const float bedY = static_cast<float>(waterTop) - lakeDepth * u;
                 carved = std::min(topLocal, static_cast<int>(std::lround(bedY)));
             }
             return carved;
