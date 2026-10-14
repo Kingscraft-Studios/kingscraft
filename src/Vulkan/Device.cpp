@@ -12,6 +12,7 @@
 #include "Bus/MessageBus.hpp"
 #include "Core/Runtime.hpp"
 #include "GLFW/glfw3.h"
+#include "Threads/Engine.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/Logger.hpp"
 #include "Util/LogUtils.hpp"
@@ -102,7 +103,7 @@ namespace kc {
     void Device::createPipelineCache() {
         VkPipelineCacheCreateInfo cacheInfo{};
         cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-        const auto& preloadData = Bootstrapper::Get().getPipelineCacheStorage().getPipelineCache();
+        const auto& preloadData = Engine::Get().getCacheManager().getPipelineCache().getPipelineCache();
         if (!preloadData.empty()) {
             cacheInfo.initialDataSize = preloadData.size();
             cacheInfo.pInitialData = preloadData.data();
@@ -134,13 +135,9 @@ namespace kc {
 
         header.engineVersion = ENGINE_CACHE_VERSION;
 
-        MessageBus::Get().send(
-            ThreadName::Engine,
-            [header, blob = std::move(blob)]()
-            {
-                Bootstrapper::Get().getPipelineCacheStorage().save(header, blob);
-            }
-        );
+        MessageBus::Get().send(ThreadName::Engine, [header, blob = std::move(blob)]() {
+                Engine::Get().getCacheManager().getPipelineCache().save(header, blob);
+        });
     }
 
     Device::~Device() {
@@ -232,7 +229,8 @@ namespace kc {
         vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
         properties = properties2.properties;
 
-        // Validate the Pipeline Cache Here
+        // Hand the device facts to the cache storage; it validates them itself
+        // the first time the payload is requested (in createPipelineCache).
         PipelineCacheValidationInfo info{};
 
         info.vendorID = properties.vendorID;
@@ -241,7 +239,7 @@ namespace kc {
 
         std::copy(properties.pipelineCacheUUID, properties.pipelineCacheUUID + VK_UUID_SIZE, info.pipelineCacheUUID.begin());
 
-        Bootstrapper::Get().getPipelineCacheStorage().validateDevice(info);
+        Engine::Get().getCacheManager().getPipelineCache().setDeviceInfo(info);
 
         // Continue
 

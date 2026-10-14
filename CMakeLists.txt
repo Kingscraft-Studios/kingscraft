@@ -19,6 +19,31 @@ include_directories(libs/json)
 
 add_subdirectory(libs/glfw)
 
+# Vendored libshaderc (GLSL -> SPIR-V), built as a shared library
+set(SHADERC_SKIP_TESTS ON CACHE BOOL "" FORCE)
+set(SHADERC_SKIP_EXAMPLES ON CACHE BOOL "" FORCE)
+set(SHADERC_SKIP_EXECUTABLES ON CACHE BOOL "" FORCE)
+set(SHADERC_SKIP_INSTALL ON CACHE BOOL "" FORCE)
+set(SHADERC_SKIP_COPYRIGHT_CHECK ON CACHE BOOL "" FORCE)
+set(SHADERC_ENABLE_WERROR_COMPILE OFF CACHE BOOL "" FORCE)
+set(SHADERC_ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+
+set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
+set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
+
+set(SPIRV_SKIP_TESTS ON CACHE BOOL "" FORCE)
+set(SPIRV_SKIP_EXECUTABLES ON CACHE BOOL "" FORCE)
+set(SPIRV_HEADERS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(SPIRV_HEADERS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+
+add_subdirectory(libs/shaderc EXCLUDE_FROM_ALL)
+
+# Build/emit a single shared library named libshaderc.so (no ABI version suffix)
+set_target_properties(shaderc_shared PROPERTIES OUTPUT_NAME shaderc)
+
 # Project Sources
 file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 file(GLOB_RECURSE HEADER_FILES include/*.hpp)
@@ -34,8 +59,22 @@ target_link_directories(kingscraft PRIVATE)
 target_link_libraries(kingscraft
         PRIVATE glfw
         PRIVATE vulkan
+        PRIVATE shaderc_shared
         PRIVATE pthread
         PRIVATE dl
+)
+
+# Find the copied libshaderc.so next to the executable at runtime
+set_target_properties(kingscraft PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH TRUE
+)
+
+add_custom_command(TARGET kingscraft POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:shaderc_shared>
+        $<TARGET_FILE_DIR:kingscraft>
 )
 
 add_custom_command(TARGET kingscraft POST_BUILD

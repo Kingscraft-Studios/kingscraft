@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "Bus/Mailbox.hpp"
+#include "Cache/CacheManger.hpp"
 #include "Core/Observability/Observability.hpp"
 #include "Core/Observability/MetricsExchange.hpp"
 #include "Renderer/FrameExchange.hpp"
@@ -38,6 +39,7 @@ namespace kc {
         FrameExchange& getFrameExchange() { return exchange; }
         MetricsExchange& getMetricsExchange() { return metricsExchange; }
         Observability& getDiagnostics() { return diagnostics; }
+        CacheManager& getCacheManager() { return cacheManager; }
 
         void gameLogicStopped();
 
@@ -46,14 +48,14 @@ namespace kc {
         std::atomic<bool> runningMailbox{true};
         std::shared_ptr<Mailbox> mailbox_;
 
+        std::thread mailboxThread;
+        std::condition_variable runCV_;
+        std::mutex runMtx_;
+
         FrameExchange exchange;
         MetricsExchange metricsExchange;
         Observability diagnostics;
-
-        std::thread mailboxThread;
-
-        std::condition_variable runCV_;
-        std::mutex runMtx_;
+        CacheManager cacheManager;
     };
 
 } // namespace kc

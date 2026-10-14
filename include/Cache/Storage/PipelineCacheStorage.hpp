@@ -10,10 +10,9 @@ namespace kc {
         // Reads + validates the header, then reads the payload. Keeps both on success.
         bool load();
 
-        // Validates the loaded header against the actual Vulkan device.
-        bool validateDevice(const PipelineCacheValidationInfo& info);
+        void setDeviceInfo(const PipelineCacheValidationInfo& info);
 
-        const std::vector<char>& getPipelineCache() const { return payload_; }
+        const std::vector<char>& getPipelineCache();
 
         // Persists the header immediately followed by the blob.
         void save(const PipelineCacheHeader& header, const std::vector<char>& blob);
@@ -21,6 +20,8 @@ namespace kc {
     private:
         PipelineCacheValidator validator_;
         PipelineCacheHeader header_{};
+        PipelineCacheValidationInfo deviceInfo_{};
+        bool deviceValidated_ = false;
         std::vector<char> payload_;
     };
 }

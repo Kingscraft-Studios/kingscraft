@@ -28,11 +28,24 @@ namespace kc {
         }
 
         payload_ = std::move(*payload);
+        deviceValidated_ = false;
+
         return true;
     }
 
-    bool PipelineCacheStorage::validateDevice(const PipelineCacheValidationInfo& info) {
-        return validator_.validateVulkan(info, header_);
+    void PipelineCacheStorage::setDeviceInfo(const PipelineCacheValidationInfo& info) {
+        deviceInfo_ = info;
+        deviceValidated_ = false;
+    }
+
+    const std::vector<char>& PipelineCacheStorage::getPipelineCache() {
+        if (!deviceValidated_ && !payload_.empty()) {
+            deviceValidated_ = true;
+            if (!validator_.validateVulkan(deviceInfo_, header_)) {
+                payload_.clear();
+            }
+        }
+        return payload_;
     }
 
     void PipelineCacheStorage::save(const PipelineCacheHeader& header, const std::vector<char>& blob) {

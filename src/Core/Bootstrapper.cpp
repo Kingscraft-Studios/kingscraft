@@ -12,6 +12,7 @@
 #include "Listener/ProfilingCaptureListener.hpp"
 #include "Listener/RenderRegistryReloadListener.hpp"
 #include "Listener/WorldRegistryReloadListener.hpp"
+#include "Threads/Engine.hpp"
 #include "Util/LogUtils.hpp"
 
 namespace kc {
@@ -47,7 +48,7 @@ namespace kc {
         loadShaderFile("resources/shaders/PostProcess/bloom/colorpass.frag.spv");
 
         // Pipeline cache
-        pipelineCacheStorage_.load();
+        Engine::Get().getCacheManager().getPipelineCache().load();
 
         // Engine-wide event listeners. Bukkit style: each listener observes the
         // events it cares about and does everything itself inside its handler;
