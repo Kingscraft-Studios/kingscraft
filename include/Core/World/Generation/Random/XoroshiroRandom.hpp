@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "Core/World/Generation/Random/Md5.hpp"
+#include "Util/Md5.hpp"
 #include "Core/World/Generation/Random/RandomSource.hpp"
 
 namespace kc {

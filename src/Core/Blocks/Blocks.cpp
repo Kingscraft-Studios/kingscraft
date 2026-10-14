@@ -9,25 +9,8 @@
 #include "Core/Blocks/GravelBlock.hpp"
 #include "Core/Blocks/WaterBlock.hpp"
 #include "Threads/Logger.hpp"
-#include "Util/LogUtils.hpp"
 
 namespace kc {
-
-    void Blocks::logModelInfo(const BlockModel& model) {
-        int quadsTotal = 0;
-        for (auto& el : model.getElements())
-            quadsTotal += static_cast<int>(el.quads.size());
-        int texCount = static_cast<int>(model.getTextures().size());
-        int rawBytes = texCount > 0
-            ? static_cast<int>(model.getTextures()[0].rawData.size()) : 0;
-
-        auto msg = "Model loaded: "
-            + std::to_string(model.getElements().size()) + " elements, "
-            + std::to_string(quadsTotal) + " quads, "
-            + std::to_string(texCount) + " textures ("
-            + std::to_string(rawBytes) + " raw bytes)";
-        LogUtils::info(ThreadName::Registry, msg);
-    }
 
     void Blocks::registerBlocks(int& pending) {
         auto& registry = Registry<Block>::getRegistry();

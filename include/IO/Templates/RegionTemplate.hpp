@@ -1,7 +1,6 @@
 #pragma once
 #include "IOTemplateBase.hpp"
 #include "ChunkTemplate.hpp"
-#include "Util/StringBuilder.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -34,8 +33,8 @@ namespace kc {
     public:
         static constexpr int REGION_SIZE = 32;      // 32 x 32 chunks per region
 
-        explicit RegionTemplate(IO& io, ChunkTemplate& chunkTemplate)
-            : IOTemplateBase(io), chunk_(chunkTemplate) {}
+        explicit RegionTemplate(DiskLayer& disk, ChunkTemplate& chunkTemplate)
+            : IOTemplateBase(disk), chunk_(chunkTemplate) {}
 
         std::vector<uint64_t> load(int gridX, int gridZ) {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -130,7 +129,7 @@ namespace kc {
         }
 
         std::string builtPath(int regX, int regZ) {
-            return StringBuilder::build("world/regions/r.", regX, ".", regZ, ".txt");
+            return StringUtils::build("world/regions/r.", regX, ".", regZ, ".txt");
         }
 
         // Lazily materialize + load a region, pull its staged edits in, and
@@ -144,7 +143,7 @@ namespace kc {
                 int rZ = static_cast<int>(k & 0xFFFFFFFF);
                 auto fileData = readBytes(builtPath(rX, rZ), MissingFile::Ignore);
                 if (!fileData || fileData->empty())
-                    s.lines = {StringBuilder::build("#R ", rX, " ", rZ)};
+                    s.lines = {StringUtils::build("#R ", rX, " ", rZ)};
                 else
                     s.lines = splitLines(std::string(fileData->begin(), fileData->end()));
                 rebuildTagIndex(s);
@@ -244,7 +243,7 @@ namespace kc {
         static std::string chunkTag(uint64_t ck) {
             int gx = static_cast<int>(ck >> 32);
             int gz = static_cast<int>(ck & 0xFFFFFFFF);
-            return StringBuilder::build("#C ", gx, " ", gz);
+            return StringUtils::build("#C ", gx, " ", gz);
         }
 
         static std::string sliceChunkText(const RegionState& s, int tagIndex) {

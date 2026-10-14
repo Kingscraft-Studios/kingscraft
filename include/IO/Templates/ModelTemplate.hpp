@@ -7,10 +7,10 @@
 namespace kc {
     class ModelTemplate final : public IOTemplateBase {
     public:
-        explicit ModelTemplate(IO& io, TextureTemplate& textureTemplate) : IOTemplateBase(io), textureTemplate(textureTemplate) {}
+        explicit ModelTemplate(DiskLayer& disk, TextureTemplate& textureTemplate) : IOTemplateBase(disk), textureTemplate(textureTemplate) {}
 
         BlockModel load(const std::string& path) {
-            auto jsonBytes = readBytes(path);
+            auto jsonBytes = readBytes(path, MissingFile::Warn);
             if (!jsonBytes) return BlockModel{};
 
             auto parsed = ModelParser::parse(*jsonBytes);

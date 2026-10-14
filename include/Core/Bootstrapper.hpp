@@ -1,31 +1,19 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <unordered_map>
 #include <memory>
-
-#include "Cache/Storage/PipelineCacheStorage.hpp"
 
 namespace kc {
 
-class Bootstrapper {
-public:
-    static void Init();
-    static void Shutdown();
-    static Bootstrapper& Get();
+    class Bootstrapper {
+    public:
+        static void Init();
+        static void Shutdown();
+        static Bootstrapper& Get();
 
-    void load();
+        void load();
 
-    const std::vector<char>& getShader(const std::string& path) const;
-
-private:
-
-    void loadShaderFile(const std::string& path);
-
-    std::unordered_map<std::string, std::vector<char>> shaders_;
-
-    static std::unique_ptr<Bootstrapper> instance_;
-};
+    private:
+        static std::unique_ptr<Bootstrapper> instance_;
+    };
 
 } // namespace kc

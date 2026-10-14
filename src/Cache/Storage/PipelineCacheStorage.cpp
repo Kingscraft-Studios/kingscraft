@@ -5,14 +5,9 @@
 #include "Util/LogUtils.hpp"
 
 namespace kc {
-    namespace {
-        GenericCacheTemplate& cache() {
-            return IO::Get().getBuiltinTemplates().getCacheTemplate();
-        }
-    }
 
     bool PipelineCacheStorage::load() {
-        if (!cache().readHeader(PIPELINE_CACHE_FILENAME, header_)) {
+        if (!IO::Get().getBuiltinTemplates().getCacheTemplate().readHeader(PIPELINE_CACHE_FILENAME, header_)) {
             LogUtils::info(ThreadName::Engine, "[PipelineCache] No cache found, starting fresh.");
             return false;
         }
@@ -21,7 +16,7 @@ namespace kc {
             return false;
         }
 
-        auto payload = cache().readPayload(PIPELINE_CACHE_FILENAME, sizeof(PipelineCacheHeader));
+        auto payload = IO::Get().getBuiltinTemplates().getCacheTemplate().readPayload(PIPELINE_CACHE_FILENAME, sizeof(PipelineCacheHeader));
         if (!payload || payload->empty()) {
             LogUtils::warn(ThreadName::Engine, "[PipelineCache] Cache payload is missing or empty.");
             return false;
@@ -49,6 +44,6 @@ namespace kc {
     }
 
     void PipelineCacheStorage::save(const PipelineCacheHeader& header, const std::vector<char>& blob) {
-        cache().write(PIPELINE_CACHE_FILENAME, header, blob);
+        IO::Get().getBuiltinTemplates().getCacheTemplate().write(PIPELINE_CACHE_FILENAME, header, blob);
     }
 }

@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <cstdio>
 
 #include "Bus/MessageBus.hpp"
 #include "Core/Registry.hpp"
@@ -19,7 +18,6 @@
 #include "Threads/IO.hpp"
 #include "Threads/RenderThread.hpp"
 #include "Core/WorkerPool.hpp"
-#include "Util/LogUtils.hpp"
 
 namespace {
 
@@ -551,13 +549,6 @@ namespace kc {
 
         const uint64_t gen = genChunksDone_.load(std::memory_order_relaxed);
         const uint64_t mesh = meshChunksDone_.load(std::memory_order_relaxed);
-
-        char buf[160];
-        snprintf(buf, sizeof buf,
-                 "streaming: gen %.1f chunks/s (%d workers), mesh %.1f chunks/s",
-                 (double)(gen - lastGenCount_) / seconds, GEN_WORKERS,
-                 (double)(mesh - lastMeshCount_) / seconds);
-        LogUtils::info(ThreadName::GameLogic, buf);
 
         lastGenCount_ = gen;
         lastMeshCount_ = mesh;

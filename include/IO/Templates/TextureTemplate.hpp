@@ -6,10 +6,10 @@
 namespace kc {
     class TextureTemplate final : public IOTemplateBase {
     public:
-        explicit TextureTemplate(IO& io) : IOTemplateBase(io) {}
+        explicit TextureTemplate(DiskLayer& disk) : IOTemplateBase(disk) {}
 
         RawTextureData loadRaw(const std::string& path) {
-            auto bytes = readBytes(path);
+            auto bytes = readBytes(path, MissingFile::Warn);
             RawTextureData tex;
 
             if (!bytes || bytes->empty()) return tex;
@@ -26,7 +26,7 @@ namespace kc {
         }
 
         DecodedTextureData loadDecoded(const std::string& path) {
-            auto bytes = readBytes(path);
+            auto bytes = readBytes(path, MissingFile::Warn);
             DecodedTextureData  tex;
 
             if (!bytes || bytes->empty()) return tex;

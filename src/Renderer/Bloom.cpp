@@ -1,8 +1,7 @@
 #include "Renderer/Bloom.hpp"
-#include "../../include/Core/Bootstrapper.hpp"
 #include <array>
-#include <cstring>
-#include <stdexcept>
+
+#include "Threads/Engine.hpp"
 
 namespace kc {
 
@@ -362,8 +361,9 @@ void Bloom::updateFrameDescriptor(uint32_t i) {
 }
 
 std::unique_ptr<Pipeline> Bloom::createBlurPipeline(VkRenderPass renderPass, uint32_t blurdirection) {
-    auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.vert.spv");
-    auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/gaussblur.frag.spv");
+    auto& shaderCache = Engine::Get().getCacheManager().getShaderCache();
+    auto& vertCode = shaderCache.get("gaussblur", ShaderStage::Vertex);
+    auto& fragCode = shaderCache.get("gaussblur", ShaderStage::Fragment);
 
     PipelineConfigInfo configInfo{};
     Pipeline::applyDefaultPipelineConfigInfo(configInfo);
@@ -415,8 +415,9 @@ void Bloom::createPipelines() {
     pipelines_.blurHorz = createBlurPipeline(activeCompositeRenderPass_, 1);
 
     // --- Color pass (glow objects) ---
-    auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.vert.spv");
-    auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/PostProcess/bloom/colorpass.frag.spv");
+    auto& shaderCache = Engine::Get().getCacheManager().getShaderCache();
+    auto& vertCode = shaderCache.get("colorpass", ShaderStage::Vertex);
+    auto& fragCode = shaderCache.get("colorpass", ShaderStage::Fragment);
 
     PipelineConfigInfo configInfo{};
     Pipeline::applyDefaultPipelineConfigInfo(configInfo);

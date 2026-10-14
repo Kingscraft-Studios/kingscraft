@@ -1,6 +1,8 @@
 #include "Core/World/Chunk.hpp"
 
 #include "Bus/MessageBus.hpp"
+#include "Core/Blocks/Block.hpp"
+#include "Core/Registry.hpp"
 #include "Core/Runtime.hpp"
 #include "Core/World/ChunkKey.hpp"
 #include "Core/World/ChunkUploadData.hpp"

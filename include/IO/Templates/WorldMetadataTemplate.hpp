@@ -57,7 +57,7 @@ namespace kc {
             WorldMetadata metadata;
         };
 
-        explicit WorldMetadataTemplate(IO& io) : IOTemplateBase(io) {}
+        explicit WorldMetadataTemplate(DiskLayer& disk) : IOTemplateBase(disk) {}
 
         LoadOutcome load() {
             LoadOutcome outcome;

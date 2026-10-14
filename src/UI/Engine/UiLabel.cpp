@@ -4,7 +4,7 @@
 #include "UI/Engine/UiBatchQueue.hpp"
 #include "Threads/Logger.hpp"
 #include "Util/LogUtils.hpp"
-#include "Util/StringBuilder.hpp"
+#include "Util/StringUtils.hpp"
 
 namespace kc {
 
@@ -52,7 +52,7 @@ namespace kc {
                 if (!clipReported_) {
                     clipReported_ = true;
                     LogUtils::warn(ThreadName::Renderer,
-                        StringBuilder::build("Label clipped: text \"", text, "\" overflows element bounds"));
+                        StringUtils::build("Label clipped: text \"", text, "\" overflows element bounds"));
                 }
                 break;
             }

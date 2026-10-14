@@ -6,7 +6,7 @@
 #include "UI/Engine/UiBatchQueue.hpp"
 #include "UI/Engine/UiStyle.hpp"
 #include "Threads/Logger.hpp"
-#include "Util/StringBuilder.hpp"
+#include "Util/StringUtils.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -27,7 +27,7 @@ namespace kc {
         hoveredElement_ = nullptr;
         isDragging_ = false;
         activeHandle_ = DragHandle::None;
-        LogUtils::info(ThreadName::Renderer, StringBuilder::build("[Debug] Editing mode: ", enabled_ ? "ON" : "OFF"));
+        LogUtils::info(ThreadName::Renderer, StringUtils::build("[Debug] Editing mode: ", enabled_ ? "ON" : "OFF"));
     }
 
     bool UiDebugEditor::isDebugOverlay(const UiElement* el) const {
@@ -261,33 +261,33 @@ namespace kc {
         glm::vec2 sz = el->getSize();
 
         LogUtils::debug(ThreadName::Renderer,
-    StringBuilder::build("--- Element State ---"));
+    StringUtils::build("--- Element State ---"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringBuilder::build("Name: \"", el->getName(), "\""));
+            StringUtils::build("Name: \"", el->getName(), "\""));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringBuilder::build(".setAnchor({", n.x, "f, ", n.y, "f}, {", off.x, "f, ", off.y, "f});"));
+            StringUtils::build(".setAnchor({", n.x, "f, ", n.y, "f}, {", off.x, "f, ", off.y, "f});"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringBuilder::build(".setNormalizedSize({", ns.x, "f, ", ns.y, "f});"));
+            StringUtils::build(".setNormalizedSize({", ns.x, "f, ", ns.y, "f});"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringBuilder::build(".setSize({", sz.x, "f, ", sz.y, "f})  (current pixel)"));
+            StringUtils::build(".setSize({", sz.x, "f, ", sz.y, "f})  (current pixel)"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringBuilder::build("Visible: ", el->isVisible() ? "true" : "false"));
+            StringUtils::build("Visible: ", el->isVisible() ? "true" : "false"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringBuilder::build("Style index: ", el->getStyleIndex(),
+            StringUtils::build("Style index: ", el->getStyleIndex(),
                                  "  Active: ", el->getActiveStyleIndex()));
 
         if (!el->getText().empty()) {
             LogUtils::debug(ThreadName::Renderer,
-                StringBuilder::build("Text: \"", el->getText(), "\""));
+                StringUtils::build("Text: \"", el->getText(), "\""));
 
             LogUtils::debug(ThreadName::Renderer,
-                StringBuilder::build("Centered: ", el->isTextCentered() ? "true" : "false"));
+                StringUtils::build("Centered: ", el->isTextCentered() ? "true" : "false"));
         }
 
         LogUtils::debug(ThreadName::Renderer,

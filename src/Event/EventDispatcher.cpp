@@ -8,6 +8,7 @@
 #include "Bus/MessageBus.hpp"
 #include "Event/detail/CurrentThread.hpp"
 #include "Util/LogUtils.hpp"
+#include "Util/StringUtils.hpp"
 
 namespace kc {
 
@@ -49,7 +50,7 @@ namespace kc {
             try {
                 handler.invoke(event);
             } catch (const std::runtime_error& e) {
-                LogUtils::error(ThreadName::Engine, StringBuilder::build("Event Handler threw an Exception: ", e.what()));
+                LogUtils::error(ThreadName::Engine, StringUtils::build("Event Handler threw an Exception: ", e.what()));
             } catch (...) {
                 LogUtils::error(ThreadName::Engine, "Event Handler threw an unknown Exception!");
             }
@@ -133,13 +134,13 @@ namespace kc {
                 ack->set_value();
             })) {
                 LogUtils::error(ThreadName::Engine,
-                    StringBuilder::build("Event Handler target thread unreachable: event type ", eventType));
+                    StringUtils::build("Event Handler target thread unreachable: event type ", eventType));
                 continue;
             }
 
             if (done.wait_for(eventRoutedHandlerTimeout) != std::future_status::ready) {
                 LogUtils::error(ThreadName::Engine,
-                    StringBuilder::build("Event Handler timed out waiting for target thread: event type ", eventType));
+                    StringUtils::build("Event Handler timed out waiting for target thread: event type ", eventType));
                 continue;
             }
         }
@@ -186,7 +187,7 @@ namespace kc {
                 complete();
             })) {
                 LogUtils::error(ThreadName::Engine,
-                    StringBuilder::build("Event Handler target thread unreachable: event type ", eventType));
+                    StringUtils::build("Event Handler target thread unreachable: event type ", eventType));
                 complete();
             }
         }

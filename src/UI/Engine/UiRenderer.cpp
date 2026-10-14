@@ -8,7 +8,6 @@
 // Fragment shader has ZERO SSBO reads — uses varyings only.
 
 #include "UI/Engine/UiRenderer.hpp"
-#include "../../../include/Core/Bootstrapper.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -18,6 +17,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Bus/MessageBus.hpp"
+#include "Threads/Engine.hpp"
 #include "Threads/RenderThread.hpp"
 
 namespace kc {
@@ -302,8 +302,9 @@ namespace kc {
 
         pipelineLayout_ = std::make_unique<PipelineLayout>(device_, layoutInfo);
 
-        auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/ui.vert.spv");
-        auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/ui.frag.spv");
+        auto& shaderCache = Engine::Get().getCacheManager().getShaderCache();
+        auto& vertCode = shaderCache.get("ui", ShaderStage::Vertex);
+        auto& fragCode = shaderCache.get("ui", ShaderStage::Fragment);
 
         PipelineConfigInfo configInfo{};
         Pipeline::applyDefaultPipelineConfigInfo(configInfo);
@@ -364,8 +365,9 @@ namespace kc {
 
         compositePipelineLayout_ = std::make_unique<PipelineLayout>(device_, layoutInfo);
 
-        auto& vertCode = Bootstrapper::Get().getShader("resources/shaders/composite.vert.spv");
-        auto& fragCode = Bootstrapper::Get().getShader("resources/shaders/composite.frag.spv");
+        auto& shaderCache = Engine::Get().getCacheManager().getShaderCache();
+        auto& vertCode = shaderCache.get("composite", ShaderStage::Vertex);
+        auto& fragCode = shaderCache.get("composite", ShaderStage::Fragment);
 
         PipelineConfigInfo configInfo{};
         Pipeline::applyDefaultPipelineConfigInfo(configInfo);

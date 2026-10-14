@@ -37,7 +37,7 @@ namespace kc {
         if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
             prefix += "[Performance] ";
 
-        std::string line = StringBuilder::build(
+        std::string line = StringUtils::build(
             prefix,
             "Validation Layer: ",
             pCallbackData->pMessage
@@ -204,7 +204,7 @@ namespace kc {
         if (deviceCount == 0) {
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
         }
-        LogUtils::info(ThreadName::Renderer, StringBuilder::build("Device Count: ", deviceCount));
+        LogUtils::info(ThreadName::Renderer, StringUtils::build("Device Count: ", deviceCount));
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
@@ -239,6 +239,9 @@ namespace kc {
 
         std::copy(properties.pipelineCacheUUID, properties.pipelineCacheUUID + VK_UUID_SIZE, info.pipelineCacheUUID.begin());
 
+        info.deviceName = properties.deviceName;
+        info.driverName = driverProperties.driverName;
+
         Engine::Get().getCacheManager().getPipelineCache().setDeviceInfo(info);
 
         // Continue
@@ -249,20 +252,20 @@ namespace kc {
         uint32_t patch = VK_API_VERSION_PATCH(properties.apiVersion);
 
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Selected GPU: ", deviceName));
+            StringUtils::build("Selected GPU: ", deviceName));
 
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Vulkan API: ", major, ".", minor, ".", patch));
+            StringUtils::build("Vulkan API: ", major, ".", minor, ".", patch));
 
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Driver: ", driverProperties.driverName,
+            StringUtils::build("Driver: ", driverProperties.driverName,
                 " (", driverProperties.driverInfo, ")"));
 
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Driver Type: ", driverIdToString(driverProperties.driverID)));
+            StringUtils::build("Driver Type: ", driverIdToString(driverProperties.driverID)));
 
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Conformance: ",
+            StringUtils::build("Conformance: ",
                     static_cast<int>(driverProperties.conformanceVersion.major), ".",
                     static_cast<int>(driverProperties.conformanceVersion.minor), ".",
                     static_cast<int>(driverProperties.conformanceVersion.subminor), ".",
@@ -561,15 +564,15 @@ namespace kc {
 
         // Print summary
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Available Instance Extensions: ", extensionCount));
+            StringUtils::build("Available Instance Extensions: ", extensionCount));
 
         LogUtils::info(ThreadName::Renderer,
-            StringBuilder::build("Required Instance Extensions: ", requiredExtensions.size()));
+            StringUtils::build("Required Instance Extensions: ", requiredExtensions.size()));
 
         // Validation check
         for (const auto& required : requiredExtensions) {
             if (!available.contains(required)) {
-                throw std::runtime_error(StringBuilder::build("Missing Required Vulkan Extension: ", required));
+                throw std::runtime_error(StringUtils::build("Missing Required Vulkan Extension: ", required));
             }
         }
     }
@@ -593,9 +596,9 @@ namespace kc {
 
         if (requiredExtensions.empty()) {
             LogUtils::info(ThreadName::Renderer,
-                StringBuilder::build("Available Device Extensions: ", extensionCount));
+                StringUtils::build("Available Device Extensions: ", extensionCount));
             LogUtils::info(ThreadName::Renderer,
-                StringBuilder::build("Required Device Extensions: ", deviceExtensions.size()));
+                StringUtils::build("Required Device Extensions: ", deviceExtensions.size()));
         }
 
         return requiredExtensions.empty();

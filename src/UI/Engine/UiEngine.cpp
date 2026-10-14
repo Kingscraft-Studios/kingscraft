@@ -1,6 +1,6 @@
 #include "UI/Engine/UiEngine.hpp"
 #include "Threads/Logger.hpp"
-#include "Util/StringBuilder.hpp"
+#include "Util/StringUtils.hpp"
 
 namespace kc {
 

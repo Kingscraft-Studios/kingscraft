@@ -2,19 +2,20 @@
 
 #include "IOTemplateBase.hpp"
 #include "Renderer/RendererSettings.hpp"
-#include "Util/StringBuilder.hpp"
 
 #include <cstdint>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "Util/StringUtils.hpp"
+
 namespace kc {
-    class IO;
+    class DiskLayer;
 
     class ChunkTemplate final : public IOTemplateBase {
     public:
-        explicit ChunkTemplate(IO& io) : IOTemplateBase(io) {}
+        explicit ChunkTemplate(DiskLayer& disk) : IOTemplateBase(disk) {}
 
         std::vector<uint64_t> load(int gridX, int gridZ) {
             auto path = buildPath(gridX, gridZ);
@@ -210,7 +211,7 @@ namespace kc {
         }
 
         std::string buildPath(int gridX, int gridZ) {
-            return StringBuilder::build("world/chunks/", gridX, "_", gridZ, ".txt");
+            return StringUtils::build("world/chunks/", gridX, "_", gridZ, ".txt");
         }
     };
 }

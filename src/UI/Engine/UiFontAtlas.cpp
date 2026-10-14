@@ -3,9 +3,10 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
-#include <fstream>
 #include <cstring>
 #include <stdexcept>
+
+#include "Threads/IO.hpp"
 
 namespace kc {
 
@@ -18,17 +19,9 @@ namespace kc {
     }
 
     bool UiFontAtlas::loadFont(const std::string& ttfPath, const std::string& name) {
-        std::ifstream file(ttfPath, std::ios::binary | std::ios::ate);
-        if (!file.is_open()) return false;
-
-        std::streamsize size = file.tellg();
-        file.seekg(0, std::ios::beg);
-
         FontFace face;
-        face.fontData.resize(static_cast<size_t>(size));
-        if (!file.read(reinterpret_cast<char*>(face.fontData.data()), size)) {
-            return false;
-        }
+        face.fontData = IO::Get().getBuiltinTemplates().getFontTemplate().load(ttfPath);
+        if (face.fontData.empty()) return false;
 
         if (!rasterizeGlyphs(face)) {
             return false;

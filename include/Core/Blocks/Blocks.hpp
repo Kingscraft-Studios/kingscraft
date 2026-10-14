@@ -6,6 +6,7 @@
 #include "Core/Resources/BlockModel.hpp"
 #include "Block.hpp"
 #include "Bus/MessageBus.hpp"
+#include "Threads/IO.hpp"
 
 namespace kc {
 
@@ -24,7 +25,6 @@ public:
     static void registerBlocks(int& pending);
 
 private:
-    static void logModelInfo(const BlockModel& model);
 
     template<typename T>
     static void loadBlock(
@@ -37,7 +37,6 @@ private:
         MessageBus::Get().request<BlockModel>(ThreadName::Engine, [path = std::string(path)]() {
             return IO::Get().getBuiltinTemplates().getModelTemplate().load(path);
         }, ThreadName::Registry, [&key, &pending, &registry](BlockModel model) {
-            logModelInfo(model);
             registry.add(key, std::make_unique<T>(std::move(model)));
             pending--;
         });

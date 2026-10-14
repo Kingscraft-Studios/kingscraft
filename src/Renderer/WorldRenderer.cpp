@@ -1,14 +1,13 @@
 #include "Renderer/WorldRenderer.hpp"
 
 #include <array>
-#include <iostream>
 
 #include "Core/World/GpuChunkData.hpp"
 #include "Renderer/FrameScene.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Threads/RenderThread.hpp"
-#include "../../include/Core/Bootstrapper.hpp"
 #include "Core/Runtime.hpp"
+#include "Threads/Engine.hpp"
 
 namespace kc {
     struct TerrainPushConstants {
@@ -70,8 +69,9 @@ namespace kc {
     }
 
     void WorldRenderer::createPipeline(bool disableTextures) {
-        auto& vertShaderCode = Bootstrapper::Get().getShader("resources/shaders/terrain.vert.spv");
-        auto& fragShaderCode = Bootstrapper::Get().getShader("resources/shaders/terrain.frag.spv");
+        auto& shaderCache = Engine::Get().getCacheManager().getShaderCache();
+        auto& vertShaderCode = shaderCache.get("terrain", ShaderStage::Vertex);
+        auto& fragShaderCode = shaderCache.get("terrain", ShaderStage::Fragment);
 
         PipelineConfigInfo configInfo{};
         Pipeline::applyDefaultPipelineConfigInfo(configInfo);
@@ -97,8 +97,9 @@ namespace kc {
     }
 
     void WorldRenderer::createHighlightPipeline() {
-        auto& vertShaderCode = Bootstrapper::Get().getShader("resources/shaders/highlight.vert.spv");
-        auto& fragShaderCode = Bootstrapper::Get().getShader("resources/shaders/highlight.frag.spv");
+        auto& shaderCache = Engine::Get().getCacheManager().getShaderCache();
+        auto& vertShaderCode = shaderCache.get("highlight", ShaderStage::Vertex);
+        auto& fragShaderCode = shaderCache.get("highlight", ShaderStage::Fragment);
 
         PipelineConfigInfo configInfo{};
         Pipeline::applyDefaultPipelineConfigInfo(configInfo);
@@ -131,8 +132,9 @@ namespace kc {
     }
 
     void WorldRenderer::createTransparentPipeline(bool disableTextures) {
-        auto& vertShaderCode = Bootstrapper::Get().getShader("resources/shaders/terrain.vert.spv");
-        auto& fragShaderCode = Bootstrapper::Get().getShader("resources/shaders/transparent.frag.spv");
+        auto& shaderCache = Engine::Get().getCacheManager().getShaderCache();
+        auto& vertShaderCode = shaderCache.get("terrain", ShaderStage::Vertex);
+        auto& fragShaderCode = shaderCache.get("transparent", ShaderStage::Fragment);
 
         PipelineConfigInfo configInfo{};
         Pipeline::applyDefaultPipelineConfigInfo(configInfo);

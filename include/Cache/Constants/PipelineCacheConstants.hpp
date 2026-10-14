@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <string>
 
 #include "vulkan/vulkan_core.h"
 
@@ -31,5 +32,8 @@ namespace kc {
         uint32_t driverVersion;
 
         std::array<uint8_t, VK_UUID_SIZE> pipelineCacheUUID;
+
+        std::string deviceName;
+        std::string driverName;
     };
 }

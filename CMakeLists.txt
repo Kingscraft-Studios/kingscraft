@@ -17,7 +17,12 @@ include_directories(libs/stb)
 include_directories(libs/FastNoiseLite)
 include_directories(libs/json)
 
+set(GLFW_LIBRARY_TYPE "SHARED" CACHE STRING "" FORCE)
 add_subdirectory(libs/glfw)
+
+# Emit a single shared library named libglfw.so (no ABI version suffix)
+set_property(TARGET glfw PROPERTY VERSION)
+set_property(TARGET glfw PROPERTY SOVERSION)
 
 # Vendored libshaderc (GLSL -> SPIR-V), built as a shared library
 set(SHADERC_SKIP_TESTS ON CACHE BOOL "" FORCE)
@@ -74,6 +79,13 @@ set_target_properties(kingscraft PROPERTIES
 add_custom_command(TARGET kingscraft POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:shaderc_shared>
+        $<TARGET_FILE_DIR:kingscraft>
+)
+
+# Ship libglfw.so next to the executable (resolved via the $ORIGIN rpath)
+add_custom_command(TARGET kingscraft POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:glfw>
         $<TARGET_FILE_DIR:kingscraft>
 )
 

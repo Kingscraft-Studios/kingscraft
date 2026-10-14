@@ -61,9 +61,9 @@ namespace kc {
 
                 const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
 
-                LogUtils::info(ThreadName::Registry, StringBuilder::build("Registry reload completed in ", elapsed, "ms."));
+                LogUtils::info(ThreadName::Registry, StringUtils::build("Registry reload completed in ", elapsed, "ms."));
             } catch (const std::runtime_error& e) {
-                LogUtils::error(ThreadName::Registry, StringBuilder::build("Registry reload failed: ", e.what()));
+                LogUtils::error(ThreadName::Registry, StringUtils::build("Registry reload failed: ", e.what()));
             } catch (...) {
                 LogUtils::error(ThreadName::Registry, "Registry reload failed with an unknown exception.");
             }

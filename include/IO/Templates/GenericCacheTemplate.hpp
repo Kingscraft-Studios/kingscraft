@@ -12,20 +12,20 @@ namespace kc {
 
     class GenericCacheTemplate final : public IOTemplateBase {
     public:
-        explicit GenericCacheTemplate(IO& io) : IOTemplateBase(io) {}
+        explicit GenericCacheTemplate(DiskLayer& disk) : IOTemplateBase(disk) {}
 
         // Typed header read against the cache directory.
         template <typename Header>
-        bool readHeader(const std::string& filename, Header& header) {
+        bool readHeader(const std::string& filename, Header& header, MissingFile missing = MissingFile::Warn) {
             static_assert(std::is_trivially_copyable_v<Header>, "Header must be trivially copyable");
-            return IOTemplateBase::readHeader(path(filename), header);
+            return IOTemplateBase::readHeader(path(filename), header, missing);
         }
 
         // Payload that follows a headerSize-byte header. Missing/short -> nullopt.
-        std::optional<std::vector<char>> readPayload(const std::string& filename, std::size_t headerSize) {
-            auto bytes = readBytes(path(filename), MissingFile::Warn);
+        std::optional<std::vector<char>> readPayload(const std::string& filename, std::size_t headerSize, MissingFile missing = MissingFile::Warn) {
+            auto bytes = readBytes(path(filename), missing);
             if (!bytes || bytes->size() < headerSize) return std::nullopt;
-            return std::vector<char>(bytes->begin() + headerSize, bytes->end());
+            return std::vector(bytes->begin() + headerSize, bytes->end());
         }
 
         // Replace the whole cache file: header immediately followed by payload.

@@ -2,10 +2,13 @@
 
 #include <filesystem>
 
+#include "Util/LogUtils.hpp"
+#include "Util/StringUtils.hpp"
+
 namespace kc {
     DiskOperations::DiskOperations(const std::string& path, const std::ios::openmode mode) : path_(path), mode_(mode), file(openFile(path, mode_)) {
         if (!file.is_open()) {
-            throw std::runtime_error("Failed to open File: " + path);
+            LogUtils::error(ThreadName::Engine, StringUtils::build("Read Failed: Unable to Open File (", path, ")"));
         }
     }
 
@@ -153,13 +156,17 @@ namespace kc {
 
         file.open(path_, mode_ | std::ios::trunc);
 
-        if (!file.is_open())
-            throw std::runtime_error("Failed to reopen file: " + path_);
+        if (!file.is_open()) {
+            LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed: Unable to reopen file (", path_, ")"));
+            return;
+        }
 
         file.write(data.data(), static_cast<std::streamsize>(data.size()));
 
-        if (!file)
-            throw std::runtime_error("Failed to write file: " + path_);
+        if (!file) {
+            LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed: ", path_));
+            return;
+        }
 
         file.flush();
         file.close();
@@ -168,11 +175,10 @@ namespace kc {
         file.open(path_, mode_);
 
         if (!file.is_open())
-            throw std::runtime_error("Failed to reopen file: " + path_);
+            LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed: Unable to reopen file (", path_, ")"));
     }
 
     // Helper Methods
-
     std::fstream DiskOperations::openFile(const std::string& path, std::ios::openmode mode) {
         const auto parent = std::filesystem::path(path).parent_path();
 

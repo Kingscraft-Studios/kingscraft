@@ -3,7 +3,7 @@
 #include <iostream>
 
 #include "Threads/IO.hpp"
-#include "Util/StringBuilder.hpp"
+#include "Util/StringUtils.hpp"
 #include "Util/TimeUtil.hpp"
 
 namespace kc {
@@ -36,7 +36,22 @@ namespace kc {
             std::cout << line << std::endl;
         }
 
-        IO::Get().writeLogFile(logFilePath_, line);
+        IO::Get().getBuiltinTemplates().getLogTemplate().append(logFilePath_, line);
+    }
+
+    void Logger::printHeader() {
+        std::string header =
+            "[DEBUG] ============================================================\n"
+            "[DEBUG] Kingscraft Engine Logs Initialized\n"
+            "[DEBUG] Version    : 1.0.0-PreAlpha\n"
+            "[DEBUG] Build      : Debug\n"
+            "[DEBUG] Platform   : Linux\n"
+            "[DEBUG] Start Time : " + TimeUtil::getCurrentSystemTime(TimeFormat::Logger) +
+            "\n[DEBUG] ============================================================\n";
+
+        std::cout << header << std::endl;
+
+        IO::Get().getBuiltinTemplates().getLogTemplate().append(logFilePath_, header);
     }
 
     std::string Logger::createLogFileName() {
@@ -46,7 +61,7 @@ namespace kc {
     std::string Logger::buildLogLine(LogLevel level,
                                  ThreadName caller,
                                  const std::string& data) {
-        return StringBuilder::build(
+        return StringUtils::build(
             "[", TimeUtil::uptimeSeconds(), " ",
             logLevelToString(level), "]: ",
             "[", threadToString(caller), "] ",
