@@ -217,8 +217,8 @@ namespace kc {
                     if (world.getSaveAllChunks()) {
                         world.dumpLoadedChunks();
                         world.setSaveAllChunks(false);
-                        IO::Get().getBuiltinTemplates().getRegionTemplate().flush();
-                        LogUtils::info(ThreadName::GameLogic, "SaveAllChunks: OFF (region dump flushed to disk)");
+                        if (!IO::Get().getBuiltinTemplates().getRegionTemplate().flush())
+                            LogUtils::error(ThreadName::GameLogic, "SaveAllChunks: flush failed");
                     } else {
                         world.setSaveAllChunks(true);
                         world.dumpLoadedChunks();

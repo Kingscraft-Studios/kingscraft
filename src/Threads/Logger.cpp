@@ -26,6 +26,8 @@ namespace kc {
     }
 
     void Logger::log(LogLevel level, ThreadName caller, std::string data) {
+        // TODO: FIX
+        if (!instance_) return;
         std::lock_guard<std::mutex> lock(mutex_);
 
         std::string line = buildLogLine(level, caller, data);

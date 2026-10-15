@@ -36,9 +36,10 @@ namespace kc {
         LogTemplate& getLogTemplate() { return logTemplate; }
 
         // Persist every staged template (regions + world metadata) in one pass.
-        void flush() {
-            regionTemplate.flush();
-            worldMetadataTemplate.flush();
+        bool flush() {
+            bool ok = regionTemplate.flush();
+            ok = worldMetadataTemplate.flush() && ok;
+            return ok;
         }
 
     private:

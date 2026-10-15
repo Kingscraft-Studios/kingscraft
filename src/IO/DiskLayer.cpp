@@ -31,12 +31,12 @@ namespace kc {
         return file.read();
     }
 
-    void DiskLayer::write(const std::string& path, const std::vector<char>& data) {
-        getFile(path, std::ios::in | std::ios::out | std::ios::binary).writeTruncate(data);
+    bool DiskLayer::write(const std::string& path, const std::vector<char>& data) {
+        return getFile(path, std::ios::in | std::ios::out | std::ios::binary).writeTruncate(data);
     }
 
-    void DiskLayer::writeAt(const std::string& path, std::size_t offset, const std::vector<char>& data) {
-        getFile(path, std::ios::in | std::ios::out | std::ios::binary).writeAt(offset, data);
+    bool DiskLayer::writeAt(const std::string& path, std::size_t offset, const std::vector<char>& data) {
+        return getFile(path, std::ios::in | std::ios::out | std::ios::binary).writeAt(offset, data);
     }
 
     bool DiskLayer::readHeader(const std::string& path, void* header, size_t headerSize, MissingFile missing) {

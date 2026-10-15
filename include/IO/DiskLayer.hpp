@@ -26,8 +26,8 @@ namespace kc {
         std::optional<std::size_t> size(const std::string& path, MissingFile missing = MissingFile::Ignore);
 
         // Write
-        void write(const std::string& path, const std::vector<char>& data);
-        void writeAt(const std::string& path, std::size_t offset, const std::vector<char>& data);
+        bool write(const std::string& path, const std::vector<char>& data);
+        bool writeAt(const std::string& path, std::size_t offset, const std::vector<char>& data);
         void append(const std::string& path, const std::string& text);
 
         // Misc

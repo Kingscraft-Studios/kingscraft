@@ -135,21 +135,26 @@ namespace kc {
         return buffer;
     }
 
-    void DiskOperations::write(const std::vector<char>& data) {
+    bool DiskOperations::write(const std::vector<char>& data) {
         std::lock_guard<std::mutex> lock(opMutex_);
         // positional write at current put position - does not truncate
         file.write(data.data(), static_cast<std::streamsize>(data.size()));
+        file.flush();
+        return static_cast<bool>(file);
     }
 
-    void DiskOperations::writeAt(std::size_t offset, const std::vector<char>& data) {
+    bool DiskOperations::writeAt(std::size_t offset, const std::vector<char>& data) {
         std::lock_guard<std::mutex> lock(opMutex_);
         file.clear();
         file.seekp(static_cast<std::streamoff>(offset));
         file.write(data.data(), static_cast<std::streamsize>(data.size()));
         file.flush();
+        // The stream is the only signal we get: a full disk (or a failed
+        // seek/write) leaves failbit set here instead of throwing.
+        return static_cast<bool>(file);
     }
 
-    void DiskOperations::writeTruncate(const std::vector<char>& data) {
+    bool DiskOperations::writeTruncate(const std::vector<char>& data) {
         std::lock_guard<std::mutex> lock(opMutex_);
         file.clear();
         file.close();
@@ -158,24 +163,40 @@ namespace kc {
 
         if (!file.is_open()) {
             LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed: Unable to reopen file (", path_, ")"));
-            return;
+            return false;
         }
 
         file.write(data.data(), static_cast<std::streamsize>(data.size()));
 
         if (!file) {
             LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed: ", path_));
-            return;
+            file.clear();
+            file.close();
+            file.open(path_, mode_);
+            return false;
         }
 
         file.flush();
+
+        if (!file) {
+            LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed (flush): ", path_));
+            file.clear();
+            file.close();
+            file.open(path_, mode_);
+            return false;
+        }
+
         file.close();
 
         // Restore the original mode.
         file.open(path_, mode_);
 
-        if (!file.is_open())
+        if (!file.is_open()) {
             LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed: Unable to reopen file (", path_, ")"));
+            return false;
+        }
+
+        return true;
     }
 
     // Helper Methods

@@ -24,12 +24,12 @@ namespace kc {
         return disk_.list(directory, recursive);
     }
 
-    void IOTemplateBase::writeBytes(const std::string& path, const std::vector<char>& data) {
-        disk_.write(path, data);
+    bool IOTemplateBase::writeBytes(const std::string& path, const std::vector<char>& data) {
+        return disk_.write(path, data);
     }
 
-    void IOTemplateBase::writeBytes(const std::string& path, std::size_t offset, const std::vector<char>& data) {
-        disk_.writeAt(path, offset, data);
+    bool IOTemplateBase::writeBytes(const std::string& path, std::size_t offset, const std::vector<char>& data) {
+        return disk_.writeAt(path, offset, data);
     }
 
     void IOTemplateBase::appendText(const std::string& path, const std::string& text) {

@@ -33,9 +33,11 @@ namespace kc {
             return readHeader(path, &value, sizeof(T), missing);
         }
 
-        // Write
-        void writeBytes(const std::string& path, const std::vector<char>& data);
-        void writeBytes(const std::string& path, std::size_t offset, const std::vector<char>& data);
+        // Write. Both return true only when the bytes (and the flush) reached
+        // the stream without error, so a template can keep staged data until a
+        // save is confirmed.
+        bool writeBytes(const std::string& path, const std::vector<char>& data);
+        bool writeBytes(const std::string& path, std::size_t offset, const std::vector<char>& data);
         void writeLines(const std::string& path, const std::vector<std::string>& lines);
         void appendText(const std::string& path, const std::string& text);
 

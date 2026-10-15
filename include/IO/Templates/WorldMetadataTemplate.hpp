@@ -145,8 +145,8 @@ namespace kc {
             pending_ = true;
         }
 
-        void flush() {
-            if (!pending_) return;
+        bool flush() {
+            if (!pending_) return true;
 
             // Write back the values actually in use, so a hand-edited dial that
             // had to be clamped (see clampToValidRanges) reads back correctly.
@@ -174,8 +174,10 @@ namespace kc {
             out << "#PY " << writeFloat(metadata_.yaw) << ' ' << writeFloat(metadata_.pitch) << '\n';
 
             std::string text = out.str();
-            writeBytes(worldPath, std::vector<char>(text.begin(), text.end()));
+            if (!writeBytes(worldPath, std::vector<char>(text.begin(), text.end())))
+                return false;   // keep pending_ so the metadata is retried
             pending_ = false;
+            return true;
         }
 
     private:

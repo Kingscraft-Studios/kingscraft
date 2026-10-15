@@ -177,8 +177,14 @@ namespace kc {
         std::condition_variable prefetchCV_;
         std::mutex prefetchMutex_;
         std::deque<std::pair<int,int>> prefetchQueue_;             // keys awaiting a load
-        std::unordered_set<uint64_t> prefetchKeys_;               // queued OR parked
+        std::unordered_set<uint64_t> prefetchKeys_;               // queued OR loading OR parked
+        std::unordered_set<uint64_t> prefetchLoading_;            // keys the worker is currently loading
         std::unordered_map<uint64_t, BlockDataPtr> prefetchCache_; // parked grids
+
+        // Prefetch statistics (R4)
+        std::atomic<uint64_t> prefetchHits_{0};
+        std::atomic<uint64_t> prefetchQueuedCancels_{0};
+        std::atomic<uint64_t> prefetchInflightCancels_{0};
 
         // Streaming throughput counters. Generation is now several threads and
         // meshing is still one, so the interesting question after this change is
@@ -192,6 +198,8 @@ namespace kc {
         // need no synchronisation of their own.
         uint64_t lastGenCount_ = 0;
         uint64_t lastMeshCount_ = 0;
+        uint64_t lastRegionLoads_ = 0;
+        uint64_t lastRegionLockWaitNs_ = 0;
         void logThroughput();
 
         std::mutex queueMutex_;   // guards the hand-off queues both threads share

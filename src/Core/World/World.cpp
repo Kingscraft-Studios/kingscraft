@@ -561,8 +561,37 @@ namespace kc {
         const uint64_t gen = genChunksDone_.load(std::memory_order_relaxed);
         const uint64_t mesh = meshChunksDone_.load(std::memory_order_relaxed);
 
+        const uint64_t dGen = gen >= lastGenCount_ ? gen - lastGenCount_ : 0;
+        const uint64_t dMesh = mesh >= lastMeshCount_ ? mesh - lastMeshCount_ : 0;
+
+        // Region-load contention and prefetch effectiveness (R4): measured over
+        // the same window so a change can be judged rather than guessed.
+        auto& regions = IO::Get().getBuiltinTemplates().getRegionTemplate();
+        const uint64_t loads = regions.getLoadCalls();
+        const uint64_t lockWaitNs = regions.getLoadLockWaitNs();
+        const uint64_t dLoads = loads >= lastRegionLoads_ ? loads - lastRegionLoads_ : 0;
+        const uint64_t dLockWaitNs = lockWaitNs >= lastRegionLockWaitNs_
+                                     ? lockWaitNs - lastRegionLockWaitNs_ : 0;
+
+        const uint64_t hits = prefetchHits_.load(std::memory_order_relaxed);
+        const uint64_t qCancel = prefetchQueuedCancels_.load(std::memory_order_relaxed);
+        const uint64_t iCancel = prefetchInflightCancels_.load(std::memory_order_relaxed);
+
+        if (dLoads > 0) {
+            LogUtils::info(ThreadName::Engine,
+                StringUtils::build("Chunk throughput: gen=", static_cast<unsigned long long>(dGen),
+                                   "/s mesh=", static_cast<unsigned long long>(dMesh),
+                                   "/s | regionLoads=", static_cast<unsigned long long>(dLoads),
+                                   " lockWaitUs=", static_cast<unsigned long long>(dLockWaitNs / 1000),
+                                   " | prefetch hit=", static_cast<unsigned long long>(hits),
+                                   " qCancel=", static_cast<unsigned long long>(qCancel),
+                                   " iCancel=", static_cast<unsigned long long>(iCancel)));
+        }
+
         lastGenCount_ = gen;
         lastMeshCount_ = mesh;
+        lastRegionLoads_ = loads;
+        lastRegionLockWaitNs_ = lockWaitNs;
     }
 
     // Mesher thread: owns every meshing task. User block-edit rebuilds first
@@ -807,6 +836,8 @@ namespace kc {
                 if (!prefetchRunning_) break;
                 task = prefetchQueue_.front();
                 prefetchQueue_.pop_front();
+                uint64_t tkey = makeChunkKey(task.first, task.second);
+                prefetchLoading_.insert(tkey);
             }
 
             const int gx = task.first;
@@ -822,21 +853,47 @@ namespace kc {
                 std::make_shared<const std::vector<uint64_t>>(std::move(blockIds));
 
             std::lock_guard<std::mutex> lock(prefetchMutex_);
-            // Evicted, or already claimed for rendering, while this was loading:
-            // do not park a grid nobody is waiting for.
-            if (!prefetchKeys_.count(key)) continue;
-            prefetchCache_[key] = std::move(grid);
+            prefetchLoading_.erase(key);
+            // If the key was removed (claimed/cancelled/evicted), drop the grid.
+            if (prefetchKeys_.count(key)) {
+                prefetchCache_[key] = std::move(grid);
+            } else {
+                // Discard: either cancelled by a real request or evicted.
+            }
         }
     }
 
     BlockDataPtr World::takePrefetched(uint64_t key) {
         std::lock_guard<std::mutex> lock(prefetchMutex_);
         auto it = prefetchCache_.find(key);
-        if (it == prefetchCache_.end()) return nullptr;
-        BlockDataPtr data = std::move(it->second);
-        prefetchCache_.erase(it);
-        prefetchKeys_.erase(key);
-        return data;
+        if (it != prefetchCache_.end()) {
+            BlockDataPtr data = std::move(it->second);
+            prefetchCache_.erase(it);
+            prefetchKeys_.erase(key);
+            prefetchHits_.fetch_add(1, std::memory_order_relaxed);
+            return data;
+        }
+        if (prefetchKeys_.count(key)) {
+            // Queued or currently loading: cancel the speculative work so it is
+            // not duplicated; the caller falls back to the normal load path.
+            if (prefetchLoading_.count(key)) {
+                prefetchInflightCancels_.fetch_add(1, std::memory_order_relaxed);
+            } else {
+                prefetchQueuedCancels_.fetch_add(1, std::memory_order_relaxed);
+            }
+            prefetchKeys_.erase(key);
+            // Remove from queue if it is still there.
+            for (auto qit = prefetchQueue_.begin(); qit != prefetchQueue_.end();) {
+                if (makeChunkKey(qit->first, qit->second) == key) {
+                    qit = prefetchQueue_.erase(qit);
+                    break;
+                } else {
+                    ++qit;
+                }
+            }
+            // Note: if it is loading, the worker will drop its result.
+        }
+        return nullptr;
     }
 
     void World::processCompletedChunks() {
@@ -1039,6 +1096,12 @@ namespace kc {
                     prefetchCache_.erase(k);
                     prefetchKeys_.erase(k);
                 }
+            }
+            // Purge queued entries that were cancelled/evicted.
+            for (auto it = prefetchQueue_.begin(); it != prefetchQueue_.end();) {
+                uint64_t kq = makeChunkKey(it->first, it->second);
+                if (!prefetchKeys_.count(kq)) it = prefetchQueue_.erase(it);
+                else ++it;
             }
         }
 

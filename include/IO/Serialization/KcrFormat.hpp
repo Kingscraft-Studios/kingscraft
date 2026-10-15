@@ -18,7 +18,8 @@ namespace kc::kcr {
     //
     //   r.<regX>.<regZ>.kcr
     //     KcrHeader  (32 bytes)
-    //     DirEntry[1024]  (24 bytes each, index = localX + localZ * 32)
+    //     DirEntry[1024]  (24 bytes each, index = localX + localZ * 32;
+    //                      reserved bytes carry a per-entry CRC32)
     //     records...  (KCH header + payload)
     //
     // All fields are explicit little-endian; nothing is a raw struct dump.
@@ -33,7 +34,6 @@ namespace kc::kcr {
     inline constexpr int CHUNK_STRIDE = REGION_SIZE * REGION_SIZE;       // 1024 slots
 
     inline constexpr uint8_t FLAG_PRESENT = 0x01;
-
     // Chunk state, mirroring the reserved header field (unused until a later
     // phase decides storage behaviour from it).
     inline constexpr uint8_t CHUNK_STATE_GENERATED = 0;
@@ -94,21 +94,52 @@ namespace kc::kcr {
         return true;
     }
 
+    // CRC32 (IEEE 802.3, reflected).
+    inline uint32_t crc32(const void* data, std::size_t n) {
+        const unsigned char* p = static_cast<const unsigned char*>(data);
+        uint32_t crc = 0xFFFFFFFFu;
+        for (std::size_t i = 0; i < n; ++i) {
+            crc ^= p[i];
+            for (int b = 0; b < 8; ++b)
+                crc = (crc & 1u) ? ((crc >> 1) ^ 0xEDB88320u) : (crc >> 1);
+        }
+        return ~crc;
+    }
+
+    inline uint32_t dirEntryCrc(uint64_t offset, uint32_t size, uint32_t rawSize, uint8_t flags) {
+        unsigned char buf[17];
+        for (int i = 0; i < 8; ++i) buf[i]      = static_cast<unsigned char>((offset  >> (8 * i)) & 0xFF);
+        for (int i = 0; i < 4; ++i) buf[8 + i]  = static_cast<unsigned char>((size    >> (8 * i)) & 0xFF);
+        for (int i = 0; i < 4; ++i) buf[12 + i] = static_cast<unsigned char>((rawSize >> (8 * i)) & 0xFF);
+        buf[16] = flags;
+        return crc32(buf, sizeof(buf));
+    }
+
     inline void writeDirEntry(BinaryWriter& w, const DirEntry& e) {
         w.u64(e.offset);
         w.u32(e.size);
         w.u32(e.rawSize);
         w.u8(e.flags);
-        for (int i = 0; i < 7; ++i) w.u8(0);   // reserved pad -> 24 bytes
+        w.u32(dirEntryCrc(e.offset, e.size, e.rawSize, e.flags));
+        for (int i = 0; i < 3; ++i) w.u8(0);   // reserved pad -> 24 bytes
     }
 
-    inline bool readDirEntry(BinaryReader& r, DirEntry& e) {
+    // Reads one directory entry. crcOk is false when the entry carries a
+    // checksum that does not match its bytes (torn/corrupt write); a stored
+    // checksum of 0 means a legacy entry written before checksums existed and is
+    // accepted after the caller's own bounds checks.
+    inline bool readDirEntry(BinaryReader& r, DirEntry& e, bool& crcOk) {
+        crcOk = true;
         if (!r.u64(e.offset)) return false;
         if (!r.u32(e.size)) return false;
         if (!r.u32(e.rawSize)) return false;
         if (!r.u8(e.flags)) return false;
+        uint32_t stored = 0;
+        if (!r.u32(stored)) return false;
         uint8_t tmp = 0;
-        for (int i = 0; i < 7; ++i) if (!r.u8(tmp)) return false;
+        for (int i = 0; i < 3; ++i) if (!r.u8(tmp)) return false;
+        if (stored != 0 && stored != dirEntryCrc(e.offset, e.size, e.rawSize, e.flags))
+            crcOk = false;
         return true;
     }
 
@@ -169,6 +200,11 @@ namespace kc::kcr {
 
         if (h.chunkX != expectX || h.chunkZ != expectZ) return false;
         if (h.payloadSize > r.remaining()) return false;
+        // A record is exactly its header plus its declared payload. Any trailing
+        // bytes mean the directory size and the record disagree: reject rather
+        // than silently hand back a truncated/short payload.
+        if (CHUNK_HEADER_SIZE + static_cast<std::size_t>(h.payloadSize) != recordSize)
+            return false;
 
         outPayload.assign(record + r.position(), record + r.position() + h.payloadSize);
         return true;
