@@ -23,6 +23,8 @@ namespace kc {
         std::optional<std::vector<char>> readBytes(const std::string& path, std::size_t offset, std::size_t size, MissingFile missing = MissingFile::Ignore);
         std::optional<std::vector<std::string>> readLines(const std::string& path, MissingFile missing = MissingFile::Ignore);
         bool readHeader(const std::string& path, void* header, std::size_t headerSize, MissingFile missing = MissingFile::Ignore);
+        // Size of a file in bytes; 0 when the file is missing.
+        std::size_t fileSize(const std::string& path, MissingFile missing = MissingFile::Ignore);
         std::vector<std::string> listFiles(const std::string& directory, bool recursive = true) const;
 
         template <typename T>

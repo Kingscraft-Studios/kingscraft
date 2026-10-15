@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
 """Terrain analyzer for Kingscraft region dumps.
 
-Parses world/regions/r.<rx>.<rz>.txt (ChunkTemplate block-grid layout) into a
+Parses world/regions/r.<rx>.<rz>.kcr (the KCR-1 binary region container) into a
 per-column surface model and prints a text-based terrain report: height stats,
 exposed surface material composition, cliff detector, ASCII heightmap/material
 maps and cross-section strips. No image output, and no third-party packages --
 this only uses the Python standard library, so it runs anywhere the game runs.
+
+FILE FORMAT (KCR-1, see include/IO/Serialization/KcrFormat.hpp)
+    r.<regX>.<regZ>.kcr =
+        KcrHeader (32 bytes: magic "KCR\\x01", u16 version, i32 regionX,
+                   i32 regionZ, u32 chunkCount, reserved[3], u16 pad)
+        DirEntry[1024] (24 bytes each: u64 offset, u32 size, u32 rawSize,
+                        u8 flags, 7 bytes pad; index = localX + localZ*32)
+        chunk records, each = KCH header (22 bytes: magic "KCH\\x01",
+                   u16 version, i32 chunkX, i32 chunkZ, u8 state, u8 flags,
+                   u16 payloadVersion, u32 payloadSize) + payload bytes.
+    All fields little-endian. The payload is still the ChunkTemplate text grid
+    (the "@F1" RLE rows), byte-identical to the old .txt chunk body.
 
 Run after exploring with the F5 save-all toggle ON:
 
@@ -42,7 +54,19 @@ IMPORTANT: --miny
 import argparse
 import glob
 import os
+import struct
 import sys
+
+# KCR-1 container layout (must match include/IO/Serialization/KcrFormat.hpp).
+KCR_MAGIC = b"KCR\x01"
+KCH_MAGIC = b"KCH\x01"
+REGION_HEADER_SIZE = 32
+DIR_ENTRY_SIZE = 24
+CHUNK_HEADER_SIZE = 22
+CHUNK_STRIDE = 32 * 32
+DIRECTORY_SIZE = CHUNK_STRIDE * DIR_ENTRY_SIZE
+REGION_DATA_OFFSET = REGION_HEADER_SIZE + DIRECTORY_SIZE
+FLAG_PRESENT = 0x01
 
 FNV_OFFSET = 1469598103934665603
 FNV_PRIME = 1099511628211
@@ -119,7 +143,7 @@ def find_region_files(world_dir):
     ]
     files = []
     for base in candidates:
-        files = sorted(glob.glob(os.path.join(base, "r.*.txt")))
+        files = sorted(glob.glob(os.path.join(base, "r.*.kcr")))
         if files:
             break
     return files
@@ -129,8 +153,9 @@ def decode_row(tokens, chunk_size, rle):
     """One grid row of chunk_size cells -> list of uint64, or None if malformed.
 
     A row is either 16 flat hex tokens (the original encoding) or a list of
-    "<count>x<hex>" run tokens, selected by the "@F1" marker line the chunk
-    carries just after its "#C" tag.
+    "<count>x<hex>" run tokens, selected by the "@F1" marker line at the top of
+    the payload. (Chunk identity now comes from the KCH record header, not from
+    a "#C" line, so the payload has no tag lines to carry it.)
 
     Every well-formed row is returned, INCLUDING all-air ones: rows have to keep
     their slot in the list or the row index stops lining up with local Y.
@@ -151,38 +176,66 @@ def decode_row(tokens, chunk_size, rle):
     return cells
 
 
+def decode_payload(text, chunk_size):
+    """ChunkTemplate payload text -> [row or None, ...] in local-Y order.
+
+    Mirrors ChunkTemplate::deserialize: '#' lines are ignored, a '@F<n>' line
+    selects the cell encoding, and every other line is one grid row. Rows keep
+    their slot in order so the row index still lines up with local Y.
+    """
+    rows = []
+    rle = False
+    for line in text.split("\n"):
+        if not line:
+            continue
+        if line[0] == "#":
+            continue
+        if line[0] == "@":
+            rle = len(line) >= 3 and line[1] == "F" and line[2] == "1"
+            continue
+        row = decode_row(line.split(), chunk_size, rle)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def parse_region_file(path, chunk_size):
+    """Read one .kcr file -> [(chunkX, chunkZ, rows), ...].
+
+    Corrupt regions or directory entries are skipped individually rather than
+    aborting the run, so one bad file cannot hide the rest of the dump.
+    """
+    with open(path, "rb") as fh:
+        data = fh.read()
+    if len(data) < REGION_DATA_OFFSET or data[0:4] != KCR_MAGIC:
+        return []
+
+    out = []
+    for i in range(CHUNK_STRIDE):
+        base = REGION_HEADER_SIZE + i * DIR_ENTRY_SIZE
+        e_off, e_size, _e_raw, e_flags = struct.unpack_from("<QIIB", data, base)
+        if not (e_flags & FLAG_PRESENT) or e_size == 0:
+            continue
+        if e_off < REGION_DATA_OFFSET or e_off + e_size > len(data):
+            continue
+        rec = data[e_off:e_off + e_size]
+        if len(rec) < CHUNK_HEADER_SIZE or rec[0:4] != KCH_MAGIC:
+            continue
+        gx, gz = struct.unpack_from("<ii", rec, 6)
+        payload_size, = struct.unpack_from("<I", rec, 18)
+        if CHUNK_HEADER_SIZE + payload_size > len(rec):
+            continue
+        payload = rec[CHUNK_HEADER_SIZE:CHUNK_HEADER_SIZE + payload_size]
+        rows = decode_payload(payload.decode("utf-8", "replace"), chunk_size)
+        out.append((gx, gz, rows))
+    return out
+
+
 def parse_regions(files, chunk_size, world_height):
-    """-> {(gridX, gridZ): [row or None, ...]} with rows in local-Y order."""
+    """-> {(gridX, gridZ): (heights, surface, soil, valid)} across all files."""
     chunks = {}
     for path in files:
-        gx = gz = None
-        rows = []
-        rle = False
-        for raw in open(path, "r", encoding="utf-8"):
-            line = raw.rstrip("\r\n")
-            if not line:
-                continue
-            if line[0] == "#":
-                parts = line.split()
-                if parts[0] == "#R":
-                    continue
-                if parts[0] == "#C":
-                    if gx is not None and rows:
-                        store_chunk(chunks, gx, gz, rows, chunk_size, world_height)
-                    gx, gz = int(parts[1]), int(parts[2])
-                    rows = []
-                    rle = False
-                continue
-            if line[0] == "@":
-                # Cell-encoding marker, e.g. "@F1" for run-length rows.
-                rle = len(line) >= 3 and line[1] == "F" and line[2] == "1"
-                continue
-            row = decode_row(line.split(), chunk_size, rle)
-            # A malformed row is dropped rather than stored, but every valid row
-            # -- air included -- takes exactly one slot so row index == local Y.
-            if row is not None:
-                rows.append(row)
-        if gx is not None and rows:
+        for gx, gz, rows in parse_region_file(path, chunk_size):
             store_chunk(chunks, gx, gz, rows, chunk_size, world_height)
     return chunks
 

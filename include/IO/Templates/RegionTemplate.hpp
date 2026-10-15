@@ -1,37 +1,50 @@
 #pragma once
 #include "IOTemplateBase.hpp"
 #include "ChunkTemplate.hpp"
+#include "IO/Serialization/KcrFormat.hpp"
+#include "Renderer/RendererSettings.hpp"
+#include "Util/LogUtils.hpp"
+#include "Util/StringUtils.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace kc {
-    // Stores 32x32 chunks in one file. Chunk identity lives on a "#C <gx> <gz>"
-    // tag line; the block-grid text that follows it is exactly what
-    // ChunkTemplate::serialize produces.
+    // Stores 32x32 chunks in one binary file. Chunk identity lives in the
+    // region directory (index = localX + localZ * 32) plus a per-chunk "KCH"
+    // header, replacing the old "#R"/"#C" tag lines of the text format. The
+    // chunk payload itself is unchanged: it is exactly the bytes produced by
+    // ChunkTemplate::serialize.
     //
-    //   world/regions/r.<regX>.<regZ>.txt:
-    //     #R <regX> <regZ>
-    //     #C <gx> <gz>
-    //     <h*N block-grid lines, N chars each>
-    //     #C <gx2> <gz2>
-    //     ...
+    //   world/regions/r.<regX>.<regZ>.kcr:
+    //     KcrHeader
+    //     DirEntry[1024]        (one per chunk slot, FLAG_PRESENT when used)
+    //     <KCH header + text payload> records...
     //
     // regionX/Z use flooring division so negative chunk coords land right.
     //
-    // Performance model: a region file is read from disk at most ONCE (its
-    // text stays cached in memory for the session). Chunk lookups and edits
-    // splice the in-memory line buffer directly, and flush() writes each
-    // region file once per batch — never one full-file rewrite per chunk.
+    // Phase 2 = single-record random access:
+    //   read  -> cache only the 24 KB directory per region, then one
+    //            positional read of the one record asked for. The whole
+    //            region file is never read into memory, and a chunk that
+    //            was never saved costs a directory lookup and nothing else.
+    //   write -> append the dirty records at EOF and patch only their
+    //            directory entries; nothing already in the file is touched
+    //            (write only the chunk). The bytes of a chunk's previous
+    //            record are left as unreachable garbage the directory no
+    //            longer points at -- reclaiming them is Phase 4 compaction.
+    // The on-disk layout does not change, so Phase-1 files stay readable and
+    // tools/terrain_analyzer.py needs no change.
     class RegionTemplate final : public IOTemplateBase {
     public:
-        static constexpr int REGION_SIZE = 32;      // 32 x 32 chunks per region
+        static constexpr int REGION_SIZE = kcr::REGION_SIZE;      // 32 x 32 chunks per region
 
         explicit RegionTemplate(DiskLayer& disk, ChunkTemplate& chunkTemplate)
             : IOTemplateBase(disk), chunk_(chunkTemplate) {}
@@ -39,48 +52,66 @@ namespace kc {
         std::vector<uint64_t> load(int gridX, int gridZ) {
             std::lock_guard<std::mutex> lock(mutex_);
             uint64_t k = regionKeyOfChunk(gridX, gridZ);
+            uint32_t li = localIndex(gridX, gridZ);
 
-            // Staged-but-unflushed edits must be visible to readers.
+            // Staged-but-unflushed edits must be visible to readers. Checked
+            // first so reading back a just-queued save materializes nothing.
             auto pendingIt = pending_.find(k);
             if (pendingIt != pending_.end()) {
-                auto stagedIt = pendingIt->second.find(chunkKey(gridX, gridZ));
-                if (stagedIt != pendingIt->second.end()) {
-                    std::vector<char> payload(stagedIt->second.begin(), stagedIt->second.end());
-                    return chunk_.deserialize(payload);
-                }
+                auto stagedIt = pendingIt->second.find(li);
+                if (stagedIt != pendingIt->second.end())
+                    return decodeRecord(stagedIt->second.data(), stagedIt->second.size(),
+                                        gridX, gridZ);
             }
 
             RegionState& s = stateFor(k);
-            auto hit = s.tagIdx.find(chunkKey(gridX, gridZ));
-            if (hit == s.tagIdx.end()) return {};
 
-            std::string text = sliceChunkText(s, hit->second);
-            std::vector<char> payload(text.begin(), text.end());
-            return chunk_.deserialize(payload);
+            // Edited but not appended yet: the newest bytes are still in memory.
+            auto stagedRec = s.staged.find(li);
+            if (stagedRec != s.staged.end())
+                return decodeRecord(stagedRec->second.data(), stagedRec->second.size(),
+                                    gridX, gridZ);
+
+            // Clean chunk: directory lookup -> one positional read of the record.
+            const kcr::DirEntry& e = s.dir[li];
+            if (!(e.flags & kcr::FLAG_PRESENT) || e.size == 0)
+                return {};                       // never saved -> caller regenerates
+            if (e.offset < kcr::REGION_DATA_OFFSET)
+                return {};                       // impossible for a real record
+
+            const std::string path = builtPath(regionXOfKey(k), regionZOfKey(k));
+            const std::size_t fsize = fileSize(path);
+            // The file only grows in-process, so this only trips on external
+            // truncation. Fail safe (regenerate) instead of reading a short record.
+            if (e.offset > fsize || e.size > fsize - e.offset)
+                return {};
+
+            auto rec = readBytes(path, e.offset, e.size);
+            if (!rec) return {};
+            return decodeRecord(rec->data(), rec->size(), gridX, gridZ);
         }
 
         // Immediate write (rarely needed; most callers prefer queueSave + flush).
         void save(int gridX, int gridZ, const std::vector<uint64_t>& data) {
             std::lock_guard<std::mutex> lock(mutex_);
             uint64_t k = regionKeyOfChunk(gridX, gridZ);
-            pending_[k][chunkKey(gridX, gridZ)] = chunk_.serialize(data);
-            stateFor(k);      // pulls the edit into the region text
-            flushRegion(k);   // and hands it straight to disk
+            pending_[k][localIndex(gridX, gridZ)] = makeRecord(gridX, gridZ, data);
+            stateFor(k);      // pulls the edit into the region state
+            flushRegion(k);   // and appends it to the region file
         }
 
         // Stage a chunk for saving. Same chunk queued twice collapses to the
-        // newest text (only the last edit reaches disk). Memory-only: the
-        // disk is touched once per region by flush() — synchronous per-chunk
-        // rewrites of the whole region file here were the shutdown bottleneck.
+        // newest record (only the last edit reaches disk). Memory-only: the
+        // disk is touched once per region by flush().
         void queueSave(int gridX, int gridZ, const std::vector<uint64_t>& data) {
             std::lock_guard<std::mutex> lock(mutex_);
             uint64_t k = regionKeyOfChunk(gridX, gridZ);
-            pending_[k][chunkKey(gridX, gridZ)] = chunk_.serialize(data);
+            pending_[k][localIndex(gridX, gridZ)] = makeRecord(gridX, gridZ, data);
         }
 
-        // Write every dirty region file once. Idempotent: clean regions cost
-        // nothing, so calling this in a loop (or again right after) is cheap.
-        // This is the ONLY place disk writes happen now (IO::Shutdown).
+        // Append every dirty region's staged records. Idempotent: clean regions
+        // cost nothing, so calling this in a loop (or again right after) is
+        // cheap. This is the ONLY place disk writes happen now (IO::Shutdown).
         void flush() {
             std::lock_guard<std::mutex> lock(mutex_);
             std::vector<uint64_t> keys;
@@ -94,31 +125,66 @@ namespace kc {
 
     private:
         struct RegionState {
-            std::vector<std::string> lines;                  // whole region text, one string per line
-            std::unordered_map<uint64_t, int32_t> tagIdx;    // chunkKey -> index of its "#C" line
-            uint64_t accessStamp_ = 0;                       // LRU stamp, bumped on every stateFor use
-            bool loaded = false;
+            // Whole directory, cached so no chunk read re-reads it. Slots the
+            // file never used stay zero-filled (flags == 0). 24 KB per region.
+            std::array<kcr::DirEntry, kcr::CHUNK_STRIDE> dir{};
+            // Dirty records waiting to be appended: localIndex -> KCH record.
+            std::unordered_map<uint32_t, std::vector<char>> staged;
+            uint32_t presentCount = 0;   // slots with FLAG_PRESENT == header chunkCount
+            uint64_t accessStamp_ = 0;   // LRU stamp, bumped on every stateFor use
+            bool loaded = false;         // directory has been read (or file found absent)
+            bool headerOk = false;       // on-disk header exists and validated
             bool dirty = false;
         };
 
         ChunkTemplate& chunk_;
         std::mutex mutex_;
         std::unordered_map<uint64_t, RegionState> states_;
-        std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::string>> pending_;
+        std::unordered_map<uint64_t, std::unordered_map<uint32_t, std::vector<char>>> pending_;
         uint64_t accessCounter_ = 0;
+
+        // Encode a chunk's block grid through the (unchanged) text codec and
+        // wrap it in a KCH record.
+        std::vector<char> makeRecord(int gridX, int gridZ, const std::vector<uint64_t>& data) {
+            std::string text = chunk_.serialize(data);
+            std::vector<char> payload(text.begin(), text.end());
+            return kcr::buildChunkRecord(gridX, gridZ, kcr::CHUNK_STATE_MODIFIED,
+                                         static_cast<uint16_t>(ChunkTemplate::RLE_VERSION),
+                                         payload);
+        }
+
+        // Shared tail of every read: validate the KCH header (magic, version and
+        // the duplicated chunk coords) and hand the payload to the text codec.
+        std::vector<uint64_t> decodeRecord(const char* record, std::size_t recordSize,
+                                           int gridX, int gridZ) {
+            std::vector<char> payload;
+            if (!kcr::extractChunkPayload(record, recordSize, gridX, gridZ, payload)) {
+                LogUtils::warn(ThreadName::Engine,
+                    StringUtils::build("KCR bad chunk record, ignoring (", gridX, ",",
+                                        gridZ, ")"));
+                return {};
+            }
+            return chunk_.deserialize(payload);
+        }
 
         static uint64_t regionKey(int regX, int regZ) {
             return (static_cast<uint64_t>(static_cast<int64_t>(regX)) << 32) |
                    (static_cast<uint64_t>(static_cast<int64_t>(regZ)) & 0xFFFFFFFF);
         }
 
-        static uint64_t chunkKey(int gx, int gz) {
-            return (static_cast<uint64_t>(static_cast<int64_t>(gx)) << 32) |
-                   (static_cast<uint64_t>(static_cast<int64_t>(gz)) & 0xFFFFFFFF);
+        static int regionXOfKey(uint64_t k) { return static_cast<int>(static_cast<int64_t>(k >> 32)); }
+        static int regionZOfKey(uint64_t k) {
+            return static_cast<int>(static_cast<int32_t>(k & 0xFFFFFFFF));
         }
 
         static uint64_t regionKeyOfChunk(int gridX, int gridZ) {
             return regionKey(floorDiv(gridX, REGION_SIZE), floorDiv(gridZ, REGION_SIZE));
+        }
+
+        static uint32_t localIndex(int gridX, int gridZ) {
+            int lx = gridX - floorDiv(gridX, REGION_SIZE) * REGION_SIZE;
+            int lz = gridZ - floorDiv(gridZ, REGION_SIZE) * REGION_SIZE;
+            return static_cast<uint32_t>(lx + lz * REGION_SIZE);
         }
 
         static int floorDiv(int a, int b) {
@@ -129,24 +195,17 @@ namespace kc {
         }
 
         std::string builtPath(int regX, int regZ) {
-            return StringUtils::build("world/regions/r.", regX, ".", regZ, ".txt");
+            return StringUtils::build("world/regions/r.", regX, ".", regZ, ".kcr");
         }
 
-        // Lazily materialize + load a region, pull its staged edits in, and
-        // bound the in-memory cache. The returned reference stays valid until
-        // the next stateFor/erase call.
+        // Lazily materialize a region (header + directory only, 24 KB), pull its
+        // staged edits in, and bound the cache. The returned reference stays
+        // valid until the next stateFor/erase call.
         RegionState& stateFor(uint64_t k) {
             auto [it, inserted] = states_.try_emplace(k);
             RegionState& s = it->second;
             if (!s.loaded) {
-                int rX = static_cast<int>(k >> 32);
-                int rZ = static_cast<int>(k & 0xFFFFFFFF);
-                auto fileData = readBytes(builtPath(rX, rZ), MissingFile::Ignore);
-                if (!fileData || fileData->empty())
-                    s.lines = {StringUtils::build("#R ", rX, " ", rZ)};
-                else
-                    s.lines = splitLines(std::string(fileData->begin(), fileData->end()));
-                rebuildTagIndex(s);
+                loadDirectory(k, s);
                 s.loaded = true;
             }
             applyPending(k, s);
@@ -155,73 +214,164 @@ namespace kc {
             return s;
         }
 
+        // Read just the 24 KB header+directory of a region and cache it. A
+        // missing file is a brand-new region (no error). Corrupt, truncated or
+        // wrong-coords files are rejected with a warning and treated as empty
+        // rather than crashing.
+        void loadDirectory(uint64_t k, RegionState& s) {
+            int rX = regionXOfKey(k);
+            int rZ = regionZOfKey(k);
+            const std::string path = builtPath(rX, rZ);
+
+            const std::size_t size = fileSize(path);
+            if (size == 0) return;   // brand-new region
+            if (size < kcr::REGION_DATA_OFFSET) {
+                LogUtils::warn(ThreadName::Engine,
+                    StringUtils::build("KCR too small, ignoring (r.", rX, ".", rZ, ".kcr)"));
+                return;
+            }
+
+            auto head = readBytes(path, 0, kcr::REGION_DATA_OFFSET);
+            if (!head || head->size() < kcr::REGION_DATA_OFFSET) {
+                LogUtils::warn(ThreadName::Engine,
+                    StringUtils::build("KCR header read failed (r.", rX, ".", rZ, ".kcr)"));
+                return;
+            }
+
+            BinaryReader r(head->data(), head->size());
+            kcr::KcrHeader h;
+            if (!kcr::readRegionHeader(r, h)) {
+                LogUtils::warn(ThreadName::Engine,
+                    StringUtils::build("KCR bad header, ignoring (r.", rX, ".", rZ, ".kcr)"));
+                return;
+            }
+            if (h.regionX != rX || h.regionZ != rZ) {
+                LogUtils::warn(ThreadName::Engine,
+                    StringUtils::build("KCR region coords mismatch, ignoring (r.", rX, ".",
+                                        rZ, ".kcr)"));
+                return;
+            }
+            s.headerOk = true;
+
+            for (std::size_t i = 0; i < kcr::CHUNK_STRIDE; ++i) {
+                kcr::DirEntry& e = s.dir[i];
+                // Can't fail: the buffer is exactly header + directory.
+                if (!kcr::readDirEntry(r, e)) break;
+                if (!(e.flags & kcr::FLAG_PRESENT) || e.size == 0) continue;
+                // Bounds against the file as it exists right now. The file only
+                // grows in this process, so an out-of-range entry here is on-disk
+                // corruption: report it and empty the slot instead of trusting it.
+                if (e.offset < kcr::REGION_DATA_OFFSET || e.offset > size ||
+                    e.size > size - e.offset) {
+                    LogUtils::warn(ThreadName::Engine,
+                        StringUtils::build("KCR bad directory entry ", i, " (r.", rX, ".",
+                                            rZ, ".kcr)"));
+                    e = kcr::DirEntry{};
+                    continue;
+                }
+                ++s.presentCount;
+            }
+        }
+
         void flushRegion(uint64_t k) {
             RegionState& s = stateFor(k);
             if (s.dirty) persistRegion(k, s);
         }
 
+        // Append-only persist (phase 2): write only the dirty chunks. Steps in
+        // crash-safe order -- records first, then the directory, then the header
+        // count -- so an interrupted save leaves the previous directory (and the
+        // records it points at) intact.
         void persistRegion(uint64_t k, RegionState& s) {
-            if (!s.dirty) return;
-            std::string out;
-            for (const auto& line : s.lines) {
-                if (!out.empty()) out += '\n';
-                out += line;
+            if (s.staged.empty()) { s.dirty = false; return; }
+
+            int rX = regionXOfKey(k);
+            int rZ = regionZOfKey(k);
+            const std::string path = builtPath(rX, rZ);
+
+            // Step 0: make sure a valid header + directory exist to append into.
+            // Rebuild covers three cases: missing file, truncated file, and a
+            // header that failed validation on load (otherwise we'd append into
+            // a container whose magic/coords are still wrong and unreadable).
+            std::size_t base = fileSize(path);
+            if (base < kcr::REGION_DATA_OFFSET || !s.headerOk) {
+                if (base > kcr::REGION_DATA_OFFSET)
+                    LogUtils::warn(ThreadName::Engine,
+                        StringUtils::build("KCR invalid header, rebuilding (r.", rX, ".", rZ,
+                                            ".kcr)"));
+                else if (base > 0)
+                    LogUtils::warn(ThreadName::Engine,
+                        StringUtils::build("KCR truncated, rebuilding (r.", rX, ".", rZ,
+                                            ".kcr)"));
+                // The cache is rebuilt with the file: unreadable old slots are gone.
+                s.dir = {};
+                s.presentCount = 0;
+                kcr::KcrHeader h;
+                h.regionX = rX;
+                h.regionZ = rZ;
+                h.chunkCount = s.presentCount;
+                std::vector<char> fresh;
+                fresh.reserve(kcr::REGION_DATA_OFFSET);
+                BinaryWriter w(fresh);
+                kcr::writeRegionHeader(w, h);
+                fresh.insert(fresh.end(), kcr::DIRECTORY_SIZE, 0);
+                writeBytes(path, fresh);           // truncate + write: header + zeroed dir
+                base = kcr::REGION_DATA_OFFSET;
+                s.headerOk = true;
             }
-            int rX = static_cast<int>(k >> 32);
-            int rZ = static_cast<int>(k & 0xFFFFFFFF);
-            writeBytes(builtPath(rX, rZ), std::vector<char>(out.begin(), out.end()));
+
+            // Step 1: append the staged records contiguously at EOF.
+            std::vector<uint32_t> indices;
+            indices.reserve(s.staged.size());
+            for (const auto& [li, rec] : s.staged) indices.push_back(li);
+            std::sort(indices.begin(), indices.end());
+
+            std::size_t blobSize = 0;
+            for (uint32_t li : indices) blobSize += s.staged[li].size();
+            std::vector<char> blob;
+            blob.reserve(blobSize);
+
+            for (uint32_t li : indices) {
+                const std::vector<char>& rec = s.staged[li];
+                kcr::DirEntry& e = s.dir[li];
+                e.offset = base + blob.size();
+                e.size = static_cast<uint32_t>(rec.size());
+                e.rawSize = e.size;
+                if (!(e.flags & kcr::FLAG_PRESENT)) {
+                    e.flags = kcr::FLAG_PRESENT;
+                    ++s.presentCount;
+                }
+                blob.insert(blob.end(), rec.begin(), rec.end());
+            }
+            writeBytes(path, base, blob);
+
+            // Step 2: patch the whole directory (one write) so every slot's
+            // offset is exact, then step 3: the header's chunkCount.
+            writeBytes(path, kcr::REGION_HEADER_SIZE,
+                       kcr::serializeDirectory(s.dir.data(), s.dir.size()));
+            std::vector<char> countBytes;
+            BinaryWriter cw(countBytes);
+            cw.u32(s.presentCount);
+            writeBytes(path, kcr::CHUNK_COUNT_OFFSET, countBytes);
+
+            s.staged.clear();
             s.dirty = false;
         }
 
         void applyPending(uint64_t k, RegionState& s) {
             auto pendingIt = pending_.find(k);
             if (pendingIt == pending_.end() || pendingIt->second.empty()) return;
-
-            struct Operation {
-                int32_t idx;                       // tag line index, or -1 to append
-                uint64_t ck;
-                std::string tag;
-                std::vector<std::string> data;
-            };
-            std::vector<Operation> ops;
-            ops.reserve(pendingIt->second.size());
-            for (const auto& [ck, text] : pendingIt->second) {
-                auto tagIt = s.tagIdx.find(ck);
-                ops.push_back(Operation{
-                    (tagIt != s.tagIdx.end()) ? tagIt->second : -1,
-                    ck,
-                    chunkTag(ck),
-                    splitLines(text)
-                });
-            }
-            // Replaces first (descending so earlier indices never shift), then
-            // appends (they only add at the end, invalidating nothing).
-            std::sort(ops.begin(), ops.end(),
-                      [](const Operation& a, const Operation& b) { return a.idx > b.idx; });
-
-            for (const auto& op : ops) {
-                if (op.idx >= 0) {
-                    int end = op.idx + 1;
-                    while (end < static_cast<int>(s.lines.size()) && !isDirective(s.lines[end])) ++end;
-                    s.lines.erase(s.lines.begin() + op.idx, s.lines.begin() + end);
-                    s.lines.insert(s.lines.begin() + op.idx, op.tag);
-                    s.lines.insert(s.lines.begin() + op.idx + 1, op.data.begin(), op.data.end());
-                    s.tagIdx[op.ck] = op.idx;
-                } else {
-                    int span = static_cast<int>(op.data.size());
-                    s.lines.push_back(op.tag);
-                    s.lines.insert(s.lines.end(), op.data.begin(), op.data.end());
-                    s.tagIdx[op.ck] = static_cast<int32_t>(s.lines.size() - span - 1);
-                }
+            for (auto& [li, record] : pendingIt->second) {
+                s.staged[li] = std::move(record);
             }
             s.dirty = true;
             pending_.erase(pendingIt);
         }
 
         // Evict the least-recently-used regions down to the configured cap
-        // (RendererSettings::regionCacheLimit). Dirty regions are persisted
-        // before their in-memory text is dropped. The just-touched region has
-        // the newest stamp and is never a target.
+        // (RendererSettings::regionCacheLimit). Staged records are appended to
+        // disk before their region is dropped. The just-touched region has the
+        // newest stamp and is never a target.
         void evictIfNeeded(uint64_t keep) {
             while (static_cast<int>(states_.size()) > RendererSettings::get().regionCacheLimit) {
                 uint64_t oldestKey = keep;
@@ -238,37 +388,6 @@ namespace kc {
                 if (it->second.dirty) persistRegion(oldestKey, it->second);
                 states_.erase(it);
             }
-        }
-
-        static std::string chunkTag(uint64_t ck) {
-            int gx = static_cast<int>(ck >> 32);
-            int gz = static_cast<int>(ck & 0xFFFFFFFF);
-            return StringUtils::build("#C ", gx, " ", gz);
-        }
-
-        static std::string sliceChunkText(const RegionState& s, int tagIndex) {
-            std::string out;
-            for (int j = tagIndex + 1; j < static_cast<int>(s.lines.size()) && !isDirective(s.lines[j]); ++j) {
-                out += s.lines[j];
-                out += '\n';
-            }
-            return out;
-        }
-
-        static void rebuildTagIndex(RegionState& s) {
-            s.tagIdx.clear();
-            for (int i = 0; i < static_cast<int>(s.lines.size()); ++i) {
-                int gx = 0, gz = 0;
-                if (parseChunkTag(s.lines[i], gx, gz))
-                    s.tagIdx[chunkKey(gx, gz)] = i;
-            }
-        }
-
-        static bool parseChunkTag(const std::string& line, int& gx, int& gz) {
-            std::istringstream iss(line);
-            std::string tag;
-            if (!(iss >> tag >> gx >> gz)) return false;
-            return tag == "#C";
         }
     };
 }

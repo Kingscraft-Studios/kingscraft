@@ -136,6 +136,7 @@ namespace kc {
         for (int i = 0; i < GEN_WORKERS; ++i)
             noiseDones_.push_back(WorkerPool::get().startWorker([this]() { noiseThreadFunc(); }));
         meshDone_ = WorkerPool::get().startWorker([this]() { meshThreadFunc(); });
+        prefetchDone_ = WorkerPool::get().startWorker([this]() { prefetchThreadFunc(); });
 
         // Start the throughput window at "now". Left at 0 the first log would
         // measure an interval of fifty years and report a nonsense rate.
@@ -173,9 +174,12 @@ namespace kc {
     World::~World() {
         noiseRunning_ = false;
         meshRunning_ = false;
+        prefetchRunning_ = false;
         noiseCV_.notify_all();
         meshCV_.notify_all();
+        prefetchCV_.notify_all();
         if (meshDone_.valid()) meshDone_.wait();
+        if (prefetchDone_.valid()) prefetchDone_.wait();
         for (auto& done : noiseDones_) if (done.valid()) done.wait();
 
         if (persistMetadata_) {
@@ -500,15 +504,22 @@ namespace kc {
             int gx = task.first;
             int gz = task.second;
 
-            // TODO: Using IO Sequentially isn't a great idea
-            auto blockIds = IO::Get().getBuiltinTemplates().getRegionTemplate().load(gx, gz);
-            if (blockIds.empty()) {
-                // Deterministic regeneration from the hardcoded seed. Not
-                // written back to disk — a chunk on disk means it was edited.
-                blockIds = terrainGen_.generateBlocks(gx, gz, chunkSize_, height_);
-            }
+            // A prefetched grid (Phase 3) already holds exactly what the disk
+            // load or the seed would produce, so consume it instead of redoing
+            // the work. Miss -> normal load/generate path.
+            BlockDataPtr prefetched = takePrefetched(makeChunkKey(gx, gz));
+            if (prefetched) {
+                std::lock_guard<std::mutex> lock(cacheMutex_);
+                blockCache_[makeChunkKey(gx, gz)] = std::move(prefetched);
+            } else {
+                // TODO: Using IO Sequentially isn't a great idea
+                auto blockIds = IO::Get().getBuiltinTemplates().getRegionTemplate().load(gx, gz);
+                if (blockIds.empty()) {
+                    // Deterministic regeneration from the hardcoded seed. Not
+                    // written back to disk — a chunk on disk means it was edited.
+                    blockIds = terrainGen_.generateBlocks(gx, gz, chunkSize_, height_);
+                }
 
-            {
                 std::lock_guard<std::mutex> lock(cacheMutex_);
                 blockCache_[makeChunkKey(gx, gz)] =
                     std::make_shared<const std::vector<uint64_t>>(std::move(blockIds));
@@ -779,6 +790,55 @@ namespace kc {
         }
     }
 
+    // Prefetch worker (Phase 3): fills prefetchCache_ with the ring just
+    // outside render distance so a chunk crossing into view skips its disk read
+    // / generation. Disk wins; the seed only fills what the overlay lacks, so
+    // the parked grid is byte-identical to what the normal load path produces.
+    // Results are parked here only — this thread never meshes or renders.
+    void World::prefetchThreadFunc() {
+        while (prefetchRunning_) {
+            std::pair<int, int> task;
+            {
+                std::unique_lock<std::mutex> lock(prefetchMutex_);
+                if (!prefetchCV_.wait_for(lock, std::chrono::milliseconds(50),
+                        [this]() { return !prefetchQueue_.empty() || !prefetchRunning_; })) {
+                    continue;
+                }
+                if (!prefetchRunning_) break;
+                task = prefetchQueue_.front();
+                prefetchQueue_.pop_front();
+            }
+
+            const int gx = task.first;
+            const int gz = task.second;
+            const uint64_t key = makeChunkKey(gx, gz);
+
+            // TODO: Using IO Sequentially isn't a great idea
+            auto blockIds = IO::Get().getBuiltinTemplates().getRegionTemplate().load(gx, gz);
+            if (blockIds.empty())
+                blockIds = terrainGen_.generateBlocks(gx, gz, chunkSize_, height_);
+
+            BlockDataPtr grid =
+                std::make_shared<const std::vector<uint64_t>>(std::move(blockIds));
+
+            std::lock_guard<std::mutex> lock(prefetchMutex_);
+            // Evicted, or already claimed for rendering, while this was loading:
+            // do not park a grid nobody is waiting for.
+            if (!prefetchKeys_.count(key)) continue;
+            prefetchCache_[key] = std::move(grid);
+        }
+    }
+
+    BlockDataPtr World::takePrefetched(uint64_t key) {
+        std::lock_guard<std::mutex> lock(prefetchMutex_);
+        auto it = prefetchCache_.find(key);
+        if (it == prefetchCache_.end()) return nullptr;
+        BlockDataPtr data = std::move(it->second);
+        prefetchCache_.erase(it);
+        prefetchKeys_.erase(key);
+        return data;
+    }
+
     void World::processCompletedChunks() {
         std::deque<ChunkGenResult> results;
         {
@@ -946,6 +1006,42 @@ namespace kc {
             unloadChunk(gx, gz);
         }
 
+        // Phase 3: drop parked/queued prefetch grids that have drifted outside
+        // the prefetch ring (or past the cache cap) so the set tracks the
+        // current center instead of growing. The worker re-checks membership
+        // before parking, so a grid caught mid-load is simply discarded.
+        {
+            std::lock_guard<std::mutex> plock(prefetchMutex_);
+            const int pr = renderDistance + 1;
+            for (auto it = prefetchKeys_.begin(); it != prefetchKeys_.end();) {
+                int gx = static_cast<int>(*it >> 32);
+                int gz = static_cast<int>(static_cast<int32_t>(*it & 0xFFFFFFFF));
+                if (std::abs(gx - centerX) > pr || std::abs(gz - centerZ) > pr) {
+                    prefetchCache_.erase(*it);
+                    it = prefetchKeys_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
+            const int cap = RendererSettings::get().prefetchCacheLimit;
+            if (cap > 0 && static_cast<int>(prefetchKeys_.size()) > cap) {
+                auto dist = [centerX, centerZ](uint64_t k) {
+                    int gx = static_cast<int>(k >> 32);
+                    int gz = static_cast<int>(static_cast<int32_t>(k & 0xFFFFFFFF));
+                    return std::max(std::abs(gx - centerX), std::abs(gz - centerZ));
+                };
+                std::vector<uint64_t> keys(prefetchKeys_.begin(), prefetchKeys_.end());
+                std::sort(keys.begin(), keys.end(),
+                    [&dist](uint64_t a, uint64_t b) { return dist(a) > dist(b); });
+                for (uint64_t k : keys) {
+                    if (static_cast<int>(prefetchKeys_.size()) <= cap) break;
+                    prefetchCache_.erase(k);
+                    prefetchKeys_.erase(k);
+                }
+            }
+        }
+
         // Load center 3x3 chunks synchronously on first update
         if (chunks_.empty()) {
             for (int gz = centerZ - HIGH_PRIO_RADIUS; gz <= centerZ + HIGH_PRIO_RADIUS; ++gz) {
@@ -1099,6 +1195,39 @@ namespace kc {
                         auto pb = unpack(b);
                         return rankChunk(pa.first, pa.second) < rankChunk(pb.first, pb.second);
                     });
+            }
+
+            // Phase 3: warm the ring just outside render distance. These grids
+            // are loaded (disk first, seed second) and parked, never meshed; a
+            // later real request claims them via takePrefetched(). Skipped when
+            // the chunk is already loaded, already queued for real, or already
+            // in the prefetch ring. Scanned every tick, so the per-frame budget
+            // only bounds a burst.
+            {
+                std::lock_guard<std::mutex> plock(prefetchMutex_);
+                const int pr = renderDistance + 1;
+                int pbudget = MAX_PREFETCH_PER_FRAME;
+                bool added = false;
+                auto tryPrefetch = [&](int px, int pz) {
+                    if (pbudget <= 0) return;
+                    uint64_t pkey = makeChunkKey(px, pz);
+                    if (chunks_.count(pkey)) return;
+                    if (pendingRequests_.count(pkey)) return;
+                    if (prefetchKeys_.count(pkey)) return;
+                    prefetchQueue_.push_back({px, pz});
+                    prefetchKeys_.insert(pkey);
+                    --pbudget;
+                    added = true;
+                };
+                for (int px = centerX - pr; px <= centerX + pr; ++px) {
+                    tryPrefetch(px, centerZ - pr);
+                    tryPrefetch(px, centerZ + pr);
+                }
+                for (int pz = centerZ - pr + 1; pz <= centerZ + pr - 1; ++pz) {
+                    tryPrefetch(centerX - pr, pz);
+                    tryPrefetch(centerX + pr, pz);
+                }
+                if (added) prefetchCV_.notify_one();
             }
         }
         // Wake every generator, not just one. With a single generator

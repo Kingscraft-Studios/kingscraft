@@ -39,7 +39,14 @@ namespace kc {
         int maxFps = 0; // 0 = None
 
         // IO / world storage
-        int regionCacheLimit = 16;  // max region texts kept in memory (LRU)
+        int regionCacheLimit = 16;  // max regions cached in memory (directory + staged edits, LRU)
+
+        // Streaming prefetch ring: the ring just outside render distance is
+        // loaded from disk (or generated from the seed) ahead of time and held
+        // in memory but never meshed or rendered, so a chunk crossing into view
+        // skips its disk read / generation. This caps how many such grids are
+        // kept; each is chunkSize*height*chunkSize*8 bytes (~768 KiB at 16x384).
+        int prefetchCacheLimit = 128;
 
         // Occlusion ray grid (screen-space)
         // Low=32x18, Medium=48x27, High=64x36, Ultra=96x54

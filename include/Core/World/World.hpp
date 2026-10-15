@@ -107,6 +107,12 @@ namespace kc {
         void loadChunkSync(int gridX, int gridZ);
         void noiseThreadFunc();
         void meshThreadFunc();
+        // Phase 3 prefetch ring: loads the ring just outside render distance and
+        // parks it in prefetchCache_ (never meshed/rendered). Runs on its own
+        // worker so speculative IO never steals a generation worker.
+        void prefetchThreadFunc();
+        // Moves a parked prefetch grid out for rendering (nullptr if none).
+        BlockDataPtr takePrefetched(uint64_t key);
         void markNeighborsForBorder(int gx, int gz);
         void queueGateRemesh(int gx, int gz, int gate);
         void processEditResults();
@@ -115,6 +121,9 @@ namespace kc {
         static constexpr int MAX_REQUESTS_PER_FRAME = 50;
         static constexpr int MAX_REMESH_PER_FRAME = 16;
         static constexpr int CLEANUP_DELAY = 4;
+        // Prefetch ring additions per frame (base ring enqueue budget). The
+        // ring is scanned every tick and deduped, so this only bounds a burst.
+        static constexpr int MAX_PREFETCH_PER_FRAME = 40;
 
         // How many threads generate chunk blocks at once.
         //
@@ -157,6 +166,19 @@ namespace kc {
         std::shared_future<void> meshDone_;
         std::atomic<bool> meshRunning_{true};
         std::condition_variable meshCV_;
+
+        // Prefetch worker (one thread). Speculative IO for the ring outside
+        // render distance; joined in the destructor. prefetchMutex_ guards the
+        // three prefetch containers together so a grid can never be parked
+        // without its key or vice versa. Nothing here is ever rendered until a
+        // real request claims it via takePrefetched().
+        std::shared_future<void> prefetchDone_;
+        std::atomic<bool> prefetchRunning_{true};
+        std::condition_variable prefetchCV_;
+        std::mutex prefetchMutex_;
+        std::deque<std::pair<int,int>> prefetchQueue_;             // keys awaiting a load
+        std::unordered_set<uint64_t> prefetchKeys_;               // queued OR parked
+        std::unordered_map<uint64_t, BlockDataPtr> prefetchCache_; // parked grids
 
         // Streaming throughput counters. Generation is now several threads and
         // meshing is still one, so the interesting question after this change is

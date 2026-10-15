@@ -15,6 +15,11 @@ namespace kc {
         return disk_.readData(path, offset, size, missing);
     }
 
+    std::size_t IOTemplateBase::fileSize(const std::string& path, MissingFile missing) {
+        auto size = disk_.size(path, missing);
+        return size.value_or(0);
+    }
+
     std::vector<std::string> IOTemplateBase::listFiles(const std::string& directory, bool recursive) const {
         return disk_.list(directory, recursive);
     }
