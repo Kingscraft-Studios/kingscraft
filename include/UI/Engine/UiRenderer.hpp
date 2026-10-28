@@ -5,8 +5,6 @@
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/Pipeline.hpp"
 #include "Vulkan/PipelineLayout.hpp"
-#include "Vulkan/RenderPass.hpp"
-#include "Vulkan/OffscreenTarget.hpp"
 #include "Vulkan/Image.hpp"
 #include "Vulkan/ImageView.hpp"
 #include "Vulkan/Sampler.hpp"
@@ -36,8 +34,9 @@ namespace kc {
         void shutdown();
         void resize(VkExtent2D extent);
 
-        void renderOffscreen(VkCommandBuffer cmd, UiBatchQueue& batchQueue, uint32_t frameIndex);
-        void composite(VkCommandBuffer cmd, uint32_t frameIndex);
+        // Draws the batched UI straight into the currently bound render pass
+        // (the world/menu target). No offscreen image, no fullscreen composite.
+        void render(VkCommandBuffer cmd, UiBatchQueue& batchQueue, uint32_t frameIndex);
         void setTargetRenderPass(VkRenderPass renderPass);
 
         void setFontAtlas(VkImageView imageView, VkSampler sampler);
@@ -51,7 +50,6 @@ namespace kc {
 
     private:
         void createPipeline();
-        void createCompositePipeline(VkRenderPass renderPass);
         void createDescriptorSetLayouts();
         void createDescriptorPools();
         void allocateDescriptorSets();
@@ -60,34 +58,28 @@ namespace kc {
         void createDummyTexture();
         void destroyDummyTexture();
         void updateUiDescriptorSet(uint32_t frameIndex);
-        void updateCompositeDescriptorSet(uint32_t frameIndex);
 
         Device& device_;
         DescriptorManager& descriptorManager_;
         VkExtent2D extent_;
         bool initialized_ = false;
 
-        // Offscreen resources
-        std::unique_ptr<RenderPass> offscreenRenderPass_;
-        std::unique_ptr<OffscreenTarget> offscreenTarget_;
+        // Render pass the UI pipeline is built against. The pipeline is created
+        // lazily on first use and rebuilt whenever the target pass changes.
+        VkRenderPass targetRenderPass_ = VK_NULL_HANDLE;
 
         // Pipelines
         std::unique_ptr<Pipeline> uiPipeline_;
-        std::unique_ptr<Pipeline> compositePipeline_;
         std::unique_ptr<PipelineLayout> pipelineLayout_;
-        std::unique_ptr<PipelineLayout> compositePipelineLayout_;
 
         // Descriptor set layouts
         std::unique_ptr<DescriptorSetLayout> uiDescriptorSetLayout_;
-        std::unique_ptr<DescriptorSetLayout> compositeDescriptorSetLayout_;
 
         // Descriptor pools
         std::unique_ptr<DescriptorPool> uiDescriptorPool_;
-        std::unique_ptr<DescriptorPool> compositeDescriptorPool_;
 
         // Descriptor sets (per frame-in-flight)
         std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> uiDescriptorSets_{};
-        std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> compositeDescriptorSets_{};
 
         // Uniform buffer (binding 0)
         std::unique_ptr<Buffer> uniformBuffer_;
@@ -97,7 +89,6 @@ namespace kc {
         VkSampler atlasSampler_ = VK_NULL_HANDLE;
         bool atlasDirty_ = false;
         uint32_t uiDescDirtyMask_ = 0;
-        uint32_t compositeDescDirtyMask_ = 0;
 
         // Deferred pipeline retirement
         struct RetiredPipeline {

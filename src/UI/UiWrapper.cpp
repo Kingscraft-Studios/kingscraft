@@ -127,7 +127,7 @@ namespace kc {
         (void)codepoint;
     }
 
-    void UiWrapper::renderOffscreen(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
+    void UiWrapper::build() {
         std::lock_guard<std::recursive_mutex> lock(uiMutex_);
         if (!engine_) return;
 
@@ -141,7 +141,7 @@ namespace kc {
             engine_->renderDebugOverlays(elements_);
         }
 
-        engine_->renderOffscreen(cmdBuffer, frameIndex);
+        engine_->buildFrame();
     }
 
     void UiWrapper::render(VkCommandBuffer cmdBuffer, VkRenderPass renderPass, uint32_t frameIndex) {
@@ -153,7 +153,7 @@ namespace kc {
             engine_->getRenderer().setTargetRenderPass(renderPass);
         }
 
-        engine_->composite(cmdBuffer, frameIndex);
+        engine_->render(cmdBuffer, frameIndex);
     }
 
     void UiWrapper::addElement(UiElement* element) {

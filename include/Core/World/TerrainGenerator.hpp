@@ -8,6 +8,7 @@
 #include "Core/World/Biomes/ClimateBiomeProvider.hpp"
 #include "Core/World/ITerrainGenerator.hpp"
 #include "Core/World/TerrainGenSettings.hpp"
+#include "Core/World/BlockGrid.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -108,6 +109,11 @@ namespace kc {
             const bool lakeWater = carved < seaLocal && noise_->lakeMask(worldX, worldZ) > 0.0f;
             return biomes_->biomeFor(biomes_->climateAt(worldX, worldZ, naturalY), naturalY,
                                      surfaceY, sea, lakeWater);
+        }
+
+        std::shared_ptr<BlockGrid> generateBlocksGrid(int gridX, int gridZ, int chunkSize, int height) override {
+            auto v = generateBlocks(gridX, gridZ, chunkSize, height);
+            return BlockGrid::fromVector(v, chunkSize, height);
         }
 
         std::vector<uint64_t> generateBlocks(int gridX, int gridZ, int chunkSize, int height) override {

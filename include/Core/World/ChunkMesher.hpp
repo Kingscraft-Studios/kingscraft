@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/World/Chunk.hpp"
+#include "Core/World/BlockGrid.hpp"
 #include <cstdint>
 #include <vector>
 
@@ -8,6 +9,15 @@ namespace kc {
 
     class ChunkMesher {
     public:
+        static void generateSubChunk(
+            SubChunk& subChunk,
+            const BlockGrid& blockGrid,
+            int N, int height,
+            int yBase,
+            const std::vector<uint64_t>* edgePosX = nullptr,
+            const std::vector<uint64_t>* edgeNegX = nullptr,
+            const std::vector<uint64_t>* edgePosZ = nullptr,
+            const std::vector<uint64_t>* edgeNegZ = nullptr);
         static void generateSubChunk(
             SubChunk& subChunk,
             const std::vector<uint64_t>& blockIds,
@@ -23,6 +33,16 @@ namespace kc {
         // neighbor chunk appears or disappears, only the faces looking into it
         // change, so we re-emit that single plane into the existing mesh instead
         // of rebuilding all 25 sub-chunks. Appends to subChunk.vertices/indices.
+        static void emitGateFaces(
+            SubChunk& subChunk,
+            const BlockGrid& blockGrid,
+            int N, int height,
+            int yBase,
+            int gate,
+            const std::vector<uint64_t>* edgePosX = nullptr,
+            const std::vector<uint64_t>* edgeNegX = nullptr,
+            const std::vector<uint64_t>* edgePosZ = nullptr,
+            const std::vector<uint64_t>* edgeNegZ = nullptr);
         static void emitGateFaces(
             SubChunk& subChunk,
             const std::vector<uint64_t>& blockIds,

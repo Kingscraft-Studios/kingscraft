@@ -57,7 +57,21 @@ namespace kc {
         }
 
         if (renderState == RenderState::Running) {
+            double tickStart = TimeUtil::uptimeSeconds();
+
+            // Idle between the previous frame's end and this frame's start: the
+            // render thread's outer loop (mailbox drain, window pump). Measured
+            // here and not inside drawFrame so it cannot be confused with work.
+            gpuMetrics_.gapMs =
+                lastFrameEnd_ > 0.0 ? (tickStart - lastFrameEnd_) * 1000.0 : 0.0;
+
             const FrameScene& scene = Engine::Get().getFrameExchange().readFrame();
+
+            // Everything between entering tick() and having a scene to record,
+            // minus the swapchain checks: this is the only stretch of the frame
+            // that no other counter covers.
+            gpuMetrics_.mailboxMs = (TimeUtil::uptimeSeconds() - tickStart) * 1000.0;
+
             drawFrame(scene);
             chunkProcessor.collectDestroyedChunks(scene.terrain.draws);
             profilingCapture_.tick(scene.stats.delta);
@@ -76,6 +90,21 @@ namespace kc {
                 }
             }
             Engine::Get().getFrameExchange().endRead();
+
+            // Measured at the END of the frame, so this snapshot's interval and
+            // all of its parts describe the same frame. The old code sampled the
+            // interval at the start, which paired frame N-1's period with frame
+            // N's costs and made the remainder meaningless (it could go
+            // negative when one frame was fast and the next stalled).
+            const double frameEnd = TimeUtil::uptimeSeconds();
+            gpuMetrics_.workMs = (frameEnd - tickStart) * 1000.0;
+            gpuMetrics_.frameIntervalMs = gpuMetrics_.workMs + gpuMetrics_.gapMs;
+            // Tail after the queue submit: collectDestroyedChunks, the profiling
+            // tick, the max-Fps sleep and the metrics publish itself.
+            gpuMetrics_.postMs = gpuMetrics_.workMs - gpuMetrics_.mailboxMs
+                               - gpuMetrics_.beginMs - gpuMetrics_.cpuFrameMs
+                               - gpuMetrics_.cpuSubmitMs;
+            lastFrameEnd_ = frameEnd;
 
             // Hand this frame's render metrics to the engine thread. If the
             // reader is mid-copy and no buffer is free, skip this frame; the
@@ -139,30 +168,35 @@ namespace kc {
 
     void RenderEngine::drawFrame(const FrameScene& scene) {
         if (renderState != RenderState::Running) {
+            gpuMetrics_.skippedFrames++;
             return;
         }
 
+        double beginStart = TimeUtil::uptimeSeconds();
         if (!renderer->beginFrame()) {
+            gpuMetrics_.skippedFrames++;
             recreateSwapChain();
             auto newExtent = Runtime::get().inputThread->getExtent();
             uiSystem->resize(newExtent.width, newExtent.height);
             return;
         }
+        // beginFrame() does more than wait (query readback, staging advance,
+        // command pool reset). CIdle only covers the fence and acquire, so this
+        // total vs CIdle is how the untimed tail there becomes visible.
         double cpuStart = TimeUtil::uptimeSeconds();
+        gpuMetrics_.beginMs = (cpuStart - beginStart) * 1000.0;
         gpuMetrics_.frames++;
         VkCommandBuffer cmd = renderer->getActiveCommandBuffer();
         VkExtent2D extent = renderer->getExtent();
         uint32_t imageIndex = renderer->getCurrentImageIndex();
 
+        // The UI is drawn straight into the world pass after the scene, so
+        // there is nothing to composite and no extra fullscreen pass.
         RenderTarget target = renderer->buildRenderTarget(scene);
 
         if (scene.ui.enabled) {
             uiSystem->update(scene.stats.delta);
-            uint32_t qi = renderer->getFrameIndex() * Renderer::QUERIES_PER_FRAME;
-            VkQueryPool tsPool = renderer->getGpuQueryPool();
-            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, tsPool, qi + Renderer::TS_UI_START);
-            uiSystem->renderOffscreen(cmd, renderer->getFrameIndex());
-            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool, qi + Renderer::TS_UI_END);
+            uiSystem->build();
         }
 
         FrameContext frameCtx{};
@@ -196,8 +230,25 @@ namespace kc {
 
         renderer->executeRenderPass(pass, [this, frameCtx, scene, target](VkCommandBuffer cb) {
             if (scene.terrain.renderTerrain) {
-                worldRenderer.render(cb, scene.camera.viewProj, scene);
+                worldRenderer.render(cb, scene.camera.viewProj, scene,
+                    renderer->getGpuQueryPool(),
+                    renderer->getFrameIndex() * Renderer::QUERIES_PER_FRAME + Renderer::TS_OPAQUE_END);
+            } else if (VkQueryPool tsPool = renderer->getGpuQueryPool()) {
+                // No terrain this frame: still write the opaque-end timestamp so
+                // the query range stays fully available and the GPU metrics do
+                // not freeze on menu screens.
+                vkCmdWriteTimestamp(cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool,
+                    renderer->getFrameIndex() * Renderer::QUERIES_PER_FRAME + Renderer::TS_OPAQUE_END);
             }
+
+            // End of the 3D scene (terrain + water + highlight), before the UI.
+            if (VkQueryPool tsPool = renderer->getGpuQueryPool()) {
+                vkCmdWriteTimestamp(cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool,
+                    renderer->getFrameIndex() * Renderer::QUERIES_PER_FRAME + Renderer::TS_SCENE_END);
+            }
+
+            // UI draws into this pass directly (depth test off), replacing the
+            // offscreen target + fullscreen composite (~0.58 ms of pure copy).
             if (scene.ui.enabled) {
                 uiSystem->render(cb, target.renderPass, renderer->getFrameIndex());
             }
@@ -237,6 +288,10 @@ namespace kc {
         gpuMetrics.pipeline.clipInvocations = renderer->getPipelineStat(Renderer::STAT_CLIP_INVOC);
         gpuMetrics.pipeline.clipPrims = renderer->getPipelineStat(Renderer::STAT_CLIP_PRIMS);
         gpuMetrics.cIdle = renderer->getCIdleMs() + sleepIdleMs_;
+        gpuMetrics.presentMs = renderer->getPresentMs();
+        gpuMetrics.opaqueGpuMs = renderer->getOpaqueGpuMs();
+        gpuMetrics.transparentGpuMs = renderer->getTransparentGpuMs();
+        gpuMetrics.terrainGpuMs = renderer->getTerrainGpuMs();
     }
 
 }  // namespace kc

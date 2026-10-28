@@ -50,7 +50,7 @@ namespace kc {
         batchQueue_->begin();
     }
 
-    void UiEngine::renderOffscreen(VkCommandBuffer cmd, uint32_t frameIndex) {
+    void UiEngine::buildFrame() {
         if (!initialized_) return;
 
         if (fontAtlas_->isReady() && !renderer_->hasFontAtlas()) {
@@ -58,13 +58,11 @@ namespace kc {
         }
 
         uploadPendingStyles();
-
-        renderer_->renderOffscreen(cmd, *batchQueue_, frameIndex);
     }
 
-    void UiEngine::composite(VkCommandBuffer cmd, uint32_t frameIndex) {
+    void UiEngine::render(VkCommandBuffer cmd, uint32_t frameIndex) {
         if (!initialized_) return;
-        renderer_->composite(cmd, frameIndex);
+        renderer_->render(cmd, *batchQueue_, frameIndex);
     }
 
     void UiEngine::addQuad(const UiVertex verts[4], const uint32_t indices[6]) {

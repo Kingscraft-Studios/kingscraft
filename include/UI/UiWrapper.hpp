@@ -36,7 +36,10 @@ namespace kc {
         void onKey(int key, int action);
         void onChar(unsigned int codepoint);
 
-        void renderOffscreen(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
+        // Builds this frame's UI vertex batch on the host. Must be called before
+        // the frame's render pass is recorded.
+        void build();
+        // Issues the UI draws inside the already-recording world/menu pass.
         void render(VkCommandBuffer cmdBuffer, VkRenderPass renderPass, uint32_t frameIndex);
 
         void addElement(UiElement* element);

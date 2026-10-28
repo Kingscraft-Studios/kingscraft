@@ -44,11 +44,11 @@ public:
 
     enum GpuTsSlot : uint32_t {
         TS_FRAME_START = 0,
-        TS_FRAME_END   = 1,
-        TS_WORLD_START = 2,
-        TS_WORLD_END   = 3,
-        TS_UI_START    = 4,
-        TS_UI_END      = 5,
+        TS_WORLD_START = 1,
+        TS_OPAQUE_END  = 2,
+        TS_SCENE_END   = 3,
+        TS_WORLD_END   = 4,
+        TS_FRAME_END   = 5,
     };
 
     enum PipeStatsIdx : uint32_t {
@@ -102,6 +102,10 @@ public:
     double getMemBandwidthGBs() const { return memBandwidthGBs_; }
     double getOverdraw() const { return overdraw_; }
     double getCIdleMs() const { return cIdleMs_; }
+    double getPresentMs() const { return presentMs_; }
+    double getOpaqueGpuMs() const { return opaqueGpuMs_; }
+    double getTransparentGpuMs() const { return transparentGpuMs_; }
+    double getTerrainGpuMs() const { return terrainGpuMs_; }
 
     VkQueryPool getGpuQueryPool() const { return gpuQueryPool_ ? gpuQueryPool_->getHandle() : VK_NULL_HANDLE; }
     VkQueryPool getPipelineStatsPool() const { return pipelineStatsPool_ ? pipelineStatsPool_->getHandle() : VK_NULL_HANDLE; }
@@ -175,6 +179,10 @@ private:
     double worldGpuMs_ = 0.0;
     double uiGpuMs_ = 0.0;
     double cmdRecordMs_ = 0.0;
+    double opaqueGpuMs_ = 0.0;
+    double transparentGpuMs_ = 0.0;
+    double terrainGpuMs_ = 0.0;
+    double presentMs_ = 0.0;
 
     std::array<uint64_t, STAT_COUNT> pipelineStats_{};
 

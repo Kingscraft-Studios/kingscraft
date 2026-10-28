@@ -25,6 +25,11 @@ namespace kc {
     };
 
     struct RenderThreadMetrics {
+        double mailboxMs = 0.0;        // tick entry -> drawFrame entry (scene read, resize checks)
+        double beginMs = 0.0;          // drawFrame entry -> beginFrame() returned (CIdle is inside)
+        double workMs = 0.0;           // whole frame on the render thread, tick entry -> end
+        double gapMs = 0.0;            // previous frame end -> this frame start (loop overhead)
+        double postMs = 0.0;           // workMs - mailbox - begin - frame - submit (post-submit tail)
         double cpuFrameMs = 0.0;
         double cpuSubmitMs = 0.0;
         double cmdRecordMs = 0.0;
@@ -35,7 +40,16 @@ namespace kc {
         double overdraw = 0.0;
         PipelineStats pipeline;
         uint64_t frames = 0;
+        // Frames that produced no draw at all (paused, or the swapchain had to
+        // be recreated after beginFrame() failed). These do not advance
+        // `frames`, so the profiler can tell "few frames" from "lost frames".
+        uint64_t skippedFrames = 0;
         double cIdle = 0.0;
+        double frameIntervalMs = 0.0;  // wall time between rendered frames, render thread
+        double presentMs = 0.0;        // vkQueuePresentKHR
+        double opaqueGpuMs = 0.0;
+        double transparentGpuMs = 0.0;
+        double terrainGpuMs = 0.0;
     };
 
     struct FrameMetrics {

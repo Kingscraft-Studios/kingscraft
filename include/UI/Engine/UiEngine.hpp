@@ -32,8 +32,11 @@ namespace kc {
 
         // Frame lifecycle
         void beginFrame();
-        void renderOffscreen(VkCommandBuffer cmd, uint32_t frameIndex);
-        void composite(VkCommandBuffer cmd, uint32_t frameIndex);
+        // Uploads any pending style data and makes sure the renderer has the
+        // font atlas. Host-side only; call before the render pass starts.
+        void buildFrame();
+        // Draws the batched UI into the currently bound render pass.
+        void render(VkCommandBuffer cmd, uint32_t frameIndex);
 
         // Draw commands
         void addQuad(const UiVertex verts[4], const uint32_t indices[6]);

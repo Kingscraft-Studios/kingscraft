@@ -2,6 +2,7 @@
 #include "Core/Blocks/Block.hpp"
 #include "Core/Registry.hpp"
 #include "Core/Resources/BlockModel.hpp"
+#include "Core/World/BlockGrid.hpp"
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <unordered_map>
@@ -92,16 +93,14 @@ namespace {
         int baseVertex = static_cast<int>(vertices.size());
 
         for (int vi = 0; vi < 4; ++vi) {
-            vertices.push_back({
-                static_cast<uint8_t>(localCorners[vi].x),
-                static_cast<uint8_t>(localCorners[vi].z),
-                static_cast<int16_t>(localCorners[vi].y),
-                static_cast<uint8_t>(dir),
+            vertices.push_back(ChunkVertex::make(
+                static_cast<uint32_t>(localCorners[vi].x),
+                static_cast<uint32_t>(localCorners[vi].y),
+                static_cast<uint32_t>(localCorners[vi].z),
+                static_cast<uint32_t>(dir),
                 uvs[vi][0],
                 uvs[vi][1],
-                0,
-                cellTex
-            });
+                cellTex));
         }
 
         if (reverseWinding[dir]) {
@@ -124,7 +123,7 @@ namespace {
 
 void ChunkMesher::generateSubChunk(
     SubChunk& subChunk,
-    const std::vector<uint64_t>& blockIds,
+    const BlockGrid& blockGrid,
     int N, int height,
     int yBase,
     const std::vector<uint64_t>* edgePosX,
@@ -132,6 +131,7 @@ void ChunkMesher::generateSubChunk(
     const std::vector<uint64_t>* edgePosZ,
     const std::vector<uint64_t>* edgeNegZ)
 {
+    const auto& blockIdsDense = blockGrid.getDenseData();
     auto& vertices = subChunk.vertices;
     auto& indices = subChunk.indices;
     auto& transparentVertices = subChunk.transparentVertices;
@@ -170,7 +170,10 @@ void ChunkMesher::generateSubChunk(
             if (edgePosZ) return (*edgePosZ)[static_cast<size_t>(y) * N + x];
             return 0;
         }
-        return blockIds[static_cast<size_t>(y) * N * N + z * N + x];
+        if (!blockIdsDense.empty()) {
+            return blockIdsDense[static_cast<size_t>(y) * N * N + z * N + x];
+        }
+        return blockGrid.get(Location(x, y, z));
     };
 
     for (int dir = 0; dir < 6; ++dir) {
@@ -303,7 +306,7 @@ void ChunkMesher::generateSubChunk(
 
 void ChunkMesher::emitGateFaces(
     SubChunk& subChunk,
-    const std::vector<uint64_t>& blockIds,
+    const BlockGrid& blockGrid,
     int N, int height,
     int yBase,
     int gate,
@@ -312,6 +315,7 @@ void ChunkMesher::emitGateFaces(
     const std::vector<uint64_t>* edgePosZ,
     const std::vector<uint64_t>* edgeNegZ)
 {
+    const auto& blockIdsDense = blockGrid.getDenseData();
     if (gate < 2 || gate > 5) return;
 
     int yEnd = std::min(yBase + static_cast<int>(SUBCHUNK_H), height);
@@ -341,7 +345,10 @@ void ChunkMesher::emitGateFaces(
             if (edgePosZ) return (*edgePosZ)[static_cast<size_t>(y) * N + x];
             return 0;
         }
-        return blockIds[static_cast<size_t>(y) * N * N + z * N + x];
+        if (!blockIdsDense.empty()) {
+            return blockIdsDense[static_cast<size_t>(y) * N * N + z * N + x];
+        }
+        return blockGrid.get(Location(x, y, z));
     };
 
     int na = normAxis[gate];
@@ -458,6 +465,44 @@ void ChunkMesher::emitGateFaces(
 
     subChunk.indexCount = static_cast<uint32_t>(subChunk.indices.size());
     subChunk.transparentIndexCount = static_cast<uint32_t>(subChunk.transparentIndices.size());
+}
+
+void ChunkMesher::generateSubChunk(
+    SubChunk& subChunk,
+    const std::vector<uint64_t>& blockIds,
+    int N, int height,
+    int yBase,
+    const std::vector<uint64_t>* edgePosX,
+    const std::vector<uint64_t>* edgeNegX,
+    const std::vector<uint64_t>* edgePosZ,
+    const std::vector<uint64_t>* edgeNegZ)
+{
+    BlockGrid tmp(N, height);
+    if (!blockIds.empty()) {
+        const size_t expected = static_cast<size_t>(N) * static_cast<size_t>(height) * static_cast<size_t>(N);
+        tmp.getDenseData() = blockIds;
+        if (tmp.getDenseData().size() > expected) tmp.getDenseData().resize(expected);
+    }
+    generateSubChunk(subChunk, tmp, N, height, yBase, edgePosX, edgeNegX, edgePosZ, edgeNegZ);
+}
+
+void ChunkMesher::emitGateFaces(
+    SubChunk& subChunk,
+    const std::vector<uint64_t>& blockIds,
+    int N, int height,
+    int yBase,
+    int gate,
+    const std::vector<uint64_t>* edgePosX,
+    const std::vector<uint64_t>* edgeNegX,
+    const std::vector<uint64_t>* edgePosZ,
+    const std::vector<uint64_t>* edgeNegZ) {
+    BlockGrid tmp(N, height);
+    if (!blockIds.empty()) {
+        const size_t expected = static_cast<size_t>(N) * static_cast<size_t>(height) * static_cast<size_t>(N);
+        tmp.getDenseData() = blockIds;
+        if (tmp.getDenseData().size() > expected) tmp.getDenseData().resize(expected);
+    }
+    emitGateFaces(subChunk, tmp, N, height, yBase, gate, edgePosX, edgeNegX, edgePosZ, edgeNegZ);
 }
 
 } // namespace kc

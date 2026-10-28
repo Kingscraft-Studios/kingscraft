@@ -95,7 +95,11 @@ bool Renderer::beginFrame() {
             };
             gpuFrameTimeMs_  = toMs(TS_FRAME_END, TS_FRAME_START);
             worldGpuMs_      = toMs(TS_WORLD_END, TS_WORLD_START);
-            uiGpuMs_         = toMs(TS_UI_END, TS_UI_START);
+            // The UI is drawn directly at the end of the world pass.
+            uiGpuMs_         = toMs(TS_WORLD_END, TS_SCENE_END);
+            opaqueGpuMs_     = toMs(TS_OPAQUE_END, TS_WORLD_START);
+            transparentGpuMs_ = toMs(TS_SCENE_END, TS_OPAQUE_END);
+            terrainGpuMs_    = toMs(TS_SCENE_END, TS_WORLD_START);
         }
     }
 
@@ -109,6 +113,9 @@ bool Renderer::beginFrame() {
             uint64_t fs = pipelineStats_[STAT_FS_INVOCATIONS];
             uint64_t w = extent_.width;
             uint64_t h = extent_.height;
+
+            // No fullscreen UI composite any more: every fragment counted here
+            // belongs to the scene or to the (small) UI quads on top of it.
             if (w > 0 && h > 0 && fs > 0) {
                 overdraw_ = static_cast<double>(fs) / static_cast<double>(w * h);
                 double bytesPerFragment = 8.0;
@@ -239,7 +246,9 @@ bool Renderer::endFrame() {
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &currentImageIndex_;
 
+    double presentStart = TimeUtil::uptimeSeconds();
     auto result = vkQueuePresentKHR(device_.presentQueue(), &presentInfo);
+    presentMs_ = (TimeUtil::uptimeSeconds() - presentStart) * 1000.0;
 
     currentFrame_ = (currentFrame_ + 1) % SyncObjects::MAX_FRAMES_IN_FLIGHT;
 

@@ -16,7 +16,8 @@ namespace kc {
         void init(Device& device, TextureCache& textureCache, VkRenderPass renderPass);
         void cleanup();
 
-        void render(VkCommandBuffer cmd, const glm::mat4& viewProj, const FrameScene& scene);
+        void render(VkCommandBuffer cmd, const glm::mat4& viewProj,
+                    const FrameScene& scene, VkQueryPool tsPool, uint32_t opaqueEndQuery);
 
         void createPipelineLayout();
         void createPipeline(bool disableTextures);

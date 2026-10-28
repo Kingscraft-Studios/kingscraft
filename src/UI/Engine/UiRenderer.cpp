@@ -30,17 +30,13 @@ namespace kc {
     }
 
     void UiRenderer::init() {
-        offscreenRenderPass_ = RenderPass::createOffscreen(device_, VK_FORMAT_R8G8B8A8_UNORM);
         createDescriptorSetLayouts();
         createDescriptorPools();
         createUniformBuffer();
         createDummyTexture();
-        offscreenTarget_ = std::make_unique<OffscreenTarget>(
-            device_, extent_, VK_FORMAT_R8G8B8A8_UNORM, offscreenRenderPass_->getHandle());
         allocateDescriptorSets();
         for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             updateUiDescriptorSet(i);
-            updateCompositeDescriptorSet(i);
         }
         updateUniformBuffer();
         initialized_ = true;
@@ -56,35 +52,29 @@ namespace kc {
             slot.clear();
         }
         uiPipeline_.reset();
-        compositePipeline_.reset();
         pipelineLayout_.reset();
-        compositePipelineLayout_.reset();
-        offscreenTarget_.reset();
         blockTexLayout_.reset();
         blockTexPool_.reset();
         uiDescriptorSetLayout_.reset();
-        compositeDescriptorSetLayout_.reset();
         uiDescriptorPool_.reset();
-        compositeDescriptorPool_.reset();
-        offscreenRenderPass_.reset();
         stylePoolBuffer_.reset();
         elementStylesBuffer_.reset();
         uniformBuffer_.reset();
         destroyDummyTexture();
+        targetRenderPass_ = VK_NULL_HANDLE;
         initialized_ = false;
     }
 
     void UiRenderer::resize(VkExtent2D extent) {
         if (!initialized_) return;
         extent_ = extent;
-        offscreenTarget_->resize(extent_, offscreenRenderPass_->getHandle());
-        compositeDescDirtyMask_ |= (1u << MAX_FRAMES_IN_FLIGHT) - 1;
         updateUniformBuffer();
     }
 
-    void UiRenderer::renderOffscreen(VkCommandBuffer cmd, UiBatchQueue& batchQueue, uint32_t frameIndex) {
+    void UiRenderer::render(VkCommandBuffer cmd, UiBatchQueue& batchQueue, uint32_t frameIndex) {
         if (!initialized_ || extent_.width == 0 || extent_.height == 0) return;
         if (atlasView_ == VK_NULL_HANDLE) return;
+        if (targetRenderPass_ == VK_NULL_HANDLE) return;
 
         currentFrameIndex_ = frameIndex;
         for (auto& rp : retiredPipelines_[frameIndex]) {
@@ -96,31 +86,7 @@ namespace kc {
         if (!uiPipeline_) {
             createPipeline();
         }
-
-        VkImageMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        barrier.image = offscreenTarget_->getImage();
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.layerCount = 1;
-        barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        vkCmdPipelineBarrier(cmd,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &barrier);
-
-        VkClearValue clear = {{{0.0f, 0.0f, 0.0f, 0.0f}}};
-        VkRenderPassBeginInfo passInfo{};
-        passInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        passInfo.renderPass = offscreenRenderPass_->getHandle();
-        passInfo.framebuffer = offscreenTarget_->getFramebuffer();
-        passInfo.renderArea = {{0, 0}, extent_};
-        passInfo.clearValueCount = 1;
-        passInfo.pClearValues = &clear;
-        vkCmdBeginRenderPass(cmd, &passInfo, VK_SUBPASS_CONTENTS_INLINE);
+        if (!uiPipeline_) return;
 
         uiPipeline_->bind(cmd);
 
@@ -142,41 +108,21 @@ namespace kc {
                                 pipelineLayout_->getHandle(), 0, 2, bindSets, 0, nullptr);
 
         batchQueue.flush(cmd);
-
-        vkCmdEndRenderPass(cmd);
-    }
-
-    void UiRenderer::composite(VkCommandBuffer cmd, uint32_t frameIndex) {
-        if (!initialized_ || extent_.width == 0 || extent_.height == 0) return;
-
-        if (compositeDescDirtyMask_ & (1u << frameIndex)) {
-            updateCompositeDescriptorSet(frameIndex);
-            compositeDescDirtyMask_ &= ~(1u << frameIndex);
-        }
-
-        VkViewport viewport{0.0f, 0.0f,
-            static_cast<float>(extent_.width), static_cast<float>(extent_.height),
-            0.0f, 1.0f};
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-        VkRect2D scissor{{0, 0}, extent_};
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-        compositePipeline_->bind(cmd);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                compositePipelineLayout_->getHandle(), 0, 1, &compositeDescriptorSets_[frameIndex], 0, nullptr);
-        vkCmdDraw(cmd, 3, 1, 0, 0);
     }
 
     void UiRenderer::setTargetRenderPass(VkRenderPass renderPass) {
+        if (renderPass == targetRenderPass_) return;
+        targetRenderPass_ = renderPass;
+
+        if (!uiPipeline_) return;
+
+        // The pipeline is only compatible with the pass it was built for, so
+        // retire the old one and rebuild against the new pass on next use.
         uint32_t retireSlot = (currentFrameIndex_ + 1) % MAX_FRAMES_IN_FLIGHT;
-
         RetiredPipeline rp;
-        rp.pipeline = std::move(compositePipeline_);
-        rp.layout = std::move(compositePipelineLayout_);
+        rp.pipeline = std::move(uiPipeline_);
+        rp.layout = std::move(pipelineLayout_);
         retiredPipelines_[retireSlot].push_back(std::move(rp));
-
-        createCompositePipeline(renderPass);
     }
 
     void UiRenderer::setFontAtlas(VkImageView imageView, VkSampler sampler) {
@@ -238,15 +184,6 @@ namespace kc {
 
         blockTexLayout_ = DescriptorSetLayout::adopt(
             device_, descriptorManager_.createLayout(blockBindings));
-
-        std::vector<VkDescriptorSetLayoutBinding> compBindings(1);
-        compBindings[0].binding = 0;
-        compBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        compBindings[0].descriptorCount = 1;
-        compBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-        compositeDescriptorSetLayout_ = DescriptorSetLayout::adopt(
-            device_, descriptorManager_.createLayout(compBindings));
     }
 
     void UiRenderer::createDescriptorPools() {
@@ -269,13 +206,6 @@ namespace kc {
 
         blockTexPool_ = DescriptorPool::adopt(
             device_, descriptorManager_.createPool(blockPoolSizes, MAX_FRAMES_IN_FLIGHT));
-
-        std::vector<VkDescriptorPoolSize> compPoolSizes(1);
-        compPoolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        compPoolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
-
-        compositeDescriptorPool_ = DescriptorPool::adopt(
-            device_, descriptorManager_.createPool(compPoolSizes, MAX_FRAMES_IN_FLIGHT));
     }
 
     void UiRenderer::allocateDescriptorSets() {
@@ -284,8 +214,6 @@ namespace kc {
                 uiDescriptorPool_->getHandle(), uiDescriptorSetLayout_->getHandle());
             blockTexSets_[i] = descriptorManager_.allocateSet(
                 blockTexPool_->getHandle(), blockTexLayout_->getHandle());
-            compositeDescriptorSets_[i] = descriptorManager_.allocateSet(
-                compositeDescriptorPool_->getHandle(), compositeDescriptorSetLayout_->getHandle());
         }
     }
 
@@ -350,46 +278,10 @@ namespace kc {
         configInfo.depthStencilInfo.depthTestEnable = VK_FALSE;
         configInfo.depthStencilInfo.depthWriteEnable = VK_FALSE;
 
-        configInfo.renderPass = offscreenRenderPass_->getHandle();
+        configInfo.renderPass = targetRenderPass_;
         configInfo.pipelineLayout = pipelineLayout_->getHandle();
 
         uiPipeline_ = std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
-    }
-
-    void UiRenderer::createCompositePipeline(VkRenderPass renderPass) {
-        VkPipelineLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        layoutInfo.setLayoutCount = 1;
-        VkDescriptorSetLayout compLayout = compositeDescriptorSetLayout_->getHandle();
-        layoutInfo.pSetLayouts = &compLayout;
-
-        compositePipelineLayout_ = std::make_unique<PipelineLayout>(device_, layoutInfo);
-
-        auto& shaderCache = Engine::Get().getCacheManager().getShaderCache();
-        auto& vertCode = shaderCache.get("composite", ShaderStage::Vertex);
-        auto& fragCode = shaderCache.get("composite", ShaderStage::Fragment);
-
-        PipelineConfigInfo configInfo{};
-        Pipeline::applyDefaultPipelineConfigInfo(configInfo);
-
-        configInfo.bindingDescriptions = {};
-        configInfo.attributeDescriptions = {};
-
-        configInfo.blendAttachmentState.blendEnable = VK_TRUE;
-        configInfo.blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        configInfo.blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        configInfo.blendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
-        configInfo.blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        configInfo.blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        configInfo.blendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
-
-        configInfo.depthStencilInfo.depthTestEnable = VK_FALSE;
-        configInfo.depthStencilInfo.depthWriteEnable = VK_FALSE;
-
-        configInfo.renderPass = renderPass;
-        configInfo.pipelineLayout = compositePipelineLayout_->getHandle();
-
-        compositePipeline_ = std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
     }
 
     void UiRenderer::createDummyTexture() {
@@ -478,9 +370,14 @@ namespace kc {
     }
 
     void UiRenderer::updateUniformBuffer() {
+        // y grows downwards in UI space, while Vulkan NDC y = -1 is the top
+        // framebuffer row, so top/bottom go in ascending order. The old
+        // offscreen path had this inverted and undid it in composite.vert;
+        // with the UI drawn directly into the world pass there is no flip to
+        // compensate for.
         glm::mat4 proj = glm::ortho(
             0.0f, static_cast<float>(extent_.width),
-            static_cast<float>(extent_.height), 0.0f,
+            0.0f, static_cast<float>(extent_.height),
             -1.0f, 1.0f);
         uniformBuffer_->write(&proj, 0, sizeof(glm::mat4));
     }
@@ -579,23 +476,6 @@ namespace kc {
 
         descriptorManager_.updateDescriptorSets(
             std::vector<VkWriteDescriptorSet>(writes, writes + writeCount));
-    }
-
-    void UiRenderer::updateCompositeDescriptorSet(uint32_t frameIndex) {
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = offscreenTarget_->getImageView();
-        imageInfo.sampler = offscreenTarget_->getSampler();
-
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = compositeDescriptorSets_[frameIndex];
-        write.dstBinding = 0;
-        write.descriptorCount = 1;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.pImageInfo = &imageInfo;
-
-        descriptorManager_.updateDescriptorSets(std::vector<VkWriteDescriptorSet>{write});
     }
 
 } // namespace kc

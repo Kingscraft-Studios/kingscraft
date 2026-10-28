@@ -2,9 +2,12 @@
 
 #include "Vulkan/Device.hpp"
 #include "Vulkan/Buffer.hpp"
+#include "Core/World/BlockGrid.hpp"
+#include "Core/World/Location.hpp"
 #include <vector>
 #include <memory>
 #include <array>
+#include <unordered_map>
 #include <glm/glm.hpp>
 
 namespace kc {
@@ -37,21 +40,59 @@ namespace kc {
         }
     };
 
-    // Per-vertex chunk-local position + face + tile. py is a signed 16-bit
-    // chunk-local Y (0..worldHeight-1); the shader adds the chunk's world
-    // origin, whose Y is RendererSettings::minY, to reach world space. It has
-    // to be 16-bit because a full Minecraft-height column no longer fits in a
-    // uint8_t. Field order keeps every attribute naturally aligned so the
-    // 10-byte stride needs no vertex-buffer alignment padding.
+    // Per-vertex chunk-local position + face + tile, packed into two 32-bit
+    // words (8 bytes) so the vertex fetch reads two attributes instead of five.
+    // Field ranges are what the mesher can actually emit:
+    //   px / pz  0..16   (chunkSize, one extra for the far plane of a chunk)
+    //   py       0..384  (chunk-local Y; a top face of the highest block is 384)
+    //   face     0..5
+    //   uvX/uvY  0..16   (greedy-mesh tile repeat)
+    // The vertex shader unpacks this word; the code below keeps the C++ side in
+    // one place so the bit layout cannot drift from resources/shaders/terrain.vert.
     struct ChunkVertex {
-        uint8_t  px;       // offset 0 — local chunk coordinate
-        uint8_t  pz;       // offset 1
-        int16_t  py;       // offset 2 — chunk-local Y, 0..383
-        uint8_t  face;     // offset 4 — 0=PosY,1=NegY,2=PosZ,3=NegZ,4=PosX,5=NegX
-        int8_t   uvX;      // offset 5 — integer UV
-        int8_t   uvY;      // offset 6
-        uint8_t  _pad;     // offset 7 — explicit tail padding
-        uint16_t texIndex; // offset 8 — texture array layer index
+        static constexpr uint32_t PX_SHIFT  = 0,  PX_BITS  = 5;
+        static constexpr uint32_t PZ_SHIFT  = 5,  PZ_BITS  = 5;
+        static constexpr uint32_t PY_SHIFT  = 10, PY_BITS  = 9;
+        static constexpr uint32_t FACE_SHIFT = 19, FACE_BITS = 3;
+        static constexpr uint32_t UVX_SHIFT = 22, UVX_BITS = 5;
+        static constexpr uint32_t UVY_SHIFT = 27, UVY_BITS = 5;
+
+        static constexpr uint32_t PX_MASK   = (1u << PX_BITS) - 1u;
+        static constexpr uint32_t PZ_MASK   = (1u << PZ_BITS) - 1u;
+        static constexpr uint32_t PY_MASK   = (1u << PY_BITS) - 1u;
+        static constexpr uint32_t FACE_MASK = (1u << FACE_BITS) - 1u;
+        static constexpr uint32_t UVX_MASK  = (1u << UVX_BITS) - 1u;
+        static constexpr uint32_t UVY_MASK  = (1u << UVY_BITS) - 1u;
+
+        static_assert(PX_SHIFT + PX_BITS == PZ_SHIFT, "packed vertex bits overlap");
+        static_assert(PZ_SHIFT + PZ_BITS == PY_SHIFT, "packed vertex bits overlap");
+        static_assert(PY_SHIFT + PY_BITS == FACE_SHIFT, "packed vertex bits overlap");
+        static_assert(FACE_SHIFT + FACE_BITS == UVX_SHIFT, "packed vertex bits overlap");
+        static_assert(UVX_SHIFT + UVX_BITS == UVY_SHIFT, "packed vertex bits overlap");
+        static_assert(UVY_SHIFT + UVY_BITS == 32, "packed vertex word must be full");
+
+        uint32_t packed = 0;    // position, face and uv
+        uint32_t texIndex = 0;  // texture array layer index
+
+        static ChunkVertex make(uint32_t px, uint32_t py, uint32_t pz, uint32_t face,
+                                int uvX, int uvY, uint32_t texIndex) {
+            ChunkVertex v;
+            v.packed = ((px & PX_MASK) << PX_SHIFT)
+                     | ((pz & PZ_MASK) << PZ_SHIFT)
+                     | ((py & PY_MASK) << PY_SHIFT)
+                     | ((face & FACE_MASK) << FACE_SHIFT)
+                     | ((static_cast<uint32_t>(uvX) & UVX_MASK) << UVX_SHIFT)
+                     | ((static_cast<uint32_t>(uvY) & UVY_MASK) << UVY_SHIFT);
+            v.texIndex = texIndex;
+            return v;
+        }
+
+        uint32_t px() const { return (packed >> PX_SHIFT) & PX_MASK; }
+        uint32_t pz() const { return (packed >> PZ_SHIFT) & PZ_MASK; }
+        uint32_t py() const { return (packed >> PY_SHIFT) & PY_MASK; }
+        uint32_t face() const { return (packed >> FACE_SHIFT) & FACE_MASK; }
+        uint32_t uvX() const { return (packed >> UVX_SHIFT) & UVX_MASK; }
+        uint32_t uvY() const { return (packed >> UVY_SHIFT) & UVY_MASK; }
 
         static VkVertexInputBindingDescription getBindingDescription() {
             VkVertexInputBindingDescription desc{};
@@ -61,35 +102,22 @@ namespace kc {
             return desc;
         }
 
-        static std::array<VkVertexInputAttributeDescription, 5> getAttributeDescriptions() {
-            std::array<VkVertexInputAttributeDescription, 5> desc{};
+        static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
+            std::array<VkVertexInputAttributeDescription, 2> desc{};
             desc[0].binding = 0;
             desc[0].location = 0;
-            desc[0].format = VK_FORMAT_R8G8_UINT;      // px, pz
-            desc[0].offset = offsetof(ChunkVertex, px);
+            desc[0].format = VK_FORMAT_R32_UINT;       // packed position/face/uv
+            desc[0].offset = offsetof(ChunkVertex, packed);
             desc[1].binding = 0;
             desc[1].location = 1;
-            desc[1].format = VK_FORMAT_R16_SINT;       // py
-            desc[1].offset = offsetof(ChunkVertex, py);
-            desc[2].binding = 0;
-            desc[2].location = 2;
-            desc[2].format = VK_FORMAT_R8_UINT;        // face
-            desc[2].offset = offsetof(ChunkVertex, face);
-            desc[3].binding = 0;
-            desc[3].location = 3;
-            desc[3].format = VK_FORMAT_R8G8_SINT;      // uvX, uvY
-            desc[3].offset = offsetof(ChunkVertex, uvX);
-            desc[4].binding = 0;
-            desc[4].location = 4;
-            desc[4].format = VK_FORMAT_R16_UINT;       // texIndex
-            desc[4].offset = offsetof(ChunkVertex, texIndex);
+            desc[1].format = VK_FORMAT_R32_UINT;       // texture array layer index
+            desc[1].offset = offsetof(ChunkVertex, texIndex);
             return desc;
         }
     };
 
-    static_assert(sizeof(ChunkVertex) == 10, "ChunkVertex must be 10 bytes");
-    static_assert(offsetof(ChunkVertex, py) == 2, "py must be 2-byte aligned");
-    static_assert(offsetof(ChunkVertex, texIndex) == 8, "texIndex must be 2-byte aligned");
+    static_assert(sizeof(ChunkVertex) == 8, "ChunkVertex must be 8 bytes");
+    static_assert(offsetof(ChunkVertex, texIndex) == 4, "texIndex must be 4-byte aligned");
 
     struct SubChunk {
         int yBase = 0;
@@ -102,10 +130,9 @@ namespace kc {
         bool meshNeeded = true;
     };
 
-    // Immutable block grid, shared between blockCache_ and live chunks. Mesh
-    // tasks grab the handle (no copy); block edits copy-on-write. Each cell
-    // holds the encoded uint64 identifier (0 = air/empty).
-    using BlockDataPtr = std::shared_ptr<const std::vector<uint64_t>>;
+    // Block grid storage (Phase 1: hybrid dense BlockGrid). Mesh tasks grab
+    // the handle (no copy); block edits copy-on-write.
+    using BlockDataPtr = BlockGridPtr;
 
     // Per-block classification bits resolved once per heightmap rebuild, so the
     // 384-deep column scan never touches the block registry.
@@ -130,12 +157,22 @@ namespace kc {
 
         const std::vector<uint64_t>& getBlockData() const {
             static const std::vector<uint64_t> empty;
-            return blockData_ ? *blockData_ : empty;
+            if (blockGrid_) return blockGrid_->getDenseData();
+            return empty;
         }
-        BlockDataPtr getBlockDataPtr() const { return blockData_; }
-        void setBlockData(BlockDataPtr data, int chunkSize, int height);
-        uint64_t getBlock(int x, int y, int z) const;
-        void setBlock(int x, int y, int z, uint64_t blockId);
+        BlockGridPtr getBlockDataPtr() const { return blockGrid_; }
+        BlockGridPtr getBlockGrid() const { return blockGrid_; }
+        void setBlockData(BlockGridPtr grid, int chunkSize, int height);
+        void setBaseGrid(BlockGridPtr grid) { baseGrid_ = grid; }
+        BlockGridPtr getBaseGrid() const { return baseGrid_; }
+        uint64_t getBlock(const Location& loc) const;
+        void setBlock(const Location& loc, uint64_t blockId);
+        void setBlockPlayer(const Location& loc, uint64_t blockId);
+        void applyPlayerOverridesFromMap(const std::unordered_map<Location, uint64_t>& overrides);
+        const std::unordered_map<Location, uint64_t>& getPlayerOverrides() const { return playerOverrides_; }
+        std::unordered_map<Location, uint64_t>& getPlayerOverrides() { return playerOverrides_; }
+        bool hasPlayerOverrides() const { return !playerOverrides_.empty(); }
+        void setPlayerOverrides(std::unordered_map<Location, uint64_t> overrides) { playerOverrides_ = std::move(overrides); }
 
         int getBlockDataSize() const { return chunkSize_; }
         int getHeight() const { return height_; }
@@ -212,7 +249,9 @@ namespace kc {
 
         std::vector<SubChunk> subChunks_;
 
-        BlockDataPtr blockData_;
+        BlockGridPtr blockGrid_;
+        BlockGridPtr baseGrid_;
+        std::unordered_map<Location, uint64_t> playerOverrides_;
         int chunkSize_ = 0;
         int height_ = 0;
         int minY_ = 0;
@@ -234,8 +273,8 @@ namespace kc {
         void rebuildHeightMaps();
         // Recomputes all heightmaps, occupancy and the vertical extremes of one
         // column after a block edit.
-        void refreshColumn(int localX, int localZ, const std::vector<uint64_t>& data);
-        void updateOccupancy(const std::vector<uint64_t>& data);
+        void refreshColumn(int localX, int localZ, const BlockGrid& grid);
+        void updateOccupancy(const BlockGrid& grid);
 
         static uint64_t hashBytes(const uint8_t* data, size_t size);
     };

@@ -157,8 +157,8 @@ namespace kc {
             const int feetLocal = chunk->worldToLocalY(surfaceY + 1);
             const int headLocal = chunk->worldToLocalY(surfaceY + 2);
             const bool submerged =
-                chunk->getBlock(bestLocalX, feetLocal, bestLocalZ) == waterId ||
-                chunk->getBlock(bestLocalX, headLocal, bestLocalZ) == waterId;
+                chunk->getBlock(Location(bestLocalX, feetLocal, bestLocalZ)) == waterId ||
+                chunk->getBlock(Location(bestLocalX, headLocal, bestLocalZ)) == waterId;
             if (submerged) continue;
 
             // Nearest dry ground wins, so the player lands as close to the

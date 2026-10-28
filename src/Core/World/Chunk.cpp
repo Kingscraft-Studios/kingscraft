@@ -6,6 +6,8 @@
 #include "Core/Runtime.hpp"
 #include "Core/World/ChunkKey.hpp"
 #include "Core/World/ChunkUploadData.hpp"
+#include "Core/World/BlockGrid.hpp"
+#include "Core/World/Location.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Threads/RenderThread.hpp"
 #include <algorithm>
@@ -105,62 +107,106 @@ namespace kc {
         }
     }
 
-    void Chunk::setBlockData(BlockDataPtr data, int chunkSize, int height) {
-        blockData_ = std::move(data);
+    void Chunk::setBlockData(BlockGridPtr grid, int chunkSize, int height) {
+        blockGrid_ = std::move(grid);
         chunkSize_ = chunkSize;
         height_ = height;
         const size_t columns = static_cast<size_t>(chunkSize) * chunkSize;
         worldSurfaceHeightMap_.assign(columns, 0);
         motionBlockingHeightMap_.assign(columns, 0);
         oceanFloorHeightMap_.assign(columns, 0);
+        if (!blockGrid_) {
+            blockGrid_ = std::make_shared<BlockGrid>(chunkSize_, height_);
+        }
         rebuildHeightMaps();
-        updateOccupancy(*blockData_);
+        updateOccupancy(*blockGrid_);
     }
 
-    uint64_t Chunk::getBlock(int x, int y, int z) const {
-        if (!blockData_ || blockData_->empty()) return 0;
-        // The grid is indexed by LOCAL Y. A negative or over-height value would
-        // cast to a huge size_t and read far outside the buffer, so it is
-        // rejected here rather than trusted from the caller -- World::getBlock
-        // is the boundary that converts, but nothing stops the next caller from
-        // being a block taller than it should be.
-        if (x < 0 || x >= chunkSize_ || y < 0 || y >= height_ || z < 0 || z >= chunkSize_)
+    uint64_t Chunk::getBlock(const Location& loc) const {
+        if (!blockGrid_) return 0;
+        if (loc.x < 0 || loc.x >= chunkSize_ || loc.y < 0 || loc.y >= height_ || loc.z < 0 || loc.z >= chunkSize_)
             return 0;
-        return (*blockData_)[static_cast<size_t>(y) * chunkSize_ * chunkSize_
-                             + static_cast<size_t>(z) * chunkSize_
-                             + static_cast<size_t>(x)];
+        return blockGrid_->get(loc);
     }
 
-    void Chunk::setBlock(int x, int y, int z, uint64_t blockId) {
-        if (!blockData_ || blockData_->empty()) return;
-        if (x < 0 || x >= chunkSize_ || y < 0 || y >= height_ || z < 0 || z >= chunkSize_)
+    void Chunk::setBlock(const Location& loc, uint64_t blockId) {
+        if (!blockGrid_) return;
+        if (loc.x < 0 || loc.x >= chunkSize_ || loc.y < 0 || loc.y >= height_ || loc.z < 0 || loc.z >= chunkSize_)
             return;
 
-        // Copy-on-write: blockData_ is shared with blockCache_ (and possibly a
-        // pending mesh task). Edits are rare, so clone the buffer, mutate the
-        // clone, then publish the new handle — the old buffer stays alive for
-        // whoever still holds it.
-        std::vector<uint64_t> data = *blockData_;
-        data[static_cast<size_t>(y) * chunkSize_ * chunkSize_
-             + static_cast<size_t>(z) * chunkSize_
-             + static_cast<size_t>(x)] = blockId;
+        BlockGridPtr cloned = blockGrid_->clone();
+        cloned->set(loc, blockId);
 
-        // Heightmaps, occupancy and the vertical extremes are all derived from
-        // the grid, so a single changed column is rescanned in full. A rescan
-        // is a few hundred reads and user edits are rare, which beats keeping
-        // three independent incremental heightmaps correct by hand.
-        refreshColumn(x, z, data);
+        refreshColumn(loc.x, loc.z, *cloned);
 
-        blockData_ = std::make_shared<const std::vector<uint64_t>>(std::move(data));
+        blockGrid_ = std::move(cloned);
 
-        int subIdx = y / static_cast<int>(SUBCHUNK_H);
+        int subIdx = loc.y / static_cast<int>(SUBCHUNK_H);
         if (static_cast<size_t>(subIdx) < subChunks_.size())
             subChunks_[subIdx].meshNeeded = true;
-        if (y % static_cast<int>(SUBCHUNK_H) == 0 && subIdx > 0)
+        if (loc.y % static_cast<int>(SUBCHUNK_H) == 0 && subIdx > 0)
             subChunks_[subIdx - 1].meshNeeded = true;
-        if (y % static_cast<int>(SUBCHUNK_H) == static_cast<int>(SUBCHUNK_H) - 1 &&
+        if (loc.y % static_cast<int>(SUBCHUNK_H) == static_cast<int>(SUBCHUNK_H) - 1 &&
             static_cast<size_t>(subIdx + 1) < subChunks_.size())
             subChunks_[subIdx + 1].meshNeeded = true;
+    }
+
+    void Chunk::setBlockPlayer(const Location& loc, uint64_t blockId) {
+        if (!blockGrid_) return;
+        if (loc.x < 0 || loc.x >= chunkSize_ || loc.y < 0 || loc.y >= height_ || loc.z < 0 || loc.z >= chunkSize_)
+            return;
+
+        uint64_t baseId = 0;
+        if (baseGrid_) {
+            baseId = baseGrid_->get(loc);
+        } else {
+            baseId = blockGrid_->get(loc);
+        }
+
+        if (baseId == blockId) {
+            auto it = playerOverrides_.find(loc);
+            if (it != playerOverrides_.end()) {
+                playerOverrides_.erase(it);
+            }
+            if (blockGrid_->get(loc) != baseId) {
+                BlockGridPtr cloned = blockGrid_->clone();
+                cloned->set(loc, baseId);
+                blockGrid_ = std::move(cloned);
+                refreshColumn(loc.x, loc.z, *blockGrid_);
+                int subIdx = loc.y / static_cast<int>(SUBCHUNK_H);
+                if (static_cast<size_t>(subIdx) < subChunks_.size()) subChunks_[subIdx].meshNeeded = true;
+                if (loc.y % static_cast<int>(SUBCHUNK_H) == 0 && subIdx > 0 && static_cast<size_t>(subIdx - 1) < subChunks_.size())
+                    subChunks_[subIdx - 1].meshNeeded = true;
+                if (loc.y % static_cast<int>(SUBCHUNK_H) == static_cast<int>(SUBCHUNK_H) - 1 &&
+                    static_cast<size_t>(subIdx + 1) < subChunks_.size())
+                    subChunks_[subIdx + 1].meshNeeded = true;
+            }
+            return;
+        }
+
+        playerOverrides_[loc] = blockId;
+        setBlock(loc, blockId);
+    }
+
+    void Chunk::applyPlayerOverridesFromMap(const std::unordered_map<Location, uint64_t>& overrides) {
+        playerOverrides_ = overrides;
+        if (!blockGrid_) return;
+        for (const auto& [loc, id] : overrides) {
+            if (loc.x < 0 || loc.x >= chunkSize_ || loc.y < 0 || loc.y >= height_ || loc.z < 0 || loc.z >= chunkSize_)
+                continue;
+            BlockGridPtr cloned = blockGrid_->clone();
+            cloned->set(loc, id);
+            blockGrid_ = std::move(cloned);
+            refreshColumn(loc.x, loc.z, *blockGrid_);
+            int subIdx = loc.y / static_cast<int>(SUBCHUNK_H);
+            if (static_cast<size_t>(subIdx) < subChunks_.size())
+                subChunks_[subIdx].meshNeeded = true;
+            if (loc.y % static_cast<int>(SUBCHUNK_H) == 0 && subIdx > 0 && static_cast<size_t>(subIdx - 1) < subChunks_.size())
+                subChunks_[subIdx - 1].meshNeeded = true;
+            if (loc.y % static_cast<int>(SUBCHUNK_H) == static_cast<int>(SUBCHUNK_H) - 1 &&
+                static_cast<size_t>(subIdx + 1) < subChunks_.size())
+                subChunks_[subIdx + 1].meshNeeded = true;
+        }
     }
 
     bool Chunk::isRemeshNeeded() const {
@@ -180,12 +226,12 @@ namespace kc {
     }
 
     void Chunk::rebuildHeightMaps() {
-        if (chunkSize_ == 0 || !blockData_) return;
+        if (chunkSize_ == 0 || !blockGrid_) return;
         if (worldSurfaceHeightMap_.empty()) return;
 
         BlockFlagTable table;
         table.build();
-        const auto& data = *blockData_;
+        const auto& data = blockGrid_->getDenseData();
 
         for (int z = 0; z < chunkSize_; ++z) {
             for (int x = 0; x < chunkSize_; ++x) {
@@ -226,12 +272,12 @@ namespace kc {
         if (minHeight_ > maxHeight_) minHeight_ = maxHeight_;
     }
 
-    void Chunk::refreshColumn(int localX, int localZ, const std::vector<uint64_t>& data) {
+    void Chunk::refreshColumn(int localX, int localZ, const BlockGrid& grid) {
         if (chunkSize_ == 0 || worldSurfaceHeightMap_.empty()) return;
 
         BlockFlagTable table;
         table.build();
-        ColumnHeights h = scanColumn(localX, localZ, chunkSize_, height_, data, table);
+        ColumnHeights h = scanColumn(localX, localZ, chunkSize_, height_, grid.getDenseData(), table);
         const size_t idx = static_cast<size_t>(localZ) * chunkSize_ + localX;
         worldSurfaceHeightMap_[idx] = h.worldSurface;
         motionBlockingHeightMap_[idx] = h.motionBlocking;
@@ -257,16 +303,17 @@ namespace kc {
         if (minHeight_ > maxHeight_) minHeight_ = maxHeight_;
     }
 
-    void Chunk::updateOccupancy(const std::vector<uint64_t>& data) {
+    void Chunk::updateOccupancy(const BlockGrid& grid) {
         if (subOccupancy_.empty()) return;
         BlockFlagTable table;
         table.build();
 
-        const int height = static_cast<int>(subOccupancy_.size()) * static_cast<int>(SUBCHUNK_H);
+        const int heightCount = static_cast<int>(subOccupancy_.size()) * static_cast<int>(SUBCHUNK_H);
         std::fill(subOccupancy_.begin(), subOccupancy_.end(), 0);
+        const auto& data = grid.getDenseData();
         for (int sub = 0; sub < static_cast<int>(subOccupancy_.size()); ++sub) {
             const int yStart = sub * static_cast<int>(SUBCHUNK_H);
-            const int yEnd = std::min(yStart + static_cast<int>(SUBCHUNK_H), height);
+            const int yEnd = std::min(yStart + static_cast<int>(SUBCHUNK_H), heightCount);
             uint8_t bits = 0;
             for (int y = yStart; y < yEnd; ++y) {
                 for (int z = 0; z < chunkSize_; ++z) {

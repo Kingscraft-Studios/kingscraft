@@ -2,13 +2,15 @@
 
 #include "IOTemplateBase.hpp"
 #include "Renderer/RendererSettings.hpp"
+#include "Core/World/PackedPos.hpp"
 
 #include <cstdint>
-#include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Util/StringUtils.hpp"
+#include "Core/World/Location.hpp"
 
 namespace kc {
     class DiskLayer;
@@ -37,93 +39,140 @@ namespace kc {
             writeBytes(path, std::vector<char>(formatted.begin(), formatted.end()));
         }
 
-        // Pure encode/decode (no file I/O) — shared with RegionTemplate so
-        // region files reuse the same block-grid text layout.
-        //
-        // A chunk's block grid is N*h rows of N cells. Each cell is the encoded
-        // uint64 identifier. Two cell encodings are supported, selected by a
-        // marker line that immediately follows the chunk's "#C" tag:
-        //
-        //   (no marker)  flat: one 16-digit lowercase hex token per cell
-        //   @F1          run-length: "<count>x<hex>" pairs, 16 cells per row
-        //
-        // RLE is what makes the text overlay bearable at full Minecraft height:
-        // a 384-tall chunk is 6144 rows and nearly all of them are sky, so the
-        // flat form spends ~1.6 MB per chunk (1.7 GB for a 32x32 region) writing
-        // "0000000000000000" sixteen times, while the run form collapses a whole
-        // sky row to "16x0000000000000000".
-        //
-        // Two details keep this compatible with RegionTemplate: the row count
-        // is identical in both encodings, so the grid geometry never changes,
-        // and the marker deliberately does NOT start with '#' — region slicing
-        // ends at the first '#' line, so a '#F' marker would be dropped and the
-        // decoder left guessing. A file with no marker reads as the old flat
-        // form, so existing regions still load.
-        static constexpr char CELL_ENCODING_PREFIX = '@';
-        static constexpr int RLE_VERSION = 1;
+        static constexpr uint32_t BINARY_SPARSE_MAGIC = 0x53424150;
+        static constexpr uint16_t BINARY_SPARSE_VERSION = 2;
 
         std::string serialize(const std::vector<uint64_t>& data) {
             auto& s = RendererSettings::get();
             int N = s.chunkSize;
             int h = s.worldHeight;
 
-            static const char* HEX = "0123456789abcdef";
+            std::vector<char> out;
+            const size_t total = static_cast<size_t>(N) * h * N;
+            out.reserve(4 + 2 + 4 + total * 12);
 
-            std::string out;
-            out.reserve(static_cast<size_t>(N) * h * 8);
-
-            auto appendHex = [&out](uint64_t v) {
-                char buf[16];
-                for (int i = 15; i >= 0; --i) { buf[i] = HEX[v & 0xF]; v >>= 4; }
-                out.append(buf, 16);
+            auto writeU32 = [&](uint32_t v) {
+                out.push_back(v & 0xFF);
+                out.push_back((v >> 8) & 0xFF);
+                out.push_back((v >> 16) & 0xFF);
+                out.push_back((v >> 24) & 0xFF);
+            };
+            auto writeU64 = [&](uint64_t v) {
+                for (int i = 0; i < 8; ++i) {
+                    out.push_back((v >> (i * 8)) & 0xFF);
+                }
             };
 
-            out += CELL_ENCODING_PREFIX;
-            out += 'F';
-            out += static_cast<char>('0' + RLE_VERSION);
-            out += '\n';
-
+            writeU32(0x4B435342); // 'KCSB'
+            out.push_back(2);
+            out.push_back(0);
+            size_t countPos = out.size();
+            writeU32(0);
+            uint32_t count = 0;
             for (int y = 0; y < h; ++y) {
-                if (y > 0) out += '\n';
-
                 for (int z = 0; z < N; ++z) {
-                    // Emit runs across the whole row; a run may span a slice
-                    // boundary, which is harmless because the decoder expands
-                    // by count and re-wraps at N cells.
-                    int x = 0;
-                    bool first = true;
-                    while (x < N) {
-                        size_t base = static_cast<size_t>(y) * N * N
-                                    + static_cast<size_t>(z) * N + x;
-                        uint64_t id = (base < data.size()) ? data[base] : 0;
-                        int run = 1;
-                        while (x + run < N) {
-                            size_t j = static_cast<size_t>(y) * N * N
-                                     + static_cast<size_t>(z) * N + (x + run);
-                            uint64_t v = (j < data.size()) ? data[j] : 0;
-                            if (v != id) break;
-                            ++run;
-                        }
-                        if (!first) out += ' ';
-                        first = false;
-                        // Run count in decimal, written by hand: to_string on
-                        // every cell of a 98304-cell grid showed up in profiles,
-                        // and a run can never exceed chunkSize anyway.
-                        {
-                            char digits[12];
-                            int n = 0;
-                            for (int v = run; v > 0; v /= 10) digits[n++] = HEX[v % 10];
-                            while (n > 0) out += digits[--n];
-                        }
-                        out += 'x';
-                        appendHex(id);
-                        x += run;
+                    for (int x = 0; x < N; ++x) {
+                        size_t idx = static_cast<size_t>(y) * N * N + static_cast<size_t>(z) * N + x;
+                        uint64_t id = (idx < data.size()) ? data[idx] : 0;
+                        if (id == 0) continue;
+                        PackedPos p = PackedPos::pack(x, y, z);
+                        writeU32(p.value);
+                        writeU64(id);
+                        ++count;
                     }
-                    out += '\n';
                 }
             }
+            out[countPos] = count & 0xFF;
+            out[countPos + 1] = (count >> 8) & 0xFF;
+            out[countPos + 2] = (count >> 16) & 0xFF;
+            out[countPos + 3] = (count >> 24) & 0xFF;
 
-            return out;
+            return std::string(out.begin(), out.end());
+        }
+
+        std::string serializeOverrides(const std::unordered_map<Location, uint64_t>& overrides) {
+            std::vector<char> out;
+            out.reserve(4 + 2 + 4 + overrides.size() * 12);
+
+            auto writeU32 = [&](uint32_t v) {
+                out.push_back(v & 0xFF);
+                out.push_back((v >> 8) & 0xFF);
+                out.push_back((v >> 16) & 0xFF);
+                out.push_back((v >> 24) & 0xFF);
+            };
+            auto writeU64 = [&](uint64_t v) {
+                for (int i = 0; i < 8; ++i) {
+                    out.push_back((v >> (i * 8)) & 0xFF);
+                }
+            };
+
+            writeU32(0x4B435342);
+            out.push_back(2);
+            out.push_back(0);
+            size_t countPos = out.size();
+            writeU32(0);
+            uint32_t count = 0;
+            for (const auto& [loc, id] : overrides) {
+                PackedPos p = PackedPos::pack(loc.x, loc.y, loc.z);
+                writeU32(p.value);
+                writeU64(id);
+                ++count;
+            }
+            out[countPos] = count & 0xFF;
+            out[countPos + 1] = (count >> 8) & 0xFF;
+            out[countPos + 2] = (count >> 16) & 0xFF;
+            out[countPos + 3] = (count >> 24) & 0xFF;
+
+            return std::string(out.begin(), out.end());
+        }
+
+        std::unordered_map<Location, uint64_t> deserializeOverrides(std::vector<char>& data) {
+            std::unordered_map<Location, uint64_t> overrides;
+            if (data.empty() || data.size() < 10) return overrides;
+            uint32_t magic = (static_cast<unsigned char>(data[0])) |
+                             (static_cast<unsigned char>(data[1]) << 8) |
+                             (static_cast<unsigned char>(data[2]) << 16) |
+                             (static_cast<unsigned char>(data[3]) << 24);
+            if (magic != 0x4B435342) return overrides;
+            size_t pos = 4;
+            uint16_t version = (static_cast<unsigned char>(data[pos])) |
+                               (static_cast<unsigned char>(data[pos + 1]) << 8);
+            pos += 2;
+            if (pos + 4 > data.size()) return overrides;
+            uint32_t count = (static_cast<unsigned char>(data[pos])) |
+                             (static_cast<unsigned char>(data[pos + 1]) << 8) |
+                             (static_cast<unsigned char>(data[pos + 2]) << 16) |
+                             (static_cast<unsigned char>(data[pos + 3]) << 24);
+            pos += 4;
+            auto& s = RendererSettings::get();
+            int N = s.chunkSize;
+            int h = s.worldHeight;
+            for (uint32_t i = 0; i < count && pos + 12 <= data.size(); ++i) {
+                uint32_t packedVal = (static_cast<unsigned char>(data[pos])) |
+                                     (static_cast<unsigned char>(data[pos + 1]) << 8) |
+                                     (static_cast<unsigned char>(data[pos + 2]) << 16) |
+                                     (static_cast<unsigned char>(data[pos + 3]) << 24);
+                pos += 4;
+                uint64_t id = static_cast<uint64_t>(static_cast<unsigned char>(data[pos])) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 1])) << 8) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 2])) << 16) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 3])) << 24) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 4])) << 32) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 5])) << 40) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 6])) << 48) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 7])) << 56);
+                pos += 8;
+                if (version == 2) {
+                    PackedPos p(packedVal);
+                    int x = 0, y = 0, z = 0;
+                    p.unpack(x, y, z);
+                    if (x < 0 || x >= N || y < 0 || y >= h || z < 0 || z >= N) continue;
+                    overrides[Location(x, y, z)] = id;
+                } else {
+                    // old format - skip
+                }
+            }
+            return overrides;
         }
 
         std::vector<uint64_t> deserialize(std::vector<char>& data) {
@@ -134,71 +183,53 @@ namespace kc {
 
             std::vector<uint64_t> blockData(static_cast<size_t>(N) * h * N, 0);
 
-            std::string content(data.begin(), data.end());
-            size_t pos = 0;
-            int dataLine = 0;
-
-            // Default to the original flat encoding; the marker flips it. Local
-            // (not a member) so concurrent loads of different regions cannot
-            // race on it.
-            bool rle = false;
-
-            while (pos < content.size() && dataLine < h * N) {
-                size_t eol = content.find('\n', pos);
-                if (eol == std::string::npos) eol = content.size();
-
-                std::string line = content.substr(pos, eol - pos);
-                pos = eol + 1;
-
-                if (line.empty()) continue;
-                if (line[0] == '#') continue;
-                if (line[0] == CELL_ENCODING_PREFIX) {
-                    rle = (line.size() >= 3 && line[1] == 'F' &&
-                           (line[2] - '0') == RLE_VERSION);
-                    continue;   // metadata, not a grid row
-                }
-
-                int y = dataLine / N;
-                int z = dataLine % N;
-                size_t rowBase = static_cast<size_t>(y) * N * N
-                               + static_cast<size_t>(z) * N;
-
-                if (rle) {
-                    // "<count>x<hex>" pairs, one row per line.
-                    size_t i = 0;
-                    int x = 0;
-                    while (i < line.size() && x < N) {
-                        if (line[i] == ' ') { ++i; continue; }
-                        int run = 0;
-                        while (i < line.size() && line[i] >= '0' && line[i] <= '9')
-                            run = run * 10 + (line[i++] - '0');
-                        if (run <= 0) break;
-                        if (i >= line.size() || line[i] != 'x') break;
-                        ++i;   // 'x'
-                        uint64_t id = 0;
-                        for (int d = 0; d < 16 && i < line.size(); ++d, ++i) {
-                            int digit = hexDigit(line[i]);
-                            if (digit < 0) break;
-                            id = (id << 4) | static_cast<uint64_t>(digit);
-                        }
-                        for (int c = 0; c < run && x < N; ++c, ++x) {
-                            size_t idx = rowBase + x;
-                            if (idx < blockData.size()) blockData[idx] = id;
-                        }
+            if (data.size() < 10) return blockData;
+            uint32_t magic = (static_cast<unsigned char>(data[0])) |
+                             (static_cast<unsigned char>(data[1]) << 8) |
+                             (static_cast<unsigned char>(data[2]) << 16) |
+                             (static_cast<unsigned char>(data[3]) << 24);
+            if (magic != 0x4B435342) return blockData;
+            size_t pos = 4;
+            uint16_t version = (static_cast<unsigned char>(data[pos])) |
+                               (static_cast<unsigned char>(data[pos + 1]) << 8);
+            pos += 2;
+            if (pos + 4 > data.size()) return blockData;
+            uint32_t count = (static_cast<unsigned char>(data[pos])) |
+                             (static_cast<unsigned char>(data[pos + 1]) << 8) |
+                             (static_cast<unsigned char>(data[pos + 2]) << 16) |
+                             (static_cast<unsigned char>(data[pos + 3]) << 24);
+            pos += 4;
+            for (uint32_t i = 0; i < count && pos + 12 <= data.size(); ++i) {
+                uint32_t packedVal = (static_cast<unsigned char>(data[pos])) |
+                                     (static_cast<unsigned char>(data[pos + 1]) << 8) |
+                                     (static_cast<unsigned char>(data[pos + 2]) << 16) |
+                                     (static_cast<unsigned char>(data[pos + 3]) << 24);
+                pos += 4;
+                uint64_t id = static_cast<uint64_t>(static_cast<unsigned char>(data[pos])) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 1])) << 8) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 2])) << 16) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 3])) << 24) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 4])) << 32) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 5])) << 40) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 6])) << 48) |
+                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 7])) << 56);
+                pos += 8;
+                if (version == 2) {
+                    PackedPos p(packedVal);
+                    int x = 0, y = 0, z = 0;
+                    p.unpack(x, y, z);
+                    if (x < 0 || x >= N || y < 0 || y >= h || z < 0 || z >= N) continue;
+                    size_t idx = static_cast<size_t>(y) * N * N + static_cast<size_t>(z) * N + x;
+                    if (idx < blockData.size()) {
+                        blockData[idx] = id;
                     }
                 } else {
-                    std::istringstream iss(line);
-                    for (int x = 0; x < N; ++x) {
-                        uint64_t id = 0;
-                        if (!(iss >> std::hex >> id)) break;
-                        size_t idx = rowBase + x;
-                        if (idx < blockData.size())
-                            blockData[idx] = id;
+                    size_t idx = packedVal;
+                    if (idx < blockData.size()) {
+                        blockData[idx] = id;
                     }
                 }
-                dataLine++;
             }
-
             return blockData;
         }
 

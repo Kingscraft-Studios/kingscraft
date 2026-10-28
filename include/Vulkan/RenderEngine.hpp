@@ -81,6 +81,7 @@ namespace kc {
         bool requestSwapchainRecreate = false;
         double cpuFrameTimeMs_ = 0.0;
         double cpuSubmitMs_ = 0.0;
+        double lastFrameEnd_ = 0.0;
         double sleepIdleMs_ = 0.0;
         RenderThreadMetrics gpuMetrics_;
         VkExtent2D lastExtent{0, 0};

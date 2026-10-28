@@ -1,5 +1,6 @@
 #include "Core/World/World.hpp"
 #include "Core/World/ChunkKey.hpp"
+#include "Core/World/BlockGrid.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -46,12 +47,12 @@ namespace {
         const int edge = N;   // face plane at N or 0
 
         auto isGateFace = [mask, edge](const kc::ChunkVertex& v) -> bool {
-            if (!(mask & (static_cast<uint8_t>(1) << v.face))) return false;
-            switch (v.face) {
-                case 4: return static_cast<int>(v.px) == edge;   // PosX
-                case 5: return static_cast<int>(v.px) == 0;      // NegX
-                case 2: return static_cast<int>(v.pz) == edge;   // PosZ
-                default: return static_cast<int>(v.pz) == 0;     // NegZ
+            if (!(mask & (static_cast<uint8_t>(1) << v.face()))) return false;
+            switch (v.face()) {
+                case 4: return static_cast<int>(v.px()) == edge;   // PosX
+                case 5: return static_cast<int>(v.px()) == 0;      // NegX
+                case 2: return static_cast<int>(v.pz()) == edge;   // PosZ
+                default: return static_cast<int>(v.pz()) == 0;     // NegZ
             }
         };
 
@@ -201,12 +202,25 @@ namespace kc {
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             auto& regions = IO::Get().getBuiltinTemplates().getRegionTemplate();
+            auto& chunkTpl = IO::Get().getBuiltinTemplates().getChunkTemplate();
             bool saveAll = saveAllChunks_.load(std::memory_order_relaxed);
             for (const auto& [key, data] : blockCache_) {
                 if (!saveAll && !unsavedChunks_.count(key)) continue;
+                if (!data) continue;
                 int gx = static_cast<int>(key >> 32);
                 int gz = static_cast<int>(key & 0xFFFFFFFF);
-                regions.queueSave(gx, gz, *data);
+                auto cit = chunks_.find(key);
+                if (cit != chunks_.end() && cit->second) {
+                    if (cit->second->hasPlayerOverrides()) {
+                        regions.queueSave(gx, gz, chunkTpl.serializeOverrides(cit->second->getPlayerOverrides()));
+                        continue;
+                    } else if (!saveAll) {
+                        continue;
+                    }
+                } else if (!saveAll) {
+                    continue;
+                }
+                regions.queueSave(gx, gz, data->toVector());
             }
         }
 
@@ -246,7 +260,7 @@ namespace kc {
         return (it != chunks_.end()) ? it->second.get() : nullptr;
     }
 
-    bool World::setBlock(int worldX, int worldY, int worldZ, const Block& block) {
+    bool World::setBlock(int worldX, int worldY, int worldZ, const Block& block, SetBlockSource source) {
         if (worldY < minY_ || worldY >= minY_ + height_) return false;
         int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
         int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
@@ -258,13 +272,17 @@ namespace kc {
         const uint64_t previousEncoded = getBlock(worldX, worldY, worldZ);
         const uint64_t currentEncoded = block.getEncodedId();
         // Local Y, same as the read above -- see the note in getBlock().
-        chunk->setBlock(lx, worldY - minY_, lz, currentEncoded);
+        if (source == SetBlockSource::Player) {
+            chunk->setBlockPlayer(kc::Location(lx, worldY - minY_, lz), currentEncoded);
+        } else {
+            chunk->setBlock(kc::Location(lx, worldY - minY_, lz), currentEncoded);
+        }
 
         // chunk->setBlock copy-on-writes to a fresh buffer; point the cache at
         // the same handle so cache and live chunk always share one grid.
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
-            blockCache_[makeChunkKey(gx, gz)] = chunk->getBlockDataPtr();
+            blockCache_[makeChunkKey(gx, gz)] = chunk->getBlockGrid();
             unsavedChunks_.insert(makeChunkKey(gx, gz));
         }
 
@@ -292,12 +310,7 @@ namespace kc {
         if (it == chunks_.end()) return 0;
         int lx = worldX - gx * chunkSize_;
         int lz = worldZ - gz * chunkSize_;
-        // Chunk grids are indexed by LOCAL Y (local 0 is world minY), so the world
-        // Y has to be converted here. Passing it straight through made every query
-        // answer for worldY + 64: collision found phantom ground 64 blocks above
-        // the real surface, the block highlight lit up empty air, and the player
-        // was shoved around by walls they could see straight through.
-        return it->second->getBlock(lx, worldY - minY_, lz);
+        return it->second->getBlock(Location(lx, worldY - minY_, lz));
     }
 
     int World::getSurfaceHeight(int worldX, int worldZ) const {
@@ -365,20 +378,22 @@ namespace kc {
         int N = chunkSize_;
         int h = height_;
 
-        // TODO: Using IO Sequentially isn't a great idea
         auto blockIds = IO::Get().getBuiltinTemplates().getRegionTemplate().load(gridX, gridZ);
+        std::unordered_map<Location, uint64_t> overrides;
         if (blockIds.empty()) {
-            // Not on disk (never edited) -> deterministic regeneration from the
-            // hardcoded seed. Generated chunks are NOT written back; only block
-            // edits reach the region overlay, so a chunk's presence on disk is
-            // exactly "this chunk differs from what the seed would produce".
-            blockIds = terrainGen_.generateBlocks(gridX, gridZ, N, h);
+            auto g3 = terrainGen_.generateBlocksGrid(gridX, gridZ, N, h);
+            if (g3) blockIds = g3->toVector();
+            else blockIds = terrainGen_.generateBlocks(gridX, gridZ, N, h);
+        } else {
+            // Try to load as overrides if it's our new format
+            // For now, check by trying to deserialize as overrides
+            // We'll handle in RegionTemplate
         }
 
-        BlockDataPtr handle;
+        BlockGridPtr terrainGrid = BlockGrid::fromVector(blockIds, N, h);
+        BlockGridPtr handle = terrainGrid;
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
-            handle = std::make_shared<const std::vector<uint64_t>>(std::move(blockIds));
             blockCache_[makeChunkKey(gridX, gridZ)] = handle;
         }
 
@@ -390,25 +405,33 @@ namespace kc {
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             auto it = blockCache_.find(makeChunkKey(gridX + 1, gridZ));
-            if (it != blockCache_.end()) { edgePosX = extractEdgeStrip(*it->second, N, h, 0); pEdgePosX = &edgePosX; }
+            if (it != blockCache_.end() && it->second) { edgePosX = extractEdgeStrip(it->second->getDenseData(), N, h, 0); pEdgePosX = &edgePosX; }
             it = blockCache_.find(makeChunkKey(gridX - 1, gridZ));
-            if (it != blockCache_.end()) { edgeNegX = extractEdgeStrip(*it->second, N, h, 1); pEdgeNegX = &edgeNegX; }
+            if (it != blockCache_.end() && it->second) { edgeNegX = extractEdgeStrip(it->second->getDenseData(), N, h, 1); pEdgeNegX = &edgeNegX; }
             it = blockCache_.find(makeChunkKey(gridX, gridZ + 1));
-            if (it != blockCache_.end()) { edgePosZ = extractEdgeStrip(*it->second, N, h, 2); pEdgePosZ = &edgePosZ; }
+            if (it != blockCache_.end() && it->second) { edgePosZ = extractEdgeStrip(it->second->getDenseData(), N, h, 2); pEdgePosZ = &edgePosZ; }
             it = blockCache_.find(makeChunkKey(gridX, gridZ - 1));
-            if (it != blockCache_.end()) { edgeNegZ = extractEdgeStrip(*it->second, N, h, 3); pEdgeNegZ = &edgeNegZ; }
+            if (it != blockCache_.end() && it->second) { edgeNegZ = extractEdgeStrip(it->second->getDenseData(), N, h, 3); pEdgeNegZ = &edgeNegZ; }
         }
 
         auto chunk = std::make_unique<Chunk>(glm::ivec2(gridX, gridZ), N, 1.0f, h);
-        chunk->setBlockData(handle, N, h);           // shares one grid with blockCache_
-        // Sub-chunks that are pure air produce no geometry, so they are never
-        // handed to the mesher. At 384 tall a typical chunk occupies only a
-        // fraction of its 96 sub-chunks, and the rest are all sky.
+        if (terrainGrid) {
+            chunk->setBaseGrid(BlockGrid::fromVector(terrainGrid->toVector(), N, h));
+        }
+        chunk->setBlockData(handle, N, h);
+        if (!overrides.empty()) {
+            chunk->applyPlayerOverridesFromMap(overrides);
+        }
         for (size_t i = 0; i < chunk->getSubChunks().size(); ++i) {
             if (!chunk->isSubChunkOccupied(i)) continue;
             auto& sub = chunk->getSubChunks()[i];
-            ChunkMesher::generateSubChunk(sub, chunk->getBlockData(), N, h, sub.yBase,
-                                           pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+            if (chunk->getBlockGrid()) {
+                ChunkMesher::generateSubChunk(sub, *chunk->getBlockGrid(), N, h, sub.yBase,
+                                               pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+            } else {
+                ChunkMesher::generateSubChunk(sub, chunk->getBlockData(), N, h, sub.yBase,
+                                               pEdgePosX, pEdgeNegX, pEdgePosZ, pEdgeNegZ);
+            }
         }
         chunk->upload();
 
@@ -430,8 +453,8 @@ namespace kc {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             auto cacheIt = blockCache_.find(key);
             bool saveAll = saveAllChunks_.load(std::memory_order_relaxed);
-            if (cacheIt != blockCache_.end() && (saveAll || unsavedChunks_.count(key))) {
-                IO::Get().getBuiltinTemplates().getRegionTemplate().queueSave(gridX, gridZ, *cacheIt->second);
+            if (cacheIt != blockCache_.end() && cacheIt->second && (saveAll || unsavedChunks_.count(key))) {
+                IO::Get().getBuiltinTemplates().getRegionTemplate().queueSave(gridX, gridZ, cacheIt->second->toVector());
             }
             unsavedChunks_.erase(key);
         }
@@ -473,7 +496,7 @@ namespace kc {
             if (!data) continue;
             int gx = static_cast<int>(key >> 32);
             int gz = static_cast<int>(static_cast<int32_t>(key & 0xFFFFFFFF));
-            regions.queueSave(gx, gz, *data);
+            regions.queueSave(gx, gz, data->toVector());
         }
     }
 
@@ -507,22 +530,35 @@ namespace kc {
             // A prefetched grid (Phase 3) already holds exactly what the disk
             // load or the seed would produce, so consume it instead of redoing
             // the work. Miss -> normal load/generate path.
-            BlockDataPtr prefetched = takePrefetched(makeChunkKey(gx, gz));
+            BlockGridPtr prefetched = takePrefetched(makeChunkKey(gx, gz));
             if (prefetched) {
                 std::lock_guard<std::mutex> lock(cacheMutex_);
-                blockCache_[makeChunkKey(gx, gz)] = std::move(prefetched);
+                blockCache_[makeChunkKey(gx, gz)] = prefetched;
             } else {
                 // TODO: Using IO Sequentially isn't a great idea
                 auto blockIds = IO::Get().getBuiltinTemplates().getRegionTemplate().load(gx, gz);
                 if (blockIds.empty()) {
                     // Deterministic regeneration from the hardcoded seed. Not
                     // written back to disk — a chunk on disk means it was edited.
-                    blockIds = terrainGen_.generateBlocks(gx, gz, chunkSize_, height_);
+                    auto genGrid = terrainGen_.generateBlocksGrid(gx, gz, chunkSize_, height_);
+                    if (!genGrid) {
+                        auto genVec = terrainGen_.generateBlocks(gx, gz, chunkSize_, height_);
+                        genGrid = BlockGrid::fromVector(genVec, chunkSize_, height_);
+                    }
+                    std::lock_guard<std::mutex> lock(cacheMutex_);
+                    blockCache_[makeChunkKey(gx, gz)] = genGrid;
+                    {
+                        std::lock_guard<std::mutex> lock(queueMutex_);
+                        toMesh_.push_back(makeChunkKey(gx, gz));
+                    }
+                    genChunksDone_.fetch_add(1, std::memory_order_relaxed);
+                    meshCV_.notify_one();
+                    logThroughput();
+                    continue;
                 }
 
                 std::lock_guard<std::mutex> lock(cacheMutex_);
-                blockCache_[makeChunkKey(gx, gz)] =
-                    std::make_shared<const std::vector<uint64_t>>(std::move(blockIds));
+                blockCache_[makeChunkKey(gx, gz)] = BlockGrid::fromVector(blockIds, chunkSize_, height_);
             }
 
             {
@@ -642,7 +678,7 @@ namespace kc {
                     editMasks_.erase(it);
                 }
 
-                BlockDataPtr blockData;
+                BlockGridPtr blockData;
                 {
                     std::lock_guard<std::mutex> lock(cacheMutex_);
                     auto it = blockCache_.find(key);
@@ -660,17 +696,17 @@ namespace kc {
                     // generator trying to publish its result.
                     constexpr int edx[4] = {1, -1, 0, 0};
                     constexpr int edz[4] = {0, 0, 1, -1};
-                    BlockDataPtr neighbour[4];
+                    BlockGridPtr neighbour[4];
                     {
                         std::lock_guard<std::mutex> lock(cacheMutex_);
                         for (int e = 0; e < 4; ++e) {
                             auto it = blockCache_.find(makeChunkKey(gx + edx[e], gz + edz[e]));
-                            neighbour[e] = (it != blockCache_.end()) ? it->second : nullptr;
+                            neighbour[e] = (it != blockCache_.end() && it->second) ? it->second : nullptr;
                         }
                     }
                     for (int e = 0; e < 4; ++e) {
                         if (neighbour[e]) {
-                            strip[e] = extractEdgeStrip(*neighbour[e], N, h, e);
+                            strip[e] = extractEdgeStrip(neighbour[e]->getDenseData(), N, h, e);
                             edges[e] = &strip[e];
                         }
                     }
@@ -686,8 +722,13 @@ namespace kc {
                     if (!mask.test(static_cast<size_t>(i))) continue;
                     SubChunk sub{};
                     sub.yBase = i * static_cast<int>(SUBCHUNK_H);
-                    ChunkMesher::generateSubChunk(sub, *blockData, N, h, sub.yBase,
-                                                  edges[0], edges[1], edges[2], edges[3]);
+                    if (blockData) {
+                        ChunkMesher::generateSubChunk(sub, *blockData, N, h, sub.yBase,
+                                                      edges[0], edges[1], edges[2], edges[3]);
+                    } else {
+                        ChunkMesher::generateSubChunk(sub, blockData->getDenseData(), N, h, sub.yBase,
+                                                      edges[0], edges[1], edges[2], edges[3]);
+                    }
                     sub.indexCount = static_cast<uint32_t>(sub.indices.size());
                     result.subs.push_back(std::move(sub));
                 }
@@ -709,7 +750,7 @@ namespace kc {
                     remeshGates_.erase(it);
                 }
 
-                BlockDataPtr blockData;
+                BlockGridPtr blockData;
                 {
                     std::lock_guard<std::mutex> lock(cacheMutex_);
                     auto it = blockCache_.find(key);
@@ -751,16 +792,21 @@ namespace kc {
                         {
                             std::lock_guard<std::mutex> lock(cacheMutex_);
                             auto it = blockCache_.find(makeChunkKey(nbx, nbz));
-                            if (it != blockCache_.end()) {
-                                strip = extractEdgeStrip(*it->second, N, h, sdir);
+                            if (it != blockCache_.end() && it->second) {
+                                strip = extractEdgeStrip(it->second->getDenseData(), N, h, sdir);
                                 pStrip = &strip;
                             }
                         }
 
                         const std::vector<uint64_t>* edges[4] = {};
                         edges[sdir] = pStrip;
-                        ChunkMesher::emitGateFaces(slab, *blockData, N, h, slab.yBase, gate,
-                                                   edges[0], edges[1], edges[2], edges[3]);
+                        if (blockData) {
+                            ChunkMesher::emitGateFaces(slab, *blockData, N, h, slab.yBase, gate,
+                                                       edges[0], edges[1], edges[2], edges[3]);
+                        } else {
+                            ChunkMesher::emitGateFaces(slab, blockData->getDenseData(), N, h, slab.yBase, gate,
+                                                       edges[0], edges[1], edges[2], edges[3]);
+                        }
                     }
                     slab.indexCount = static_cast<uint32_t>(slab.indices.size());
                     result.slabs.push_back(std::move(slab));
@@ -774,11 +820,11 @@ namespace kc {
             }
 
             // Fresh chunk mesh.
-            BlockDataPtr blockData;
+            BlockGridPtr blockData;
             {
                 std::lock_guard<std::mutex> lock(cacheMutex_);
                 auto it = blockCache_.find(key);
-                if (it == blockCache_.end()) continue;   // unloaded before meshing — drop
+                if (it == blockCache_.end() || !it->second) continue;   // unloaded before meshing — drop
                 blockData = it->second;
             }
 
@@ -790,8 +836,8 @@ namespace kc {
                 constexpr int edz[4] = {0, 0, 1, -1};
                 for (int e = 0; e < 4; ++e) {
                     auto it = blockCache_.find(makeChunkKey(gx + edx[e], gz + edz[e]));
-                    if (it != blockCache_.end()) {
-                        strip[e] = extractEdgeStrip(*it->second, N, h, e);
+                    if (it != blockCache_.end() && it->second) {
+                        strip[e] = extractEdgeStrip(it->second->getDenseData(), N, h, e);
                         edges[e] = &strip[e];
                     }
                 }
@@ -799,12 +845,21 @@ namespace kc {
 
             auto tempChunk = std::make_unique<Chunk>(glm::ivec2(gx, gz), N, 1.0f, h);
             tempChunk->setBlockData(blockData, N, h);   // shares the cache grid, no copy
-            const std::vector<uint64_t>& chunkData = tempChunk->getBlockData();
-            for (size_t i = 0; i < tempChunk->getSubChunks().size(); ++i) {
-                if (!tempChunk->isSubChunkOccupied(i)) continue;
-                auto& sub = tempChunk->getSubChunks()[i];
-                ChunkMesher::generateSubChunk(sub, chunkData, N, h, sub.yBase,
-                                              edges[0], edges[1], edges[2], edges[3]);
+            if (tempChunk->getBlockGrid()) {
+                for (size_t i = 0; i < tempChunk->getSubChunks().size(); ++i) {
+                    if (!tempChunk->isSubChunkOccupied(i)) continue;
+                    auto& sub = tempChunk->getSubChunks()[i];
+                    ChunkMesher::generateSubChunk(sub, *tempChunk->getBlockGrid(), N, h, sub.yBase,
+                                                  edges[0], edges[1], edges[2], edges[3]);
+                }
+            } else {
+                const std::vector<uint64_t>& chunkData = tempChunk->getBlockData();
+                for (size_t i = 0; i < tempChunk->getSubChunks().size(); ++i) {
+                    if (!tempChunk->isSubChunkOccupied(i)) continue;
+                    auto& sub = tempChunk->getSubChunks()[i];
+                    ChunkMesher::generateSubChunk(sub, chunkData, N, h, sub.yBase,
+                                                  edges[0], edges[1], edges[2], edges[3]);
+                }
             }
 
             ChunkGenResult result;
@@ -846,28 +901,35 @@ namespace kc {
 
             // TODO: Using IO Sequentially isn't a great idea
             auto blockIds = IO::Get().getBuiltinTemplates().getRegionTemplate().load(gx, gz);
-            if (blockIds.empty())
-                blockIds = terrainGen_.generateBlocks(gx, gz, chunkSize_, height_);
-
-            BlockDataPtr grid =
-                std::make_shared<const std::vector<uint64_t>>(std::move(blockIds));
+            BlockGridPtr grid;
+            if (!blockIds.empty()) {
+                grid = BlockGrid::fromVector(blockIds, chunkSize_, height_);
+            } else {
+                auto g2 = terrainGen_.generateBlocksGrid(gx, gz, chunkSize_, height_);
+                if (g2) {
+                    grid = g2;
+                } else {
+                    blockIds = terrainGen_.generateBlocks(gx, gz, chunkSize_, height_);
+                    grid = BlockGrid::fromVector(blockIds, chunkSize_, height_);
+                }
+            }
 
             std::lock_guard<std::mutex> lock(prefetchMutex_);
             prefetchLoading_.erase(key);
             // If the key was removed (claimed/cancelled/evicted), drop the grid.
             if (prefetchKeys_.count(key)) {
-                prefetchCache_[key] = std::move(grid);
+                prefetchCache_[key] = grid;
             } else {
                 // Discard: either cancelled by a real request or evicted.
             }
         }
     }
 
-    BlockDataPtr World::takePrefetched(uint64_t key) {
+    BlockGridPtr World::takePrefetched(uint64_t key) {
         std::lock_guard<std::mutex> lock(prefetchMutex_);
         auto it = prefetchCache_.find(key);
         if (it != prefetchCache_.end()) {
-            BlockDataPtr data = std::move(it->second);
+            BlockGridPtr data = std::move(it->second);
             prefetchCache_.erase(it);
             prefetchKeys_.erase(key);
             prefetchHits_.fetch_add(1, std::memory_order_relaxed);

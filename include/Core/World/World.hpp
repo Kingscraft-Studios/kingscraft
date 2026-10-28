@@ -2,8 +2,10 @@
 
 #include "Core/World/Chunk.hpp"
 #include "Core/World/ChunkMesher.hpp"
+#include "Core/World/Location.hpp"
 #include "Core/World/ITerrainGenerator.hpp"
 #include "Core/World/WorldMetadata.hpp"
+#include "Core/World/BlockGrid.hpp"
 #include <vector>
 #include <array>
 #include <memory>
@@ -55,7 +57,9 @@ namespace kc {
 
         const Chunk* getChunk(int gridX, int gridZ) const;
 
-        bool setBlock(int worldX, int worldY, int worldZ, const Block& block);
+        enum class SetBlockSource { Internal, Player };
+        bool setBlock(int worldX, int worldY, int worldZ, const Block& block, SetBlockSource source = SetBlockSource::Internal);
+        bool setBlock(int worldX, int worldY, int worldZ, const Location& loc, uint64_t blockId, SetBlockSource source = SetBlockSource::Internal);
         uint64_t getBlock(int worldX, int worldY, int worldZ) const;
         int getSurfaceHeight(int worldX, int worldZ) const;
         void remeshDirtyChunks();
@@ -112,7 +116,7 @@ namespace kc {
         // worker so speculative IO never steals a generation worker.
         void prefetchThreadFunc();
         // Moves a parked prefetch grid out for rendering (nullptr if none).
-        BlockDataPtr takePrefetched(uint64_t key);
+        BlockGridPtr takePrefetched(uint64_t key);
         void markNeighborsForBorder(int gx, int gz);
         void queueGateRemesh(int gx, int gz, int gate);
         void processEditResults();
@@ -179,7 +183,7 @@ namespace kc {
         std::deque<std::pair<int,int>> prefetchQueue_;             // keys awaiting a load
         std::unordered_set<uint64_t> prefetchKeys_;               // queued OR loading OR parked
         std::unordered_set<uint64_t> prefetchLoading_;            // keys the worker is currently loading
-        std::unordered_map<uint64_t, BlockDataPtr> prefetchCache_; // parked grids
+        std::unordered_map<uint64_t, BlockGridPtr> prefetchCache_; // parked grids
 
         // Prefetch statistics (R4)
         std::atomic<uint64_t> prefetchHits_{0};
@@ -227,7 +231,7 @@ namespace kc {
         float moveDirZ_ = 0.0f;
         bool hasMoveDir_ = false;
 
-        std::unordered_map<uint64_t, BlockDataPtr> blockCache_;
+        std::unordered_map<uint64_t, BlockGridPtr> blockCache_;
         mutable std::mutex cacheMutex_;
 
         // Chunks edited since load (setBlock). Only these are serialized and staged

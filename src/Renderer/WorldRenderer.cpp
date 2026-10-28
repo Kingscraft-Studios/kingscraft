@@ -13,8 +13,6 @@ namespace kc {
     struct TerrainPushConstants {
         glm::mat4 viewProj;     // 64 bytes
         glm::vec4 chunkOrigin;  // 16 bytes
-        glm::vec4 fogColor;     // 16 bytes -- rgb fog colour, w unused
-        glm::vec4 fogParams;    // 16 bytes -- x start distance, y full distance
     };
 
     struct HighlightPushConstants {
@@ -22,9 +20,6 @@ namespace kc {
     };
 
     static constexpr uint32_t HIGHLIGHT_VERTEX_COUNT = 24;
-
-    // Where distance fog begins, as a fraction of the chunk load distance.
-    static constexpr float fogStartFraction = 0.55f;
 
     WorldRenderer::~WorldRenderer() {
         cleanup();
@@ -50,9 +45,9 @@ namespace kc {
 
     void WorldRenderer::createPipelineLayout() {
         VkPushConstantRange pushConstantRange{};
-        // The fog fields live in the fragment stage, so the range has to be
-        // visible there as well or the shader cannot read them.
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        // viewProj + chunkOrigin are read in the vertex stage only; the terrain
+        // and transparent fragment shaders take no push constants any more.
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(TerrainPushConstants);
 
@@ -172,7 +167,8 @@ namespace kc {
         transparentPipeline_ = std::make_unique<Pipeline>(*device_, vertShaderCode, fragShaderCode, configInfo);
     }
 
-    void WorldRenderer::render(VkCommandBuffer cmd, const glm::mat4 &viewProj, const FrameScene& scene) {
+    void WorldRenderer::render(VkCommandBuffer cmd, const glm::mat4 &viewProj,
+                               const FrameScene& scene, VkQueryPool tsPool, uint32_t opaqueEndQuery) {
         if (!pipeline_) return;
 
         bool currentDisableTextures = RendererSettings::get().disableTextures;
@@ -197,24 +193,21 @@ namespace kc {
         TerrainPushConstants pc{};
         pc.viewProj = viewProj;
 
-        // Fog colour has to match the world render pass clear colour, otherwise
-        // the fogged edge of the loaded world shows as a band of a different
-        // colour against the sky.
-        pc.fogColor = glm::vec4(0.4f, 0.6f, 0.9f, 1.0f);
-
-        // Fog starts partway out and only becomes solid at the load distance, so
-        // the edge of the loaded world dissolves instead of being cut off.
-        const float loadDistance = RendererSettings::get().farPlaneCalc;
-        pc.fogParams = glm::vec4(loadDistance * fogStartFraction, loadDistance, 0.0f, 0.0f);
-
         // Only chunkOrigin changes per chunk, so the rest is written once.
-        const VkShaderStageFlags terrainStages =
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        const VkShaderStageFlags terrainStages = VK_SHADER_STAGE_VERTEX_BIT;
 
         for (const TerrainDraw& draw : scene.terrain.draws) {
             pc.chunkOrigin = glm::vec4(draw.worldOrigin, 0.0f);
             vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), terrainStages, 0, sizeof(TerrainPushConstants), &pc);
             drawChunk(cmd, draw.chunkKey);
+        }
+
+        // End of the opaque pass. BOTTOM_OF_PIPE drains prior work, so the
+        // split is a little pessimistic for the opaque span, but the World
+        // total stays comparable with earlier captures.
+        if (tsPool != VK_NULL_HANDLE) {
+            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                tsPool, opaqueEndQuery);
         }
 
         // Opaque pass is fully drawn. Now the transparent pass (water/glass):
@@ -324,7 +317,7 @@ namespace kc {
 
         HighlightPushConstants pc{};
         pc.viewProj = viewProj;
-        vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(HighlightPushConstants), &pc);
+        vkCmdPushConstants(cmd, pipelineLayout_->getHandle(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(HighlightPushConstants), &pc);
 
         VkBuffer vb = highlightVertexBuffer_->getHandle();
         VkDeviceSize offset = 0;
