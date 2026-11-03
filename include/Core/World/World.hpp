@@ -2,7 +2,6 @@
 
 #include "Core/World/Chunk.hpp"
 #include "Core/World/ChunkMesher.hpp"
-#include "Core/World/Location.hpp"
 #include "Core/World/ITerrainGenerator.hpp"
 #include "Core/World/WorldMetadata.hpp"
 #include "Core/World/BlockGrid.hpp"
@@ -57,9 +56,7 @@ namespace kc {
 
         const Chunk* getChunk(int gridX, int gridZ) const;
 
-        enum class SetBlockSource { Internal, Player };
-        bool setBlock(int worldX, int worldY, int worldZ, const Block& block, SetBlockSource source = SetBlockSource::Internal);
-        bool setBlock(int worldX, int worldY, int worldZ, const Location& loc, uint64_t blockId, SetBlockSource source = SetBlockSource::Internal);
+        bool setBlock(int worldX, int worldY, int worldZ, const Block& block);
         uint64_t getBlock(int worldX, int worldY, int worldZ) const;
         int getSurfaceHeight(int worldX, int worldZ) const;
         void remeshDirtyChunks();

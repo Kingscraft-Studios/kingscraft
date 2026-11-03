@@ -39,6 +39,11 @@ namespace kc {
         return *this;
     }
 
+    void DescriptorPool::freeSet(VkDescriptorSet set) {
+        if (pool_ != VK_NULL_HANDLE && set != VK_NULL_HANDLE)
+            vkFreeDescriptorSets(device_.device(), pool_, 1, &set);
+    }
+
     void DescriptorPool::reset() {
         if (pool_ != VK_NULL_HANDLE)
             vkDestroyDescriptorPool(device_.device(), pool_, nullptr);

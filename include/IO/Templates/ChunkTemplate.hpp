@@ -6,11 +6,9 @@
 
 #include <cstdint>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "Util/StringUtils.hpp"
-#include "Core/World/Location.hpp"
 
 namespace kc {
     class DiskLayer;
@@ -88,91 +86,6 @@ namespace kc {
             out[countPos + 3] = (count >> 24) & 0xFF;
 
             return std::string(out.begin(), out.end());
-        }
-
-        std::string serializeOverrides(const std::unordered_map<Location, uint64_t>& overrides) {
-            std::vector<char> out;
-            out.reserve(4 + 2 + 4 + overrides.size() * 12);
-
-            auto writeU32 = [&](uint32_t v) {
-                out.push_back(v & 0xFF);
-                out.push_back((v >> 8) & 0xFF);
-                out.push_back((v >> 16) & 0xFF);
-                out.push_back((v >> 24) & 0xFF);
-            };
-            auto writeU64 = [&](uint64_t v) {
-                for (int i = 0; i < 8; ++i) {
-                    out.push_back((v >> (i * 8)) & 0xFF);
-                }
-            };
-
-            writeU32(0x4B435342);
-            out.push_back(2);
-            out.push_back(0);
-            size_t countPos = out.size();
-            writeU32(0);
-            uint32_t count = 0;
-            for (const auto& [loc, id] : overrides) {
-                PackedPos p = PackedPos::pack(loc.x, loc.y, loc.z);
-                writeU32(p.value);
-                writeU64(id);
-                ++count;
-            }
-            out[countPos] = count & 0xFF;
-            out[countPos + 1] = (count >> 8) & 0xFF;
-            out[countPos + 2] = (count >> 16) & 0xFF;
-            out[countPos + 3] = (count >> 24) & 0xFF;
-
-            return std::string(out.begin(), out.end());
-        }
-
-        std::unordered_map<Location, uint64_t> deserializeOverrides(std::vector<char>& data) {
-            std::unordered_map<Location, uint64_t> overrides;
-            if (data.empty() || data.size() < 10) return overrides;
-            uint32_t magic = (static_cast<unsigned char>(data[0])) |
-                             (static_cast<unsigned char>(data[1]) << 8) |
-                             (static_cast<unsigned char>(data[2]) << 16) |
-                             (static_cast<unsigned char>(data[3]) << 24);
-            if (magic != 0x4B435342) return overrides;
-            size_t pos = 4;
-            uint16_t version = (static_cast<unsigned char>(data[pos])) |
-                               (static_cast<unsigned char>(data[pos + 1]) << 8);
-            pos += 2;
-            if (pos + 4 > data.size()) return overrides;
-            uint32_t count = (static_cast<unsigned char>(data[pos])) |
-                             (static_cast<unsigned char>(data[pos + 1]) << 8) |
-                             (static_cast<unsigned char>(data[pos + 2]) << 16) |
-                             (static_cast<unsigned char>(data[pos + 3]) << 24);
-            pos += 4;
-            auto& s = RendererSettings::get();
-            int N = s.chunkSize;
-            int h = s.worldHeight;
-            for (uint32_t i = 0; i < count && pos + 12 <= data.size(); ++i) {
-                uint32_t packedVal = (static_cast<unsigned char>(data[pos])) |
-                                     (static_cast<unsigned char>(data[pos + 1]) << 8) |
-                                     (static_cast<unsigned char>(data[pos + 2]) << 16) |
-                                     (static_cast<unsigned char>(data[pos + 3]) << 24);
-                pos += 4;
-                uint64_t id = static_cast<uint64_t>(static_cast<unsigned char>(data[pos])) |
-                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 1])) << 8) |
-                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 2])) << 16) |
-                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 3])) << 24) |
-                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 4])) << 32) |
-                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 5])) << 40) |
-                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 6])) << 48) |
-                              (static_cast<uint64_t>(static_cast<unsigned char>(data[pos + 7])) << 56);
-                pos += 8;
-                if (version == 2) {
-                    PackedPos p(packedVal);
-                    int x = 0, y = 0, z = 0;
-                    p.unpack(x, y, z);
-                    if (x < 0 || x >= N || y < 0 || y >= h || z < 0 || z >= N) continue;
-                    overrides[Location(x, y, z)] = id;
-                } else {
-                    // old format - skip
-                }
-            }
-            return overrides;
         }
 
         std::vector<uint64_t> deserialize(std::vector<char>& data) {

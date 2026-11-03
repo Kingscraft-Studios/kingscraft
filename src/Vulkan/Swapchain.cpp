@@ -31,9 +31,8 @@ namespace kc {
     }
 
     SwapChain::~SwapChain() {
-        for (auto imageView: swapChainImageViews) {
-            vkDestroyImageView(device.device(), imageView, nullptr);
-        }
+        // Views must be gone before the swapchain they were created from.
+        swapChainImageViews.clear();
 
         if (swapChain != nullptr) {
             vkDestroySwapchainKHR(device.device(), swapChain, nullptr);
@@ -111,7 +110,9 @@ namespace kc {
     }
 
     void SwapChain::createImageViews() {
-        swapChainImageViews.resize(swapChainImages.size());
+        swapChainImageViews.clear();
+        swapChainImageViews.reserve(swapChainImages.size());
+
         for (size_t i = 0; i < swapChainImages.size(); i++) {
             VkImageViewCreateInfo viewInfo{};
             viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -124,10 +125,7 @@ namespace kc {
             viewInfo.subresourceRange.baseArrayLayer = 0;
             viewInfo.subresourceRange.layerCount = 1;
 
-            if (vkCreateImageView(device.device(), &viewInfo, nullptr, &swapChainImageViews[i]) !=
-                VK_SUCCESS) {
-                throw std::runtime_error("failed to create texture image view!");
-            }
+            swapChainImageViews.push_back(std::make_unique<ImageView>(device, viewInfo));
         }
     }
 

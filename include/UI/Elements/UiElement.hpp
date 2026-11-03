@@ -40,6 +40,16 @@ namespace kc {
         uint32_t getStyleIndex() const { return styleIndex_; }
         virtual uint32_t getActiveStyleIndex() const { return styleIndex_; }
 
+        // True for elements that can be laid out over their whole parent with
+        // setFillParent(). Only rect-like quads qualify: text, images and
+        // buttons never cover the frame on their own.
+        virtual bool isFullscreenQuad() const { return false; }
+
+        // True when this element is visible, fills the frame and its style is
+        // fully opaque, so everything registered before it is guaranteed to be
+        // hidden. The batch builder drops those elements entirely.
+        bool occludesBelow(const UiEngine& engine) const;
+
         // Text accessors — delegates to label_
         void setText(const std::string& text) { label_.text = text; }
         void setFont(const std::string& fontName) { label_.fontName = fontName; }

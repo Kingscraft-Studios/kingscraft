@@ -1,4 +1,5 @@
 #include "Vulkan/Texture.hpp"
+#include "Vulkan/Buffer.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -11,13 +12,6 @@ namespace kc {
         createTextureImage(fileData);
         createTextureImageView();
         createTextureSampler();
-    }
-
-    Texture::~Texture() {
-        vkDestroySampler(device.device(), textureSampler, nullptr);
-        vkDestroyImageView(device.device(), textureImageView, nullptr);
-        vkDestroyImage(device.device(), textureImage, nullptr);
-        vkFreeMemory(device.device(), textureImageMemory, nullptr);
     }
 
     void Texture::createTextureImage(const std::vector<char>& fileData) {
@@ -33,61 +27,59 @@ namespace kc {
 
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-
-        // Create staging buffer with CPU visible memory
-        device.createBuffer(
+        // Staging lives only for the upload; the Device copy helper below submits
+        // and waits for idle, so it can be released at the end of this scope.
+        Buffer staging(
+                device,
                 imageSize,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                stagingBuffer,
-                stagingBufferMemory);
-
-        // Copy pixel data to staging buffer memory
-        void *data;
-        vkMapMemory(device.device(), stagingBufferMemory, 0, imageSize, 0, &data);
-        memcpy(data, pixels, static_cast<size_t>(imageSize));
-        vkUnmapMemory(device.device(), stagingBufferMemory);
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        staging.write(pixels, 0, imageSize);
 
         stbi_image_free(pixels);
 
         // Create GPU local image with transfer destination & sampled usage
-        device.createImage(
-                texWidth,
-                texHeight,
-                VK_FORMAT_R8G8B8A8_SRGB,
-                VK_IMAGE_TILING_OPTIMAL,
-                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                textureImage,
-                textureImageMemory);
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent = {
+            static_cast<uint32_t>(texWidth),
+            static_cast<uint32_t>(texHeight),
+            1};
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        image_ = std::make_unique<Image>(device, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         // Transition image layout to receive data
-        device.transitionImageLayout(textureImage,
+        device.transitionImageLayout(image_->getHandle(),
                                         VK_FORMAT_R8G8B8A8_SRGB,
                                         VK_IMAGE_LAYOUT_UNDEFINED,
                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
         // Copy buffer (CPU side) to image (GPU side)
-        device.copyBufferToImage(stagingBuffer, textureImage,
+        device.copyBufferToImage(staging.getHandle(), image_->getHandle(),
                                     static_cast<uint32_t>(texWidth),
                                     static_cast<uint32_t>(texHeight), 1);
 
         // Transition image layout for shader read access
-        device.transitionImageLayout(textureImage,
+        device.transitionImageLayout(image_->getHandle(),
                                         VK_FORMAT_R8G8B8A8_SRGB,
                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-        vkDestroyBuffer(device.device(), stagingBuffer, nullptr);
-        vkFreeMemory(device.device(), stagingBufferMemory, nullptr);
     }
 
     void Texture::createTextureImageView() {
-        textureImageView = device.createImageView(textureImage,
-                                                     VK_FORMAT_R8G8B8A8_SRGB,
-                                                     VK_IMAGE_ASPECT_COLOR_BIT);
+        imageView_ = std::make_unique<ImageView>(
+                device, image_->getHandle(),
+                VK_FORMAT_R8G8B8A8_SRGB,
+                VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     void Texture::createTextureSampler() {
@@ -105,9 +97,7 @@ namespace kc {
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-        if (vkCreateSampler(device.device(), &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create texture sampler!");
-        }
+        sampler_ = std::make_unique<Sampler>(device, samplerInfo);
     }
 
 }  // namespace kc

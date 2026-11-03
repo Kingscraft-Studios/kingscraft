@@ -11,6 +11,7 @@ namespace kc {
         RawTextureData loadRaw(const std::string& path) {
             auto bytes = readBytes(path, MissingFile::Warn);
             RawTextureData tex;
+            tex.sourcePath = path;
 
             if (!bytes || bytes->empty()) return tex;
 

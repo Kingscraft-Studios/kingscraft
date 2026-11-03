@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 #include <glm/glm.hpp>
 
@@ -18,6 +19,10 @@ struct RawTextureData {
     std::vector<unsigned char> rawData;
     int width = 0;
     int height = 0;
+
+    // Where this slot was loaded from. Diagnostics only; it lets the atlas
+    // builder name the file behind a failed layer instead of a layer index.
+    std::string sourcePath;
 
     bool isValid() const { return !rawData.empty(); }
 };

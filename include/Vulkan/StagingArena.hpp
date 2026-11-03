@@ -2,10 +2,12 @@
 
 #include <vulkan/vulkan.h>
 #include <cstdint>
+#include <memory>
 
 namespace kc {
 
     class Device;
+    class Buffer;
 
     struct StagingAllocation {
         VkBuffer buffer;
@@ -28,8 +30,7 @@ namespace kc {
     private:
         Device& device_;
         VkDeviceSize slotSize_;
-        VkBuffer buffer_ = VK_NULL_HANDLE;
-        VkDeviceMemory memory_ = VK_NULL_HANDLE;
+        std::unique_ptr<Buffer> buffer_;
         void* mapped_ = nullptr;
         VkDeviceSize slotOffset_[SLOT_COUNT] = {};
         uint64_t frameIndex_ = 0;

@@ -49,10 +49,11 @@ add_subdirectory(libs/shaderc EXCLUDE_FROM_ALL)
 # Build/emit a single shared library named libshaderc.so (no ABI version suffix)
 set_target_properties(shaderc_shared PROPERTIES OUTPUT_NAME shaderc)
 
-# Project Sources
-file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
-file(GLOB_RECURSE HEADER_FILES include/*.hpp)
-set(CMAKE_CONFIGURE_DEPENDS ${ENGINE_SRC} ${HEADER_FILES})
+# Project Sources. CONFIGURE_DEPENDS re-runs the glob when files are added or
+# removed, so a new .cpp is picked up by the next build without a manual
+# `cmake -B ...` reconfigure.
+file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS src/*.cpp)
+file(GLOB_RECURSE HEADER_FILES CONFIGURE_DEPENDS include/*.hpp)
 
 add_executable(kingscraft
         ${SOURCE_FILES}
@@ -89,9 +90,17 @@ add_custom_command(TARGET kingscraft POST_BUILD
         $<TARGET_FILE_DIR:kingscraft>
 )
 
-add_custom_command(TARGET kingscraft POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E remove_directory $<TARGET_FILE_DIR:kingscraft>/resources
+# Refresh the runtime resource tree on every build. This used to be POST_BUILD on
+# kingscraft, so editing only a shader/texture/model (nothing that relinks) left
+# the build-dir copy stale; the game then hashed the old shader text and reused
+# cached SPIR-V. An ALL target runs regardless of whether anything links.
+add_custom_target(copy_resources ALL
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+                ${CMAKE_CURRENT_BINARY_DIR}/resources
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/resources
-        $<TARGET_FILE_DIR:kingscraft>/resources
+                ${CMAKE_SOURCE_DIR}/resources
+                ${CMAKE_CURRENT_BINARY_DIR}/resources
+        COMMENT "Refreshing runtime resources"
+        VERBATIM
 )
+add_dependencies(kingscraft copy_resources)

@@ -133,8 +133,23 @@ namespace kc {
 
         engine_->beginFrame();
 
-        for (auto* element : elements_) {
-            element->render(*engine_);
+        // A visible opaque quad that fills the frame hides everything registered
+        // before it, and the UI is one painter's-order batch: those elements can
+        // be skipped entirely instead of generating vertices that would only be
+        // overdraw. Debug editing intentionally draws every element so hidden
+        // ones can still be inspected and selected.
+        std::size_t first = 0;
+        if (!engine_->isDebugModeOn()) {
+            for (std::size_t i = elements_.size(); i-- > 0;) {
+                if (elements_[i]->occludesBelow(*engine_)) {
+                    first = i;
+                    break;
+                }
+            }
+        }
+
+        for (std::size_t i = first; i < elements_.size(); ++i) {
+            elements_[i]->render(*engine_);
         }
 
         if (engine_->isDebugModeOn()) {

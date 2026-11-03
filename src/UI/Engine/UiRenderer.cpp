@@ -10,7 +10,6 @@
 #include "UI/Engine/UiRenderer.hpp"
 
 #include <cstddef>
-#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <bits/this_thread_sleep.h>
@@ -33,7 +32,9 @@ namespace kc {
         createDescriptorSetLayouts();
         createDescriptorPools();
         createUniformBuffer();
-        createDummyTexture();
+        fallbackTexture_ = std::make_unique<FallbackTexture>(device_);
+        blockTexView_ = fallbackTexture_->getView();
+        blockTexSampler_ = fallbackTexture_->getSampler();
         allocateDescriptorSets();
         for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             updateUiDescriptorSet(i);
@@ -60,7 +61,10 @@ namespace kc {
         stylePoolBuffer_.reset();
         elementStylesBuffer_.reset();
         uniformBuffer_.reset();
-        destroyDummyTexture();
+        fallbackTexture_.reset();
+        blockTexView_ = VK_NULL_HANDLE;
+        blockTexSampler_ = VK_NULL_HANDLE;
+        blockTexDirty_ = false;
         targetRenderPass_ = VK_NULL_HANDLE;
         initialized_ = false;
     }
@@ -133,6 +137,11 @@ namespace kc {
     }
 
     void UiRenderer::setBlockTexture(VkImageView imageView, VkSampler sampler) {
+        // A null view/sampler must never reach a descriptor write, and the UI may
+        // ask for the atlas before the cache has built it. Keep whatever is
+        // currently bound (the fallback checkerboard, at worst) instead.
+        if (imageView == VK_NULL_HANDLE || sampler == VK_NULL_HANDLE) return;
+
         blockTexView_ = imageView;
         blockTexSampler_ = sampler;
         blockTexDirty_ = true;
@@ -282,84 +291,6 @@ namespace kc {
         configInfo.pipelineLayout = pipelineLayout_->getHandle();
 
         uiPipeline_ = std::make_unique<Pipeline>(device_, vertCode, fragCode, configInfo);
-    }
-
-    void UiRenderer::createDummyTexture() {
-        // 1x1 white pixel texture as fallback for block texture descriptor
-        uint32_t white = 0xFFFFFFFF;
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingMemory;
-        VkDeviceSize size = 4;
-        device_.createBuffer(size,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingMemory);
-        void* mapped;
-        vkMapMemory(device_.device(), stagingMemory, 0, size, 0, &mapped);
-        std::memcpy(mapped, &white, size);
-        vkUnmapMemory(device_.device(), stagingMemory);
-
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = 1;
-        imageInfo.extent.height = 1;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        dummyImage_ = std::make_unique<Image>(device_, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-        device_.transitionImageLayout(dummyImage_->getHandle(), VK_FORMAT_R8G8B8A8_SRGB,
-                                      VK_IMAGE_LAYOUT_UNDEFINED,
-                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                      1, 1);
-        device_.copyBufferToImage(stagingBuffer, dummyImage_->getHandle(), 1, 1, 1);
-        device_.transitionImageLayout(dummyImage_->getHandle(), VK_FORMAT_R8G8B8A8_SRGB,
-                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                      1, 1);
-
-        vkDestroyBuffer(device_.device(), stagingBuffer, nullptr);
-        vkFreeMemory(device_.device(), stagingMemory, nullptr);
-
-        dummyImageView_ = std::make_unique<ImageView>(
-            device_, dummyImage_->getHandle(), VK_FORMAT_R8G8B8A8_SRGB,
-            VK_IMAGE_ASPECT_COLOR_BIT, 1, 0,
-            VK_IMAGE_VIEW_TYPE_2D_ARRAY, 1);
-
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_NEAREST;
-        samplerInfo.minFilter = VK_FILTER_NEAREST;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 1.0f;
-
-        dummySampler_ = std::make_unique<Sampler>(device_, samplerInfo);
-
-        // Use dummy as the initial block texture
-        blockTexView_ = dummyImageView_->getHandle();
-        blockTexSampler_ = dummySampler_->getHandle();
-    }
-
-    void UiRenderer::destroyDummyTexture() {
-        dummySampler_.reset();
-        dummyImageView_.reset();
-        dummyImage_.reset();
     }
 
     void UiRenderer::createUniformBuffer() {

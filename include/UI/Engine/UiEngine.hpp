@@ -57,6 +57,10 @@ namespace kc {
         uint32_t allocateElementId();
         void setElementStyle(uint32_t id, uint32_t styleIndex);
 
+        // True when this style paints every fragment of its quad with alpha 1.
+        // Font, texture and rounded-rect styles are never assumed opaque.
+        bool isStyleOpaque(uint32_t styleIndex) const;
+
         // Debug editing mode — forwards to UiDebugEditor
         void setDebugMode(bool on);
         bool isDebugModeOn() const;

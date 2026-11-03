@@ -15,17 +15,16 @@ namespace kc {
 
             auto parsed = ModelParser::parse(*jsonBytes);
 
-            // Decode textures in JSON order, skipping failures. TextureCache builds a
-            // flat layer array and skips invalid textures (TextureCache.cpp:51), so the
-            // final tileIndex must be resolved after decoding, not during parse.
+            // One slot per JSON texture path, in JSON order. A failed load stays
+            // as an empty slot instead of being removed: the atlas builder turns
+            // empty slots into the global missing-texture checkerboard, and every
+            // quad's texOrder is already its final layer offset within the model.
+            // Dropping failed entries used to shift all later layers and make a
+            // missing file render as a different texture.
             std::vector<RawTextureData> textures;
-            std::vector<int> orderToFinal(parsed.texturePaths.size(), -1);
-            for (size_t i = 0; i < parsed.texturePaths.size(); ++i) {
-                auto tex = textureTemplate.loadRaw(parsed.texturePaths[i]);
-                if (tex.isValid()) {
-                    orderToFinal[i] = static_cast<int>(textures.size());
-                    textures.push_back(std::move(tex));
-                }
+            textures.reserve(parsed.texturePaths.size());
+            for (const auto& texturePath : parsed.texturePaths) {
+                textures.push_back(textureTemplate.loadRaw(texturePath));
             }
 
             // Convert parsed elements -> real Elements, patching texOrder -> tileIndex.
@@ -42,9 +41,8 @@ namespace kc {
                     out.uvFrom = q.uvFrom;
                     out.uvTo = q.uvTo;
                     out.tileIndex = (q.texOrder >= 0 &&
-                                     q.texOrder < static_cast<int>(orderToFinal.size()) &&
-                                     orderToFinal[q.texOrder] >= 0)
-                                        ? orderToFinal[q.texOrder] : 0;
+                                     q.texOrder < static_cast<int>(textures.size()))
+                                        ? q.texOrder : 0;
                     e.quads.push_back(out);
                 }
 

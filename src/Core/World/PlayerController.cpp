@@ -2,7 +2,6 @@
 #include "Core/KeyBindHandler.hpp"
 #include "Core/Keys.hpp"
 #include "Core/World/Physics/CollisionSystem.hpp"
-#include "Core/Blocks/Blocks.hpp"
 #include "Core/World/World.hpp"
 #include "Event/EventManager.hpp"
 #include "Event/Events/PlayerDeathEvent.hpp"
@@ -20,24 +19,6 @@ namespace kc {
 
     namespace {
         constexpr float VOID_KILL_Y = -32.0f;
-
-        // How far the spawn search will walk from the saved spawn point looking
-        // for land, counted in whole chunks rather than blocks. A chunk is the
-        // natural unit here: each one is asked for its best column in a single
-        // heightmap pass, so a wider ring costs a few more reads rather than a
-        // few hundred more.
-        constexpr int spawnSearchChunks = 14;
-
-        // How many chunks one tick is allowed to inspect. The sweep is resumable,
-        // so this only sets how smoothly the search spreads across frames; it
-        // caps the per-tick cost either way.
-        constexpr int spawnChunksPerTick = 64;
-
-        // How much of the search area must have actually streamed in before the
-        // sweep is allowed to conclude "this is all ocean" and settle for the
-        // shallowest column. Without this the search can finish sweeping unloaded
-        // chunks and drop the player on the seabed mid-load.
-        constexpr int spawnMinInspectedChunks = 32;
 
         // How long the player must be unable to make any progress before the
         // watchdog tries to lift them out. Long enough that a normal pause never
@@ -58,163 +39,6 @@ namespace kc {
         float centeredMin(int blockCoord, float width) {
             return static_cast<float>(blockCoord) + (1.0f - width) * 0.5f;
         }
-    }
-
-    // Places the player on dry ground near the spawn point.
-    //
-    // The old code took surface + 1 at a fixed column. Water is not collidable
-    // (CollisionSystem.cpp) and there is no swimming, so whenever that column
-    // happened to be ocean the player was dropped onto the seabed, fully
-    // submerged, with no way out -- and the depenetration pass fighting the fall
-    // every tick read as the camera drifting on its own.
-    //
-    // The sweep now works a whole chunk at a time: read that chunk's OCEAN_FLOOR
-    // heightmap once, keep its single highest column, and only that one column
-    // needs a block lookup to confirm it is dry. Rings come in nearest-first, so
-    // the first chunk that yields dry ground wins, and the sweep stops there.
-    //
-    // Work is capped per tick and the cursor is kept on the controller, so a big
-    // search area costs the same per frame as a small one.
-    bool PlayerController::tryResolveSpawn(World& world) {
-        // Read-only view: World's non-const getChunk overload is private, and
-        // the search has no business mutating anything anyway.
-        const World& view = world;
-
-        // The cell encoding of water. Taken straight off the key rather than resolved
-        // through the registry: Blocks::WATER.getEncoded() IS the value
-        // WaterBlock::getEncodedId() would return, and the old
-        // getShared(...)->getEncodedId() round trip cost an O(n) scan of the
-        // whole registry under a lock on every search tick -- and returned
-        // "registry not up yet", failing the spawn search outright whenever
-        // this ran before block registration finished.
-        const uint64_t waterId = Blocks::WATER.getEncoded();
-
-        const int cs = world.getChunkSize();
-        if (cs <= 0) return false;
-
-        // Fast gate. Until the spawn chunk itself has streamed in there is
-        // nothing to search outward from.
-        const int originGx = static_cast<int>(std::floor(spawnPos_.x / static_cast<float>(cs)));
-        const int originGz = static_cast<int>(std::floor(spawnPos_.z / static_cast<float>(cs)));
-        if (!view.getChunk(originGx, originGz)) return false;
-
-        int budget = spawnChunksPerTick;
-        while (budget > 0) {
-            // Where we are on the square spiral. Ring 0 is the spawn chunk
-            // itself; each later ring is walked one chunk at a time around its
-            // perimeter.
-            const int ring = spawnSearchRing_;
-            if (ring > spawnSearchChunks) break;       // sweep finished
-
-            int ringDx = 0, ringDz = 0;
-            if (ring == 0) {
-                // The spawn chunk. Advance the cursor so it is not re-scanned.
-                spawnSearchRing_ = 1;
-            } else {
-                const int side = 2 * ring;
-                const int perim = 4 * side;
-                const int i = spawnSearchStep_;
-                if (i >= perim) { spawnSearchRing_ = ring + 1; spawnSearchStep_ = 0; continue; }
-                if      (i < side)       { ringDx = -ring + i;        ringDz = -ring; }
-                else if (i < 2 * side)   { ringDx =  ring;             ringDz = -ring + (i - side); }
-                else if (i < 3 * side)   { ringDx =  ring - (i - 2 * side); ringDz =  ring; }
-                else                     { ringDx = -ring;             ringDz =  ring - (i - 3 * side); }
-                ++spawnSearchStep_;
-            }
-            --budget;
-
-            const Chunk* chunk = view.getChunk(originGx + ringDx, originGz + ringDz);
-            if (!chunk) continue;                       // still streaming in
-
-            // One heightmap pass for the whole chunk. OCEAN_FLOOR, because
-            // water is ocean fill rather than ground -- see World::getSurfaceHeight.
-            const int n = chunk->getBlockDataSize();
-            int bestLocalY = -1, bestLocalX = 0, bestLocalZ = 0;
-            for (int lz = 0; lz < n; ++lz) {
-                for (int lx = 0; lx < n; ++lx) {
-                    const int top = chunk->getOceanFloorTopY(lx, lz);
-                    if (top > bestLocalY) { bestLocalY = top; bestLocalX = lx; bestLocalZ = lz; }
-                }
-            }
-            if (bestLocalY < 0) continue;              // nothing but air
-            ++spawnChunksInspected_;
-
-            const int surfaceY = chunk->localToWorldY(bestLocalY);
-            if (surfaceY >= world.getMaxY() - 1) continue;
-
-            // Remember the highest ground anywhere seen. If the whole swept area
-            // turns out to be water this is the shallowest point in it, which is
-            // a far kinder outcome than the bottom of the sea.
-            if (!spawnHaveBest_ || surfaceY > spawnBestSurface_) {
-                spawnHaveBest_ = true;
-                spawnBestSurface_ = surfaceY;
-                spawnBestX_ = (originGx + ringDx) * cs + bestLocalX;
-                spawnBestZ_ = (originGz + ringDz) * cs + bestLocalZ;
-            }
-
-            // Feet and head must both be clear of liquid, checked on the actual
-            // block so this stays correct if water placement changes.
-            const int feetLocal = chunk->worldToLocalY(surfaceY + 1);
-            const int headLocal = chunk->worldToLocalY(surfaceY + 2);
-            const bool submerged =
-                chunk->getBlock(Location(bestLocalX, feetLocal, bestLocalZ)) == waterId ||
-                chunk->getBlock(Location(bestLocalX, headLocal, bestLocalZ)) == waterId;
-            if (submerged) continue;
-
-            // Nearest dry ground wins, so the player lands as close to the
-            // requested point as the map allows.
-            const int wx = (originGx + ringDx) * cs + bestLocalX;
-            const int wz = (originGz + ringDz) * cs + bestLocalZ;
-            spawnPos_ = glm::vec3(centeredMin(wx, Attributes::PLAYER_WIDTH), spawnPos_.y,
-                                  centeredMin(wz, Attributes::PLAYER_WIDTH));
-            resetSpawnSearch();
-            LogUtils::info(ThreadName::GameLogic,
-                "spawn: placed on dry land at (" + std::to_string(wx) + ", " +
-                std::to_string(surfaceY) + ", " + std::to_string(wz) + ")");
-            placeOnSurface(world, wx, surfaceY, wz);
-            return true;
-        }
-
-        // Swept the whole area without finding dry ground. Commit to the
-        // shallowest column rather than leaving the player falling forever --
-        // but only once enough of the area has actually loaded to justify
-        // concluding it really is all ocean. Otherwise restart the sweep and let
-        // more chunks stream in first.
-        if (spawnSearchRing_ > spawnSearchChunks) {
-            if (spawnChunksInspected_ < spawnMinInspectedChunks) {
-                resetSpawnSearch();
-                return false;
-            }
-            if (spawnHaveBest_) {
-                const int surfaceY = spawnBestSurface_;
-                const int wx = spawnBestX_;
-                const int wz = spawnBestZ_;
-                const int inspected = spawnChunksInspected_;
-                spawnPos_ = glm::vec3(centeredMin(wx, Attributes::PLAYER_WIDTH), spawnPos_.y,
-                                      centeredMin(wz, Attributes::PLAYER_WIDTH));
-                resetSpawnSearch();
-                LogUtils::warn(ThreadName::GameLogic,
-                    "spawn: no dry land within " + std::to_string(spawnSearchChunks) +
-                    " chunks (" + std::to_string(inspected) +
-                    " loaded chunks inspected); settling on the shallowest water at (" +
-                    std::to_string(wx) + ", " + std::to_string(surfaceY) + ", " +
-                    std::to_string(wz) + ")");
-                placeOnSurface(world, wx, surfaceY, wz);
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    void PlayerController::resetSpawnSearch() {
-        spawnSearchRing_ = 0;
-        spawnSearchStep_ = 0;
-        spawnChunksInspected_ = 0;
-        spawnHaveBest_ = false;
-        spawnBestSurface_ = 0;
-        spawnBestX_ = 0;
-        spawnBestZ_ = 0;
     }
 
     void PlayerController::placeOnSurface(World& world, int x, int surface, int z) {
@@ -312,7 +136,7 @@ namespace kc {
         lastMouseY_ = Runtime::get().inputThread->getLastY();
         bodyPos_ = spawnPos_;
         velocityY_ = 0.0f;
-        resetSpawnSearch();
+        spawnFinder_.reset();
 
         camera_.setPosition(bodyPos_ + glm::vec3(Attributes::PLAYER_WIDTH * 0.5f, Attributes::EYE_HEIGHT, Attributes::PLAYER_WIDTH * 0.5f));
         camera_.setRotation(0.0f, -35.0f);
@@ -331,7 +155,21 @@ namespace kc {
             // Deliberately does nothing until it can place the player on dry
             // land: committing to a half-streamed world is what used to drop the
             // player onto an ocean floor.
-            tryResolveSpawn(world);
+            const SpawnFinder::Result found = spawnFinder_.poll(
+                world,
+                static_cast<int>(std::floor(spawnPos_.x)),
+                static_cast<int>(std::floor(spawnPos_.z)));
+
+            if (found.status == SpawnFinder::Status::Placed) {
+                // The finder only picks where on the ground plane the spawn
+                // belongs; spawnPos_ keeps its Y and placeOnSurface resolves the
+                // body height from the column it reported.
+                spawnPos_ = glm::vec3(centeredMin(found.column.x, Attributes::PLAYER_WIDTH),
+                                      spawnPos_.y,
+                                      centeredMin(found.column.z, Attributes::PLAYER_WIDTH));
+                placeOnSurface(world, found.column.x, found.column.surfaceY,
+                               found.column.z);
+            }
 
             // A candidate column is not the same as a floor. Hold here until the
             // blocks under the player's feet are actually solid in the world,
@@ -339,7 +177,7 @@ namespace kc {
             // on and the player falls through the terrain.
             if (!spawnPending_ && !hasSolidFloor(world)) {
                 spawnPending_ = true;
-                resetSpawnSearch();
+                spawnFinder_.reset();
             }
 
             // Still searching, so hold the player in place. Letting gravity run
@@ -491,7 +329,7 @@ namespace kc {
     void PlayerController::setSpawn(const glm::vec3& spawn) {
         spawnPos_ = spawn;
         // A new spawn point invalidates whatever the previous sweep had found.
-        resetSpawnSearch();
+        spawnFinder_.reset();
     }
 
     void PlayerController::restore(const glm::vec3& position, float yaw, float pitch, bool snapToSurface) {
@@ -501,7 +339,7 @@ namespace kc {
         // Only a fresh default spawn needs the surface snap; a persisted
         // position keeps its exact Y (e.g. inside a dug-out room / box).
         spawnPending_ = snapToSurface;
-        if (snapToSurface) resetSpawnSearch();
+        if (snapToSurface) spawnFinder_.reset();
         flyMode_ = false;
         jumpedThisAirTime_ = false;
         jumpPresses_.clear();
@@ -513,6 +351,8 @@ namespace kc {
         velocityY_ = 0.0f;
         respawnGrace_ = 0.4f;
         spawnPending_ = true;
+        // A respawn is a fresh spawn request: never resume a half-finished sweep.
+        spawnFinder_.reset();
         dead_ = false;
         flyMode_ = false;
         jumpedThisAirTime_ = false;

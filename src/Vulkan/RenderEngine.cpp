@@ -38,6 +38,9 @@ namespace kc {
             Registries::waitForBuild();
             textureCache_->updateFromRegistry();
             worldRenderer.init(device, *textureCache_, renderer->getWorldRenderPass());
+            // The cache always has a texture now (real atlas or fallback), so
+            // bind it immediately instead of leaving the UI on its placeholder.
+            uiSystem->setBlockTexture(textureCache_->getImageView(), textureCache_->getSampler());
             worldRendererInitialized = true;
         }
 

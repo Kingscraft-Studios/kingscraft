@@ -13,6 +13,8 @@ namespace kc {
         UiGradientRect& operator=(const UiGradientRect&) = delete;
 
         void render(UiEngine& engine) override;
+
+        bool isFullscreenQuad() const override { return true; }
     };
 
 } // namespace kc

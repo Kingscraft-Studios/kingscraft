@@ -9,7 +9,7 @@ namespace kc {
 
     void PlayerBlockInteractionListener::onBlockBreak(BlockBreakEvent& event) {
         World& world = Runtime::get().kingscraft->getWorld();
-        world.setBlock(event.getX(), event.getY(), event.getZ(), Blocks::AIR, World::SetBlockSource::Player);
+        world.setBlock(event.getX(), event.getY(), event.getZ(), Blocks::AIR);
         world.remeshDirtyChunks();
     }
 
@@ -31,7 +31,7 @@ namespace kc {
             return;
         }
 
-        world.setBlock(x, y, z, block, World::SetBlockSource::Player);
+        world.setBlock(x, y, z, block);
         world.remeshDirtyChunks();
     }
 

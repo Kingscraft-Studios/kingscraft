@@ -7,7 +7,6 @@
 #include <vector>
 #include <memory>
 #include <array>
-#include <unordered_map>
 #include <glm/glm.hpp>
 
 namespace kc {
@@ -163,16 +162,8 @@ namespace kc {
         BlockGridPtr getBlockDataPtr() const { return blockGrid_; }
         BlockGridPtr getBlockGrid() const { return blockGrid_; }
         void setBlockData(BlockGridPtr grid, int chunkSize, int height);
-        void setBaseGrid(BlockGridPtr grid) { baseGrid_ = grid; }
-        BlockGridPtr getBaseGrid() const { return baseGrid_; }
         uint64_t getBlock(const Location& loc) const;
         void setBlock(const Location& loc, uint64_t blockId);
-        void setBlockPlayer(const Location& loc, uint64_t blockId);
-        void applyPlayerOverridesFromMap(const std::unordered_map<Location, uint64_t>& overrides);
-        const std::unordered_map<Location, uint64_t>& getPlayerOverrides() const { return playerOverrides_; }
-        std::unordered_map<Location, uint64_t>& getPlayerOverrides() { return playerOverrides_; }
-        bool hasPlayerOverrides() const { return !playerOverrides_.empty(); }
-        void setPlayerOverrides(std::unordered_map<Location, uint64_t> overrides) { playerOverrides_ = std::move(overrides); }
 
         int getBlockDataSize() const { return chunkSize_; }
         int getHeight() const { return height_; }
@@ -250,8 +241,6 @@ namespace kc {
         std::vector<SubChunk> subChunks_;
 
         BlockGridPtr blockGrid_;
-        BlockGridPtr baseGrid_;
-        std::unordered_map<Location, uint64_t> playerOverrides_;
         int chunkSize_ = 0;
         int height_ = 0;
         int minY_ = 0;

@@ -1,6 +1,12 @@
 #pragma once
 
 #include "Device.hpp"
+#include "Framebuffer.hpp"
+#include "Image.hpp"
+#include "ImageView.hpp"
+#include "Sampler.hpp"
+
+#include <memory>
 
 namespace kc {
 
@@ -14,10 +20,10 @@ namespace kc {
 
         void resize(VkExtent2D newExtent, VkRenderPass renderPass);
 
-        VkImageView getImageView() const { return imageView_; }
-        VkSampler getSampler() const { return sampler_; }
-        VkFramebuffer getFramebuffer() const { return framebuffer_; }
-        VkImage getImage() const { return image_; }
+        VkImageView getImageView() const { return imageView_->getHandle(); }
+        VkSampler getSampler() const { return sampler_->getHandle(); }
+        VkFramebuffer getFramebuffer() const { return framebuffer_->getHandle(); }
+        VkImage getImage() const { return image_->getHandle(); }
 
     private:
         void createResources(VkExtent2D extent, VkFormat format, VkRenderPass renderPass);
@@ -28,11 +34,10 @@ namespace kc {
         VkExtent2D extent_{};
         VkFormat format_{};
 
-        VkImage image_ = VK_NULL_HANDLE;
-        VkDeviceMemory imageMemory_ = VK_NULL_HANDLE;
-        VkImageView imageView_ = VK_NULL_HANDLE;
-        VkSampler sampler_ = VK_NULL_HANDLE;
-        VkFramebuffer framebuffer_ = VK_NULL_HANDLE;
+        std::unique_ptr<Image> image_;
+        std::unique_ptr<ImageView> imageView_;
+        std::unique_ptr<Sampler> sampler_;
+        std::unique_ptr<Framebuffer> framebuffer_;
     };
 
 } // namespace kc

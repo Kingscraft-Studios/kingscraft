@@ -19,6 +19,11 @@ namespace kc {
         DescriptorPool& operator=(DescriptorPool&& other) noexcept;
 
         VkDescriptorPool getHandle() const { return pool_; }
+
+        // Releases a set back to this pool. The pool must have been created
+        // with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT.
+        void freeSet(VkDescriptorSet set);
+
         void reset();
 
     private:

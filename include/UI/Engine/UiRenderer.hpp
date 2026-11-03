@@ -5,9 +5,7 @@
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/Pipeline.hpp"
 #include "Vulkan/PipelineLayout.hpp"
-#include "Vulkan/Image.hpp"
-#include "Vulkan/ImageView.hpp"
-#include "Vulkan/Sampler.hpp"
+#include "Vulkan/FallbackTexture.hpp"
 #include "Vulkan/DescriptorSetLayout.hpp"
 #include "Vulkan/DescriptorPool.hpp"
 #include "UI/Engine/UiBatchQueue.hpp"
@@ -55,8 +53,6 @@ namespace kc {
         void allocateDescriptorSets();
         void createUniformBuffer();
         void updateUniformBuffer();
-        void createDummyTexture();
-        void destroyDummyTexture();
         void updateUiDescriptorSet(uint32_t frameIndex);
 
         Device& device_;
@@ -114,10 +110,9 @@ namespace kc {
         VkSampler blockTexSampler_ = VK_NULL_HANDLE;
         bool blockTexDirty_ = false;
 
-        // Placeholder white texture used before real block textures are available
-        std::unique_ptr<Image> dummyImage_;
-        std::unique_ptr<ImageView> dummyImageView_;
-        std::unique_ptr<Sampler> dummySampler_;
+        // Placeholder bound as the block texture until setBlockTexture() supplies
+        // the real atlas.
+        std::unique_ptr<FallbackTexture> fallbackTexture_;
     };
 
 } // namespace kc

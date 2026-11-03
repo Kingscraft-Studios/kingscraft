@@ -202,24 +202,12 @@ namespace kc {
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             auto& regions = IO::Get().getBuiltinTemplates().getRegionTemplate();
-            auto& chunkTpl = IO::Get().getBuiltinTemplates().getChunkTemplate();
             bool saveAll = saveAllChunks_.load(std::memory_order_relaxed);
             for (const auto& [key, data] : blockCache_) {
                 if (!saveAll && !unsavedChunks_.count(key)) continue;
                 if (!data) continue;
                 int gx = static_cast<int>(key >> 32);
                 int gz = static_cast<int>(key & 0xFFFFFFFF);
-                auto cit = chunks_.find(key);
-                if (cit != chunks_.end() && cit->second) {
-                    if (cit->second->hasPlayerOverrides()) {
-                        regions.queueSave(gx, gz, chunkTpl.serializeOverrides(cit->second->getPlayerOverrides()));
-                        continue;
-                    } else if (!saveAll) {
-                        continue;
-                    }
-                } else if (!saveAll) {
-                    continue;
-                }
                 regions.queueSave(gx, gz, data->toVector());
             }
         }
@@ -260,7 +248,7 @@ namespace kc {
         return (it != chunks_.end()) ? it->second.get() : nullptr;
     }
 
-    bool World::setBlock(int worldX, int worldY, int worldZ, const Block& block, SetBlockSource source) {
+    bool World::setBlock(int worldX, int worldY, int worldZ, const Block& block) {
         if (worldY < minY_ || worldY >= minY_ + height_) return false;
         int gx = worldToGrid(static_cast<float>(worldX), chunkSize_);
         int gz = worldToGrid(static_cast<float>(worldZ), chunkSize_);
@@ -272,11 +260,7 @@ namespace kc {
         const uint64_t previousEncoded = getBlock(worldX, worldY, worldZ);
         const uint64_t currentEncoded = block.getEncodedId();
         // Local Y, same as the read above -- see the note in getBlock().
-        if (source == SetBlockSource::Player) {
-            chunk->setBlockPlayer(kc::Location(lx, worldY - minY_, lz), currentEncoded);
-        } else {
-            chunk->setBlock(kc::Location(lx, worldY - minY_, lz), currentEncoded);
-        }
+        chunk->setBlock(Location(lx, worldY - minY_, lz), currentEncoded);
 
         // chunk->setBlock copy-on-writes to a fresh buffer; point the cache at
         // the same handle so cache and live chunk always share one grid.
@@ -291,12 +275,9 @@ namespace kc {
         if (lz == 0) queueGateRemesh(gx, gz - 1, 2);                // -Z neighbor: re-cut its +Z face
         else if (lz == chunkSize_ - 1) queueGateRemesh(gx, gz + 1, 3); // +Z neighbor: re-cut its -Z face
 
-        EventManager::get().callEvent<BlockChangedEvent>(
-            worldX, worldY, worldZ,
-            RegistryKey<Block>{previousEncoded,
-                Registry<Block>::getRegistry().getIdentifier(previousEncoded)},
-            RegistryKey<Block>{currentEncoded,
-                Registry<Block>::getRegistry().getIdentifier(currentEncoded)});
+        EventManager::get().callEvent<BlockChangedEvent>(worldX, worldY, worldZ,
+            RegistryKey<Block>{previousEncoded, Registry<Block>::getRegistry().getIdentifier(previousEncoded)},
+            RegistryKey<Block>{currentEncoded, Registry<Block>::getRegistry().getIdentifier(currentEncoded)});
 
         mutationGen_.fetch_add(1, std::memory_order_relaxed);
         return true;
@@ -379,19 +360,13 @@ namespace kc {
         int h = height_;
 
         auto blockIds = IO::Get().getBuiltinTemplates().getRegionTemplate().load(gridX, gridZ);
-        std::unordered_map<Location, uint64_t> overrides;
         if (blockIds.empty()) {
             auto g3 = terrainGen_.generateBlocksGrid(gridX, gridZ, N, h);
             if (g3) blockIds = g3->toVector();
             else blockIds = terrainGen_.generateBlocks(gridX, gridZ, N, h);
-        } else {
-            // Try to load as overrides if it's our new format
-            // For now, check by trying to deserialize as overrides
-            // We'll handle in RegionTemplate
         }
 
-        BlockGridPtr terrainGrid = BlockGrid::fromVector(blockIds, N, h);
-        BlockGridPtr handle = terrainGrid;
+        BlockGridPtr handle = BlockGrid::fromVector(blockIds, N, h);
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             blockCache_[makeChunkKey(gridX, gridZ)] = handle;
@@ -415,13 +390,7 @@ namespace kc {
         }
 
         auto chunk = std::make_unique<Chunk>(glm::ivec2(gridX, gridZ), N, 1.0f, h);
-        if (terrainGrid) {
-            chunk->setBaseGrid(BlockGrid::fromVector(terrainGrid->toVector(), N, h));
-        }
         chunk->setBlockData(handle, N, h);
-        if (!overrides.empty()) {
-            chunk->applyPlayerOverridesFromMap(overrides);
-        }
         for (size_t i = 0; i < chunk->getSubChunks().size(); ++i) {
             if (!chunk->isSubChunkOccupied(i)) continue;
             auto& sub = chunk->getSubChunks()[i];

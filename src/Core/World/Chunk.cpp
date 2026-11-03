@@ -151,64 +151,6 @@ namespace kc {
             subChunks_[subIdx + 1].meshNeeded = true;
     }
 
-    void Chunk::setBlockPlayer(const Location& loc, uint64_t blockId) {
-        if (!blockGrid_) return;
-        if (loc.x < 0 || loc.x >= chunkSize_ || loc.y < 0 || loc.y >= height_ || loc.z < 0 || loc.z >= chunkSize_)
-            return;
-
-        uint64_t baseId = 0;
-        if (baseGrid_) {
-            baseId = baseGrid_->get(loc);
-        } else {
-            baseId = blockGrid_->get(loc);
-        }
-
-        if (baseId == blockId) {
-            auto it = playerOverrides_.find(loc);
-            if (it != playerOverrides_.end()) {
-                playerOverrides_.erase(it);
-            }
-            if (blockGrid_->get(loc) != baseId) {
-                BlockGridPtr cloned = blockGrid_->clone();
-                cloned->set(loc, baseId);
-                blockGrid_ = std::move(cloned);
-                refreshColumn(loc.x, loc.z, *blockGrid_);
-                int subIdx = loc.y / static_cast<int>(SUBCHUNK_H);
-                if (static_cast<size_t>(subIdx) < subChunks_.size()) subChunks_[subIdx].meshNeeded = true;
-                if (loc.y % static_cast<int>(SUBCHUNK_H) == 0 && subIdx > 0 && static_cast<size_t>(subIdx - 1) < subChunks_.size())
-                    subChunks_[subIdx - 1].meshNeeded = true;
-                if (loc.y % static_cast<int>(SUBCHUNK_H) == static_cast<int>(SUBCHUNK_H) - 1 &&
-                    static_cast<size_t>(subIdx + 1) < subChunks_.size())
-                    subChunks_[subIdx + 1].meshNeeded = true;
-            }
-            return;
-        }
-
-        playerOverrides_[loc] = blockId;
-        setBlock(loc, blockId);
-    }
-
-    void Chunk::applyPlayerOverridesFromMap(const std::unordered_map<Location, uint64_t>& overrides) {
-        playerOverrides_ = overrides;
-        if (!blockGrid_) return;
-        for (const auto& [loc, id] : overrides) {
-            if (loc.x < 0 || loc.x >= chunkSize_ || loc.y < 0 || loc.y >= height_ || loc.z < 0 || loc.z >= chunkSize_)
-                continue;
-            BlockGridPtr cloned = blockGrid_->clone();
-            cloned->set(loc, id);
-            blockGrid_ = std::move(cloned);
-            refreshColumn(loc.x, loc.z, *blockGrid_);
-            int subIdx = loc.y / static_cast<int>(SUBCHUNK_H);
-            if (static_cast<size_t>(subIdx) < subChunks_.size())
-                subChunks_[subIdx].meshNeeded = true;
-            if (loc.y % static_cast<int>(SUBCHUNK_H) == 0 && subIdx > 0 && static_cast<size_t>(subIdx - 1) < subChunks_.size())
-                subChunks_[subIdx - 1].meshNeeded = true;
-            if (loc.y % static_cast<int>(SUBCHUNK_H) == static_cast<int>(SUBCHUNK_H) - 1 &&
-                static_cast<size_t>(subIdx + 1) < subChunks_.size())
-                subChunks_[subIdx + 1].meshNeeded = true;
-        }
-    }
-
     bool Chunk::isRemeshNeeded() const {
         for (auto& sub : subChunks_)
             if (sub.meshNeeded) return true;

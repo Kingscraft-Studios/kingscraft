@@ -1,14 +1,10 @@
 #pragma once
 
 #include "Vulkan/Device.hpp"
-#include "Vulkan/Image.hpp"
-#include "Vulkan/ImageView.hpp"
-#include "Vulkan/Sampler.hpp"
-#include "Vulkan/DescriptorPool.hpp"
-#include "Vulkan/DescriptorSetLayout.hpp"
 #include <vulkan/vulkan.h>
-#include <memory>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace kc {
 
@@ -20,26 +16,31 @@ public:
     TextureCache(const TextureCache&) = delete;
     TextureCache& operator=(const TextureCache&) = delete;
 
+    // Rebuilds the block texture array. Never leaves the cache without a bound
+    // texture: a layer that fails to read or decode becomes the global
+    // missing-texture checkerboard, and a failure while creating GPU resources
+    // keeps the previous atlas (or falls back to an all-checkerboard one).
+    // Only device loss / out-of-memory escapes, and those are fatal.
+    //
+    // The descriptor set and layout handles are replaced, so the caller must
+    // idle the device (nothing may still reference the old atlas) and rebuild
+    // the world pipeline that was created from getLayout().
     void updateFromRegistry();
 
-    VkDescriptorSetLayout getLayout() const { return descriptorSetLayout_ ? descriptorSetLayout_->getHandle() : VK_NULL_HANDLE; }
-    VkDescriptorSet getDescriptorSet() const { return descriptorSet_; }
-    VkImageView getImageView() const { return imageView_ ? imageView_->getHandle() : VK_NULL_HANDLE; }
-    VkSampler getSampler() const { return sampler_ ? sampler_->getHandle() : VK_NULL_HANDLE; }
-    uint32_t getLayerCount() const { return layerCount_; }
+    VkDescriptorSetLayout getLayout() const;
+    VkDescriptorSet getDescriptorSet() const;
+    VkImageView getImageView() const;
+    VkSampler getSampler() const;
+    uint32_t getLayerCount() const;
 
 private:
-    void cleanup();
+    struct Atlas;
+
+    std::unique_ptr<Atlas> buildAtlas(const std::vector<std::vector<unsigned char>>& layers,
+                                      int width, int height);
 
     Device& device_;
-
-    std::unique_ptr<Image> image_;
-    std::unique_ptr<ImageView> imageView_;
-    std::unique_ptr<Sampler> sampler_;
-    std::unique_ptr<DescriptorPool> descriptorPool_;
-    std::unique_ptr<DescriptorSetLayout> descriptorSetLayout_;
-    VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;
-    uint32_t layerCount_ = 0;
+    std::unique_ptr<Atlas> atlas_;
 };
 
 } // namespace kc

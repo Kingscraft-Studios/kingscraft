@@ -83,7 +83,7 @@ public:
 
     VkFormat getSwapChainImageFormat() const { return swapchain_->getSwapChainImageFormat(); }
     uint32_t getSwapChainImageCount() const { return static_cast<uint32_t>(swapchain_->imageCount()); }
-    const std::vector<VkImageView>& getSwapChainImageViews() const { return swapchain_->getImageViews(); }
+    std::vector<VkImageView> getSwapChainImageViews() const { return swapchain_->getImageViews(); }
     SwapChain& getSwapChain() { return *swapchain_; }
 
     VkRenderPass getRenderPass() const { return presentRenderPass_->getHandle(); }

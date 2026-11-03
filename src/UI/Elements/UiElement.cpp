@@ -12,6 +12,18 @@ namespace kc {
                point.y >= center.y - half.y && point.y <= center.y + half.y;
     }
 
+    // A fullscreen quad that is guaranteed to paint every pixel of the frame.
+    // The layout test uses the normalized form, so it is correct even before the
+    // first resize has run updateLayout(). The colour is read from the style
+    // pool, not from color_: ui.vert resolves the style by element id and the
+    // vertex colour is unused, so color_ would be the wrong thing to inspect.
+    bool UiElement::occludesBelow(const UiEngine& engine) const {
+        if (!visible_ || !isFullscreenQuad()) return false;
+        if (normalizedPos_ != glm::vec2(0.0f) || pixelOffset_ != glm::vec2(0.0f)) return false;
+        if (normalizedSize_ != glm::vec2(1.0f)) return false;
+        return engine.isStyleOpaque(getActiveStyleIndex());
+    }
+
     void UiElement::renderLabel(UiEngine& engine, glm::vec4 color) {
         if (label_.text.empty()) return;
 

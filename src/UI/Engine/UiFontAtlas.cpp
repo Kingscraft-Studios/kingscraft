@@ -3,7 +3,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
-#include <cstring>
+#include "Vulkan/Buffer.hpp"
 #include <stdexcept>
 
 #include "Threads/IO.hpp"
@@ -115,19 +115,14 @@ namespace kc {
     void UiFontAtlas::createAtlasTexture(const std::vector<unsigned char>& pixels) {
         VkDeviceSize imageSize = static_cast<VkDeviceSize>(ATLAS_WIDTH) * ATLAS_HEIGHT * 4;
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        device_.createBuffer(
+        // Staging lives only for the upload; the Device copy helper below submits
+        // and waits for idle, so it can be released at the end of this scope.
+        Buffer staging(
+            device_,
             imageSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer,
-            stagingBufferMemory);
-
-        void* data;
-        vkMapMemory(device_.device(), stagingBufferMemory, 0, imageSize, 0, &data);
-        std::memcpy(data, pixels.data(), static_cast<size_t>(imageSize));
-        vkUnmapMemory(device_.device(), stagingBufferMemory);
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        staging.write(pixels.data(), 0, imageSize);
 
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -152,7 +147,7 @@ namespace kc {
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-        device_.copyBufferToImage(stagingBuffer, atlasImage_->getHandle(),
+        device_.copyBufferToImage(staging.getHandle(), atlasImage_->getHandle(),
                                    static_cast<uint32_t>(ATLAS_WIDTH),
                                    static_cast<uint32_t>(ATLAS_HEIGHT), 1);
 
@@ -160,9 +155,6 @@ namespace kc {
             atlasImage_->getHandle(), VK_FORMAT_R8G8B8A8_UNORM,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-        vkDestroyBuffer(device_.device(), stagingBuffer, nullptr);
-        vkFreeMemory(device_.device(), stagingBufferMemory, nullptr);
 
         atlasView_ = std::make_unique<ImageView>(
             device_, atlasImage_->getHandle(), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);

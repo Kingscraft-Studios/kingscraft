@@ -104,6 +104,25 @@ namespace kc {
         stylePoolDirty_ = true;
     }
 
+    // Only a style that leaves every fragment fully opaque can hide the elements
+    // drawn before it. Solid is the obvious case; a gradient only qualifies when
+    // both ends are opaque. Rounded rects have transparent corners, a font pass
+    // only covers glyph pixels, and texture alpha is unknown, so those are never
+    // treated as covers.
+    bool UiEngine::isStyleOpaque(uint32_t styleIndex) const {
+        if (styleIndex >= stylePool_.size()) return false;
+        const GpuStyle& style = stylePool_[styleIndex];
+        const int mode = static_cast<int>(style.params.x);
+        if (mode == static_cast<int>(RenderMode::Solid)) {
+            return style.color1.a >= 1.0f;
+        }
+        if (mode == static_cast<int>(RenderMode::GradientLinear) ||
+            mode == static_cast<int>(RenderMode::GradientRadial)) {
+            return style.color1.a >= 1.0f && style.color2.a >= 1.0f;
+        }
+        return false;
+    }
+
     void UiEngine::markDirty(uint32_t elementId, int styleIndex) {
         if (elementId >= UiRenderer::MAX_ELEMENTS) return;
         if (styleIndex >= 0) elementStyles_[elementId] = static_cast<uint32_t>(styleIndex);

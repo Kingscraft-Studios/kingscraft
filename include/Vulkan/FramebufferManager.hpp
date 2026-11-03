@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Device.hpp"
+#include "Framebuffer.hpp"
+#include <memory>
 #include <vector>
 
 namespace kc {
@@ -16,12 +18,12 @@ namespace kc {
         void createFramebuffers(const std::vector<VkImageView>& imageViews, VkRenderPass renderPass, VkExtent2D extent);
         void destroyFramebuffers();
 
-        VkFramebuffer getFramebuffer(int index) const { return framebuffers_[index]; }
+        VkFramebuffer getFramebuffer(int index) const { return framebuffers_[index]->getHandle(); }
         size_t size() const { return framebuffers_.size(); }
 
     private:
         Device& device_;
-        std::vector<VkFramebuffer> framebuffers_;
+        std::vector<std::unique_ptr<Framebuffer>> framebuffers_;
     };
 
 } // namespace kc

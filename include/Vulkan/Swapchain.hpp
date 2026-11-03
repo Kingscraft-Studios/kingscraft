@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Device.hpp"
+#include "ImageView.hpp"
 
 // vulkan headers
 #include "vulkan/vulkan.h"
@@ -26,9 +27,14 @@ namespace kc {
 
         VkSwapchainKHR getSwapChain() { return swapChain; }
 
-        const std::vector<VkImageView>& getImageViews() const { return swapChainImageViews; }
+        std::vector<VkImageView> getImageViews() const {
+            std::vector<VkImageView> views;
+            views.reserve(swapChainImageViews.size());
+            for (const auto& view : swapChainImageViews) views.push_back(view->getHandle());
+            return views;
+        }
 
-        VkImageView getImageView(int index) { return swapChainImageViews[index]; }
+        VkImageView getImageView(int index) { return swapChainImageViews[index]->getHandle(); }
 
         size_t imageCount() { return swapChainImages.size(); }
 
@@ -66,7 +72,9 @@ namespace kc {
         VkExtent2D swapChainExtent;
 
         std::vector<VkImage> swapChainImages;
-        std::vector<VkImageView> swapChainImageViews;
+        // The VkImages are owned by the swapchain, but the views we create over
+        // them are ours to destroy, so they are RAII.
+        std::vector<std::unique_ptr<ImageView>> swapChainImageViews;
 
         Device &device;
         VkExtent2D windowExtent;

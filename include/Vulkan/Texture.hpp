@@ -1,6 +1,11 @@
 #pragma once
 
 #include "Device.hpp"
+#include "Image.hpp"
+#include "ImageView.hpp"
+#include "Sampler.hpp"
+
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -10,11 +15,12 @@ namespace kc {
     public:
         Texture(Device &device, const std::vector<char>& fileData);
 
-        ~Texture();
+        Texture(const Texture&) = delete;
+        Texture& operator=(const Texture&) = delete;
 
-        VkImageView getImageView() const { return textureImageView; }
+        VkImageView getImageView() const { return imageView_->getHandle(); }
 
-        VkSampler getSampler() const { return textureSampler; }
+        VkSampler getSampler() const { return sampler_->getHandle(); }
 
     private:
         void createTextureImage(const std::vector<char>& fileData);
@@ -25,10 +31,9 @@ namespace kc {
 
         Device &device;
 
-        VkImage textureImage;
-        VkDeviceMemory textureImageMemory;
-        VkImageView textureImageView;
-        VkSampler textureSampler;
+        std::unique_ptr<Image> image_;
+        std::unique_ptr<ImageView> imageView_;
+        std::unique_ptr<Sampler> sampler_;
     };
 
 }  // namespace kc

@@ -2,7 +2,6 @@
 #include "IOTemplateBase.hpp"
 #include "ChunkTemplate.hpp"
 #include "IO/Serialization/KcrFormat.hpp"
-#include "Core/World/Location.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Util/LogUtils.hpp"
 #include "Util/StringUtils.hpp"
@@ -151,13 +150,6 @@ namespace kc {
             pending_[k][localIndex(gridX, gridZ)] = makeRecord(gridX, gridZ, data);
         }
 
-        void queueSave(int gridX, int gridZ, const std::string& payload) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            uint64_t k = regionKeyOfChunk(gridX, gridZ);
-            std::vector<char> p(payload.begin(), payload.end());
-            pending_[k][localIndex(gridX, gridZ)] = kcr::buildChunkRecord(gridX, gridZ, kcr::CHUNK_STATE_MODIFIED, 2, p);
-        }
-
         // Append every dirty region's staged records. Idempotent: clean regions
         // cost nothing, so calling this in a loop (or again right after) is
         // cheap. Returns false if any region failed to persist (its staged
@@ -208,17 +200,6 @@ namespace kc {
                                          payload);
         }
 
-        std::vector<char> makeRecordOverrides(int gridX, int gridZ, const std::unordered_map<Location, uint64_t>& overrides) {
-            if (overrides.empty()) {
-                std::string text = chunk_.serializeOverrides(overrides);
-                std::vector<char> payload(text.begin(), text.end());
-                return kcr::buildChunkRecord(gridX, gridZ, kcr::CHUNK_STATE_MODIFIED, 2, payload);
-            }
-            std::string text = chunk_.serializeOverrides(overrides);
-            std::vector<char> payload(text.begin(), text.end());
-            return kcr::buildChunkRecord(gridX, gridZ, kcr::CHUNK_STATE_MODIFIED, 2, payload);
-        }
-
         std::vector<uint64_t> decodeRecord(const char* record, std::size_t recordSize,
                                            int gridX, int gridZ) {
             std::vector<char> payload;
@@ -229,15 +210,6 @@ namespace kc {
                 return {};
             }
             return chunk_.deserialize(payload);
-        }
-
-        std::unordered_map<Location, uint64_t> decodeOverrides(const char* record, std::size_t recordSize,
-                                                               int gridX, int gridZ) {
-            std::vector<char> payload;
-            if (!kcr::extractChunkPayload(record, recordSize, gridX, gridZ, payload)) {
-                return {};
-            }
-            return chunk_.deserializeOverrides(payload);
         }
 
         static uint64_t regionKey(int regX, int regZ) {
