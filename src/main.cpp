@@ -5,11 +5,13 @@
 #include "Threads/Logger.hpp"
 
 int main() {
+    kc::TimeUtil::Init();
+
     kc::MessageBus::Init();
 
-    kc::TimeUtil::Init();
+    // Starts Logger
+    kc::Logger::Get();
     kc::IO::Init();
-    kc::Logger::Init();
 
     kc::WorkerPool::get().start();
 
@@ -19,9 +21,13 @@ int main() {
 
     kc::WorkerPool::get().stop();
 
-    kc::Logger::Shutdown();
     kc::IO::Shutdown();
-
+    // Logger Stops at Last so before Stopping we one last time Process all Messages Left in Engine Threads if Any
+    kc::Message msg;
+    while (kc::Engine::Get().mailbox_->try_pop(msg)) {
+        if (msg.payload)
+            msg.payload();
+    }
     kc::MessageBus::Shutdown();
     return 0;
 }

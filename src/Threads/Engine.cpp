@@ -1,5 +1,4 @@
 #include "Threads/Engine.hpp"
-#include "Threads/Logger.hpp"
 #include "Bus/MessageBus.hpp"
 #include "Core/Bootstrapper.hpp"
 #include "Event/detail/CurrentThread.hpp"
@@ -65,9 +64,7 @@ namespace kc {
         Bootstrapper::Shutdown();
 
         // Engine Specific Shutdown
-        MessageBus::Get().unsubscribe(ThreadName::Engine);
         runningMailbox = false;
-        mailbox_->stop();
         if (mailboxThread.joinable()) mailboxThread.join();
     }
 

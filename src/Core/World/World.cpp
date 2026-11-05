@@ -17,6 +17,7 @@
 #include "Renderer/RendererSettings.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/IO.hpp"
+#include "Threads/Kingscraft.hpp"
 #include "Threads/RenderThread.hpp"
 #include "Core/WorkerPool.hpp"
 
@@ -126,50 +127,30 @@ namespace {
 
 namespace kc {
 
-    World::World(ITerrainGenerator& terrainGen, int chunkSize, int height, const WorldMetadata& metadata)
-        : terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height)
-        , minY_(RendererSettings::get().minY), metadata_(metadata) {
-        persistMetadata_ = true;
-        // Several generators share one queue: whoever is free takes the next
-        // chunk. They all read the same terrain generator, which is why
-        // generateBlocks() takes a shared rather than an exclusive lock.
+    World::World(ITerrainGenerator& terrainGen,int chunkSize,int height,const WorldMetadata& metadata,bool persistMetadata,bool snapPlayerToSurface) :
+    terrainGen_(terrainGen), chunkSize_(chunkSize), height_(height), minY_(RendererSettings::get().minY), metadata_(metadata), persistMetadata_(persistMetadata) {
+
         noiseDones_.reserve(GEN_WORKERS);
-        for (int i = 0; i < GEN_WORKERS; ++i)
+
+        for (int i = 0; i < GEN_WORKERS; ++i) {
             noiseDones_.push_back(WorkerPool::get().startWorker([this]() { noiseThreadFunc(); }));
+        }
+
         meshDone_ = WorkerPool::get().startWorker([this]() { meshThreadFunc(); });
+
         prefetchDone_ = WorkerPool::get().startWorker([this]() { prefetchThreadFunc(); });
 
-        // Start the throughput window at "now". Left at 0 the first log would
-        // measure an interval of fifty years and report a nonsense rate.
-        throughputLogMicros_.store(
-            (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::steady_clock::now().time_since_epoch()).count(),
-            std::memory_order_relaxed);
-        playerController_.init(Runtime::get().inputThread->getKeyBindHandler());
+        throughputLogMicros_.store(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch())
+            .count()), std::memory_order_relaxed);
+
+        playerController_.init(Runtime::get().kingscraft->getActionRouter(),
+                               Runtime::get().inputThread->getInputSystem());
 
         worldTime_ = metadata_.worldTime;
+
         playerController_.setSpawn(metadata_.spawnPos);
-        playerController_.restore(metadata_.playerPos, metadata_.yaw, metadata_.pitch, true);
 
-        MessageBus::Get().request<WorldMetadataTemplate::LoadOutcome>(
-            ThreadName::Engine,
-            []() { return IO::Get().getBuiltinTemplates().getWorldMetadataTemplate().load(); },
-            ThreadName::GameLogic,
-            [this](WorldMetadataTemplate::LoadOutcome outcome) {
-                persistMetadata_ = outcome.result != WorldMetadataTemplate::LoadResult::Invalid;
-
-                loadResolved_ = true;
-
-                if (outcome.result != WorldMetadataTemplate::LoadResult::Ok) {
-                    return;
-                }
-
-                metadata_ = outcome.metadata;
-                terrainGen_.applySettings(metadata_.settings);
-                worldTime_ = metadata_.worldTime;
-                playerController_.setSpawn(metadata_.spawnPos);
-                playerController_.restore(metadata_.playerPos, metadata_.yaw, metadata_.pitch, false);
-            });
+        playerController_.restore(metadata_.playerPos, metadata_.yaw, metadata_.pitch, snapPlayerToSurface);
     }
 
     World::~World() {
@@ -1041,11 +1022,6 @@ namespace kc {
     }
 
     void World::tick(double dt) {
-        // The async world.kcw load must have resolved (any result) before the
-        // world is allowed to do anything: chunk streaming, gravity and the
-        // player must start from the persisted position, never the defaults.
-        if (!loadResolved_) return;
-
         remeshRequestsThisTick_ = 0;
         ++worldTime_;
 

@@ -26,7 +26,7 @@ namespace kc {
 
     class World {
     public:
-        World(ITerrainGenerator& terrainGen, int chunkSize, int height, const WorldMetadata& metadata);
+        World(ITerrainGenerator& terrainGen, int chunkSize, int height, const WorldMetadata& metadata, bool persistMetadata, bool snapPlayerToSurface);
         ~World();
 
         void unloadChunk(int gridX, int gridZ);

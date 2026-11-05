@@ -1,6 +1,7 @@
 #include "Core/World/WorldScreen.hpp"
 
 #include <utility>
+#include <vector>
 
 #include "Bus/MessageBus.hpp"
 #include "Core/World/World.hpp"
@@ -12,12 +13,12 @@
 #include "UI/UiWrapper.hpp"
 #include "UI/Engine/UiStyle.hpp"
 #include "Renderer/RendererSettings.hpp"
-#include "Core/KeyBindHandler.hpp"
 #include "Core/Keys.hpp"
 #include "Core/Raycast.hpp"
 #include "Core/Runtime.hpp"
 #include "Core/Blocks/Blocks.hpp"
 #include "Core/World/Physics/CollisionSystem.hpp"
+#include "Core/MainMenu.hpp"
 #include "Threads/Kingscraft.hpp"
 #include "Threads/InputThread.hpp"
 #include "Threads/RenderThread.hpp"
@@ -41,23 +42,19 @@ namespace kc {
 
     void WorldScreen::init() {
         auto& world = Runtime::get().kingscraft->getWorld();
-        Runtime::get().renderThread->getUI().setBlockTexture(Runtime::get().renderThread->getTexCache().getImageView(), Runtime::get().renderThread->getTexCache().getSampler());
+        auto& ui = Runtime::get().renderThread->getUI();
+        ui.setBlockTexture(Runtime::get().renderThread->getTexCache().getImageView(), Runtime::get().renderThread->getTexCache().getSampler());
 
         world.getPlayerController().setCaptured(true);
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
-        });
-        debugOverlay_ = std::make_shared<UiDebugOverlay>();
-        debugOverlay_->init(Runtime::get().renderThread->getUI(),
-            static_cast<float>(extent_.width), static_cast<float>(extent_.height));
-        debugOverlaySub_ = EventManager::get().registerScopedListener(debugOverlay_);
-        hotbar_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
-        deathScreen_.init(Runtime::get().renderThread->getUI(), static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+        setUiCapture(false);
 
-        crosshairStyle_ = Runtime::get().renderThread->getUI().registerStyle(UiStyle{
+        debugOverlay_ = std::make_shared<UiDebugOverlay>();
+        debugOverlay_->init(ui, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+        debugOverlaySub_ = EventManager::get().registerScopedListener(debugOverlay_);
+        hotbar_.init(ui, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+        deathScreen_.init(ui, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
+
+        crosshairStyle_ = ui.registerStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = {1.0f, 1.0f, 1.0f, 0.9f},
         });
@@ -65,53 +62,96 @@ namespace kc {
         crosshairH_.setSize({20.0f, 2.0f});
         crosshairH_.setStyleIndex(crosshairStyle_);
         crosshairH_.setName("CrosshairH");
-        Runtime::get().renderThread->getUI().addElement(&crosshairH_);
+        ui.addElement(&crosshairH_);
         crosshairV_.setAnchor({0.5f, 0.5f}, {-1.0f, -10.0f});
         crosshairV_.setSize({2.0f, 20.0f});
         crosshairV_.setStyleIndex(crosshairStyle_);
         crosshairV_.setName("CrosshairV");
-        Runtime::get().renderThread->getUI().addElement(&crosshairV_);
-        Runtime::get().renderThread->getUI().resize(static_cast<int>(extent_.width),
-                             static_cast<int>(extent_.height));
+        ui.addElement(&crosshairV_);
+        ui.resize(static_cast<int>(extent_.width), static_cast<int>(extent_.height));
 
-        Runtime::get().renderThread->getUI().setScrollCallback([this](double, double dy) {
-            if (dy > 0)
-                hotbar_.selectSlot(Runtime::get().renderThread->getUI(), hotbar_.getSelectedSlot() - 1);
-            else if (dy < 0)
-                hotbar_.selectSlot(Runtime::get().renderThread->getUI(), hotbar_.getSelectedSlot() + 1);
+        // World-scoped bindings. Unlike the old Global Esc binding this context
+        // only exists while this screen is alive, so Esc cannot tear down a
+        // world that is no longer on screen.
+        ActionRouter& actions = Runtime::get().kingscraft->getActionRouter();
+
+        std::vector<Binding> worldBindings;
+        worldBindings.reserve(1 + HOTBAR_SLOT_COUNT);
+        worldBindings.push_back({{Keys::ESCAPE}, Action::OpenPauseMenu});
+        for (int i = 0; i < HOTBAR_SLOT_COUNT; ++i) {
+            worldBindings.push_back({{Keys::_1 + i}, hotbarAction(i)});
+        }
+
+        worldContext_ = actions.addContext(ContextSpec{
+            .name = "world",
+            .priority = 10,
+            .captureText = false,
+            .bindings = std::move(worldBindings),
         });
 
-        for (int i = 0; i < UiHotbarOverlay::SLOT_COUNT; ++i) {
-            int key = Keys::_1 + i;
-            MessageBus::Get().send(ThreadName::Input, [key, i, this]() {
-                Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Screen, {key}, [this, i]() {
-                    hotbar_.selectSlot(Runtime::get().renderThread->getUI(), i);
+        pauseSub_ = actions.subscribe(Action::OpenPauseMenu, [this](const ActionEvent& event) {
+            if (event.phase != Phase::Pressed) return;
+            // Handled at the top of tick(), after the current mailbox batch,
+            // so tearing down this screen never happens inside a handler.
+            pauseRequested_ = true;
+        });
+
+        for (int i = 0; i < HOTBAR_SLOT_COUNT; ++i) {
+            hotbarSubs_[i] = actions.subscribe(hotbarAction(i), [this, i](const ActionEvent& event) {
+                if (event.phase != Phase::Pressed) return;
+                // GameLogic updates the UI data here; the Renderer only reads
+                // it. UiGuard makes the mutation safe.
+                hotbar_.selectSlot(Runtime::get().renderThread->getUI(), i);
+            });
+        }
+    }
+
+    void WorldScreen::setUiCapture(bool enabled) {
+        if (enabled) {
+            if (!uiContext_) {
+                uiContext_ = Runtime::get().kingscraft->getActionRouter().addContext(ContextSpec{
+                    .name = "world-ui",
+                    .priority = 100,
+                    .captureText = true,
+                    .bindings = {},
                 });
+            }
+            MessageBus::Get().send(ThreadName::Input, []() {
+                if (auto* input = Runtime::get().inputThread)
+                    input->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            });
+        } else {
+            uiContext_.reset();
+            MessageBus::Get().send(ThreadName::Input, []() {
+                if (auto* input = Runtime::get().inputThread)
+                    input->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             });
         }
     }
 
     void WorldScreen::tick(double dt) {
+        // Esc is delivered as an action. Do the teardown here rather than in a
+        // handler so this screen is never destroyed while its own handler is
+        // on the stack.
+        if (pauseRequested_) {
+            pauseRequested_ = false;
+            auto* kingscraft = Runtime::get().kingscraft;
+            kingscraft->getWorldManager().destroyWorld();
+            kingscraft->setScreen<MainMenu>(kingscraft->getActionRouter());
+            return;
+        }
+
         auto& world = Runtime::get().kingscraft->getWorld();
         bool debug = Runtime::get().renderThread->getUI().isDebugModeOn();
 
         if (debug != wasDebugOn_ && !world.getPlayerController().isDead()) {
             wasDebugOn_ = debug;
+            setUiCapture(debug);
             if (debug) {
-                MessageBus::Get().send(ThreadName::Input, []() {
-                    Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-                    Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
-                });
                 world.getPlayerController().setCaptured(false);
             } else {
-                MessageBus::Get().send(ThreadName::Input, []() {
-                    Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                    Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
-                });
                 world.getPlayerController().setCaptured(true);
-                world.getPlayerController().resetMouse();
             }
-
             world.getPlayerController().resetMouse();
         }
 
@@ -131,10 +171,7 @@ namespace kc {
 
 void WorldScreen::onPlayerDeath() {
         auto& world = Runtime::get().kingscraft->getWorld();
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, true);
-        });
+        setUiCapture(true);
         world.getPlayerController().setCaptured(false);
         world.getPlayerController().resetMouse();
         deathScreen_.show(Runtime::get().renderThread->getUI());
@@ -142,10 +179,7 @@ void WorldScreen::onPlayerDeath() {
 
     void WorldScreen::onPlayerRespawn() {
         auto& world = Runtime::get().kingscraft->getWorld();
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            Runtime::get().inputThread->getKeyBindHandler().setLayerEnabled(BindLayer::UI, false);
-        });
+        setUiCapture(false);
         world.getPlayerController().setCaptured(true);
         world.getPlayerController().resetMouse();
         deathScreen_.hide(Runtime::get().renderThread->getUI());
@@ -201,19 +235,42 @@ void WorldScreen::render(FrameScene& scene) {
     }
 
     void WorldScreen::cleanup() {
-        Runtime::get().renderThread->getUI().setScrollCallback(nullptr);
-        hotbar_.cleanup(Runtime::get().renderThread->getUI());
+        if (cleanedUp_) return;
+        cleanedUp_ = true;
+
+        // Remove every input registration before the UI elements go away.
+        pauseSub_.reset();
+        for (auto& sub : hotbarSubs_) sub.reset();
+        uiContext_.reset();
+        worldContext_.reset();
+
+        auto& ui = Runtime::get().renderThread->getUI();
+        hotbar_.cleanup(ui);
         if (debugOverlay_) {
-            debugOverlay_->cleanup(Runtime::get().renderThread->getUI());
+            debugOverlay_->cleanup(ui);
             debugOverlaySub_.unsubscribe();
         }
-        deathScreen_.cleanup(Runtime::get().renderThread->getUI());
-        Runtime::get().renderThread->getUI().removeElement(&crosshairH_);
-        Runtime::get().renderThread->getUI().removeElement(&crosshairV_);
-        if (Runtime::get().inputThread->isInitialized()) {
+        deathScreen_.cleanup(ui);
+        ui.removeElement(&crosshairH_);
+        ui.removeElement(&crosshairV_);
+        if (Runtime::get().inputThread && Runtime::get().inputThread->isInitialized()) {
             MessageBus::Get().send(ThreadName::Input, []() {
-                Runtime::get().inputThread->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                if (auto* input = Runtime::get().inputThread)
+                    input->setCursorType(GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             });
+        }
+    }
+
+    void WorldScreen::onScroll(double dx, double dy) {
+        (void)dx;
+        // Runs on GameLogic (InputThread routes scroll here). selectSlot only
+        // changes UI data under UiGuard; the Renderer reads it.
+        if (dy > 0) {
+            hotbar_.selectSlot(Runtime::get().renderThread->getUI(),
+                               hotbar_.getSelectedSlot() - 1);
+        } else if (dy < 0) {
+            hotbar_.selectSlot(Runtime::get().renderThread->getUI(),
+                               hotbar_.getSelectedSlot() + 1);
         }
     }
 

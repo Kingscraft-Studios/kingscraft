@@ -1,13 +1,18 @@
 #pragma once
 #include <atomic>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
 
 #include "BaseThread.hpp"
 #include "Bus/Mailbox.hpp"
 #include "Core/Constants.hpp"
-#include "Core/KeyBindHandler.hpp"
 #include "Core/WindowStruct.hpp"
+#include "Input/BindingRegistry.hpp"
+#include "Input/InputSystem.hpp"
 #include "Vulkan/GLFWWindow.hpp"
 
 namespace kc {
@@ -29,8 +34,10 @@ namespace kc {
         bool wasWindowResized() {
             return windowResized_.load(std::memory_order_acquire);
         }
+        // Called by RenderEngine between frames (Renderer thread). It only
+        // touches the atomic flag: GLFWWindow::framebufferResized is written by
+        // the input thread's resize callback and must not be mutated from here.
         void resetWindowResizedFlag() {
-            window->resetWindowResizedFlag();
             windowResized_.store(false, std::memory_order_release);
         }
         void toggleFullscreen() {
@@ -77,6 +84,8 @@ namespace kc {
         void setFullscreenToggleCallback(std::function<void()> callback) {
             window->setFullscreenToggleCallback(std::move(callback));
         }
+        // Called by Device on the Renderer thread: GLFW surfaces can be created
+        // from a different thread than the window owner.
         void createSurface(VkInstance instance, VkSurfaceKHR& surface) {
             window->createWindowSurface(instance, &surface);
         }
@@ -86,18 +95,25 @@ namespace kc {
         void setClipBoard(const std::string text) {
             window->setClipboard(text.c_str());
         }
+        // Called by RenderEngine while minimizing (Renderer thread) so the
+        // renderer can block until the window is restored.
         void waitEvents() {
             window->waitEvents();
         }
 
-        KeyBindHandler& getKeyBindHandler() {
-            return *keyHandler;
+        // Shared registry: GameLogic registers contexts through ActionRouter,
+        // the input thread evaluates them through InputSystem.
+        InputSystem& getInputSystem() {
+            return *inputSystem_;
         }
 
     private:
         WindowCreateInfo info{DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, "Kingscraft"};
         std::unique_ptr<GLFWWindow> window = std::make_unique<GLFWWindow>(info.width, info.height, info.name);
-        std::unique_ptr<KeyBindHandler> keyHandler = std::make_unique<KeyBindHandler>();
+
+        // registry_ must be declared before inputSystem_ (it seeds it).
+        std::shared_ptr<BindingRegistry> registry_ = std::make_shared<BindingRegistry>();
+        std::unique_ptr<InputSystem> inputSystem_ = std::make_unique<InputSystem>(registry_);
 
         std::shared_ptr<Mailbox> mailbox;
         std::atomic<bool> running;

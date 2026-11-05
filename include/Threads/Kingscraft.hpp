@@ -11,6 +11,8 @@
 #include "Core/World/Biomes/BiomeProvider.hpp"
 #include "Core/World/TerrainGenerator.hpp"
 #include "Core/World/World.hpp"
+#include "Core/World/WorldManager.hpp"
+#include "Input/ActionRouter.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Util/TimeUtil.hpp"
 
@@ -26,7 +28,15 @@ public:
 
     // Public Getters
     ScreenManager& getScreenManager() { return *screenManager; }
-    World& getWorld() { return *world;}
+    WorldManager& getWorldManager() { return worldManager; }
+
+    // GameLogic-only action dispatcher. Input actions arrive here as POD
+    // events; handlers always run on this thread.
+    ActionRouter& getActionRouter() { return actions_; }
+
+    // Temporary Compatibility Accessor
+    World& getWorld() { return *worldManager.getWorld(); }
+
     template<typename T, typename... Args>
     void setScreen(Args&&... args) {
         screenManager->setScreen<T>(std::forward<Args>(args)...);
@@ -62,16 +72,19 @@ private:
     static constexpr double TICK_INTERVAL = 1.0 / TICK_RATE;
 
     std::unique_ptr<ScreenManager> screenManager = std::make_unique<ScreenManager>();
-    // Built from the fresh WorldMetadata's settings; World re-seeds it via
-    // ITerrainGenerator::applySettings once the loaded world.kcw resolves.
-    //
-    // The generator owns its BiomeProvider, because the provider has to share
-    // the generator's HomelandsNoise: two separately seeded graphs would let the
-    // biome map and the heightfield disagree. Read the provider through
-    // getBiomeProvider() rather than caching a reference, since applySettings()
-    // replaces the instance.
-    std::unique_ptr<DefaultTerrainGenerator> terrainGen;
-    std::unique_ptr<World> world;
+
+    WorldManager worldManager;
+
+    // Declared before the handles/subscriptions so they are destroyed first
+    // (their RAII cleanup can still reach a live router/registry).
+    ActionRouter actions_;
+    ContextHandle globalContext_;
+    ActionRouter::Subscription fullscreenSub_;
+    ActionRouter::Subscription debugSub_;
+    ActionRouter::Subscription logElementSub_;
+    ActionRouter::Subscription profilerSub_;
+    ActionRouter::Subscription reloadSub_;
+    ActionRouter::Subscription dumpSub_;
 
     std::atomic<uint64_t> currentBiomeEncoded_{0};
     std::atomic<bool> playerFlying_{false};

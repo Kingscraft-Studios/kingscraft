@@ -30,52 +30,13 @@ namespace kc {
 
         prevTime_ = TimeUtil::uptimeSeconds();
 
-        // Fresh WorldMetadata defaults a brand-new world; World loads the real
-        // world.kcw async on the engine (IO) thread via MessageBus::request and
-        // applies it on this thread before the first tick (re-seeding terrain
-        // and restoring spawn/time through metadata_.settings / player state).
-        WorldMetadata fresh;
-        terrainGen = std::make_unique<DefaultTerrainGenerator>(fresh.settings);
+        // The InputSystem owns this registry; the router is the GameLogic-side
+        // handle used to add contexts and subscribe to actions.
+        actions_.setRegistry(Runtime::get().inputThread->getInputSystem().getRegistry());
 
-        // How far the spawn scan is allowed to travel for dry land, in blocks.
-        // Wider than the render distance on purpose, so the player can start on
-        // land even when the middle of the map is open ocean.
-        constexpr int newWorldSpawnRadius = 1536;
-
-        // A brand new world starts on dry land near the origin instead of at the
-        // hardcoded (67, 67), which for many seeds sits far out at sea. This runs
-        // against the terrain generator directly, so it costs no chunk generation.
-        {
-            const int originX = static_cast<int>(std::floor(fresh.spawnPos.x));
-            const int originZ = static_cast<int>(std::floor(fresh.spawnPos.z));
-            int landX = 0;
-            int landY = 0;
-            int landZ = 0;
-            if (terrainGen->findSpawnColumn(originX, originZ, newWorldSpawnRadius,
-                                            landX, landY, landZ)) {
-                // Eye height is added back because metadata stores eye position,
-                // not feet position.
-                const glm::vec3 onLand(static_cast<float>(landX) + 0.5f,
-                                       static_cast<float>(landY) + Attributes::EYE_HEIGHT,
-                                       static_cast<float>(landZ) + 0.5f);
-                fresh.spawnPos = onLand;
-                fresh.playerPos = onLand;
-                LogUtils::info(ThreadName::GameLogic,
-                    "world: new spawn placed on land at (" + std::to_string(landX) + ", "
-                    + std::to_string(landY) + ", " + std::to_string(landZ) + ")");
-            } else {
-                LogUtils::warn(ThreadName::GameLogic,
-                    "world: no dry land within " + std::to_string(newWorldSpawnRadius)
-                    + " blocks of (" + std::to_string(originX) + ", "
-                    + std::to_string(originZ) + "); keeping the default spawn");
-            }
-        }
-
-        world = std::make_unique<World>(*terrainGen, RendererSettings::get().chunkSize,
-                                        RendererSettings::get().worldHeight, fresh);
         registerAllKeys();
         registerUICallbacks();
-        screenManager->setScreen<MainMenu>();
+        screenManager->setScreen<MainMenu>(actions_);
     }
 
     void Kingscraft::run() {
@@ -100,8 +61,20 @@ namespace kc {
     }
 
     void Kingscraft::stop() {
+        // Tear screens/world down while the router and registry are still alive
+        // so every RAII context/subscription can unregister cleanly.
         screenManager.reset();
-        world.reset();
+        worldManager.destroyWorld();
+
+        globalContext_.reset();
+        fullscreenSub_.reset();
+        debugSub_.reset();
+        logElementSub_.reset();
+        profilerSub_.reset();
+        reloadSub_.reset();
+        dumpSub_.reset();
+        actions_.setRegistry(nullptr);
+
         MessageBus::Get().unsubscribe(ThreadName::GameLogic);
         Engine::Get().gameLogicStopped();
     }
@@ -113,16 +86,18 @@ namespace kc {
         prevTime_ = currentTime;
         if (dt_ > 0.25) dt_ = 0.25;
 
-        // Publish the biome under the player for the debug overlay (read-only
-        // on the renderer thread via an atomic).
-        if (terrainGen && world) {
-            glm::vec3 body = world->getPlayerController().getBodyPosition();
-            currentBiomeEncoded_.store(
-                terrainGen->getBiomeAt(static_cast<int>(std::floor(body.x)),
-                                       static_cast<int>(std::floor(body.z)))
-                    .getEncoded(),
-                std::memory_order_relaxed);
+        if (World* world = worldManager.getWorld()) {
+            const glm::vec3 body = world->getPlayerController().getBodyPosition();
+
+            // The terrain generator is owned by WorldManager.
+            // We will expose a getter for it in the next step.
+            currentBiomeEncoded_.store(worldManager.getTerrainGenerator()->getBiomeAt(static_cast<int>(std::floor(body.x)),
+                static_cast<int>(std::floor(body.z))).getEncoded(), std::memory_order_relaxed);
+
             playerFlying_.store(world->getPlayerController().isFlying(), std::memory_order_relaxed);
+        } else {
+            currentBiomeEncoded_.store(0, std::memory_order_relaxed);
+            playerFlying_.store(false, std::memory_order_relaxed);
         }
 
         tickAccumulator_ += dt_;
@@ -164,134 +139,134 @@ namespace kc {
         exchange.publish();
     }
 
+    // All handlers below run on the GameLogic thread. Anything that touches
+    // InputThread or RenderThread is marshalled through MessageBus; the router
+    // never auto-marshals, because one action often needs work on several
+    // threads (F11 toggles the window and recreates the swapchain).
     void Kingscraft::registerAllKeys() {
+        globalContext_ = actions_.addContext(ContextSpec{
+            .name = "global",
+            .priority = 0,
+            .captureText = false,
+            .bindings = {
+                {{Keys::F11}, Action::ToggleFullscreen},
+                {{Keys::F3, Keys::F6}, Action::ToggleDebug},
+                {{Keys::F7}, Action::LogSelectedElement},
+                {{Keys::F8}, Action::StartProfiler},
+                {{Keys::F10}, Action::ReloadRegistries},
+                {{Keys::F5}, Action::DumpRegions},
+            },
+        });
 
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F11}, []() {
-                MessageBus::Get().send(ThreadName::Input, []() {
-                    Runtime::get().inputThread->toggleFullscreen();
-                });
-                MessageBus::Get().send(ThreadName::Renderer, []() {
-                    Runtime::get().renderThread->recreateSwapchain(true);
-                });
+        fullscreenSub_ = actions_.subscribe(Action::ToggleFullscreen, [](const ActionEvent& event) {
+            if (event.phase != Phase::Pressed) return;
+
+            MessageBus::Get().send(ThreadName::Input, []() {
+                if (auto* input = Runtime::get().inputThread)
+                    input->toggleFullscreen();
+            });
+            MessageBus::Get().send(ThreadName::Renderer, []() {
+                if (auto* renderer = Runtime::get().renderThread)
+                    renderer->recreateSwapchain(true);
             });
         });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::ESCAPE}, []() {
-                MessageBus::Get().send(ThreadName::Input, []() {
-                    Runtime::get().inputThread->setWindowClose();
-                });
-            });
-        });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F3, Keys::F6}, []() {
-                Runtime::get().renderThread->getUI().setDebugMode(!Runtime::get().renderThread->getUI().isDebugModeOn());
-            });
-        });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F7}, []() {
-                if (Runtime::get().renderThread->getUI().isDebugModeOn())
-                    Runtime::get().renderThread->getUI().logSelectedElementPosition();
-            });
-        });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F8}, []() {
-                if (!Runtime::get().renderThread->getProfilerCapture().isActive()) {
-                    Runtime::get().renderThread->getProfilerCapture().start();
+
+        debugSub_ = actions_.subscribe(Action::ToggleDebug, [](const ActionEvent& event) {
+            if (event.phase != Phase::Pressed) return;
+
+            MessageBus::Get().send(ThreadName::Renderer, []() {
+                if (auto* renderer = Runtime::get().renderThread) {
+                    auto& ui = renderer->getUI();
+                    ui.setDebugMode(!ui.isDebugModeOn());
                 }
             });
         });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F10}, []() {
-                Registries::reload();
+
+        logElementSub_ = actions_.subscribe(Action::LogSelectedElement, [](const ActionEvent& event) {
+            if (event.phase != Phase::Pressed) return;
+
+            MessageBus::Get().send(ThreadName::Renderer, []() {
+                if (auto* renderer = Runtime::get().renderThread) {
+                    auto& ui = renderer->getUI();
+                    if (ui.isDebugModeOn())
+                        ui.logSelectedElementPosition();
+                }
             });
         });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().onPress(BindLayer::Global, {Keys::F5}, []() {
-                // Region-dump debug switch. First press records every chunk:
-                // those already loaded are staged right away, and the rest are
-                // staged as they unload. A second press stops recording and
-                // flushes the staged regions to disk.
-                MessageBus::Get().send(ThreadName::GameLogic, []() {
-                    auto& world = Runtime::get().kingscraft->getWorld();
-                    if (world.getSaveAllChunks()) {
-                        world.dumpLoadedChunks();
-                        world.setSaveAllChunks(false);
-                        if (!IO::Get().getBuiltinTemplates().getRegionTemplate().flush())
-                            LogUtils::error(ThreadName::GameLogic, "SaveAllChunks: flush failed");
-                    } else {
-                        world.setSaveAllChunks(true);
-                        world.dumpLoadedChunks();
-                        LogUtils::info(ThreadName::GameLogic, "SaveAllChunks: ON (recording loaded + unloaded chunks)");
-                    }
-                });
-            });
+
+        profilerSub_ = actions_.subscribe(Action::StartProfiler, [](const ActionEvent& event) {
+            if (event.phase != Phase::Pressed) return;
+
+            // ProfilingCapture is fed by ProfilingCaptureListener on GameLogic
+            // (MetricsUpdateEvent is synchronous), so start() must stay on this
+            // thread or it would race feedFrame().
+            auto* renderer = Runtime::get().renderThread;
+            if (!renderer) return;
+
+            auto& capture = renderer->getProfilerCapture();
+            if (!capture.isActive())
+                capture.start();
         });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->setMouseMoveCallback([](double x, double y) {
-                MessageBus::Get().send(ThreadName::Renderer, [x, y]() {
-                    Runtime::get().renderThread->getUI().onMouseMove(x, y);
-                });
-            });
+
+        reloadSub_ = actions_.subscribe(Action::ReloadRegistries, [](const ActionEvent& event) {
+            if (event.phase != Phase::Pressed) return;
+            Registries::reload();
         });
-        MessageBus::Get().send(ThreadName::Input, [this]() {
-            Runtime::get().inputThread->setMouseButtonCallback([this](int button, int action, int mods) {
-                double x = Runtime::get().inputThread->getLastX();
-                double y = Runtime::get().inputThread->getLastY();
-                MessageBus::Get().send(ThreadName::Renderer, [button, action, mods, x, y]() {
-                    Runtime::get().renderThread->getUI().onMouseButton(button, action, mods, x, y);
-                });
-                MessageBus::Get().send(ThreadName::GameLogic, [this, button, action, mods]() {
-                    if (screenManager->getCurrent())
-                        screenManager->getCurrent()->onMouseButton(button, action, mods);
-                });
-            });
-        });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->setScrollCallback([](double dx, double dy) {
-                MessageBus::Get().send(ThreadName::Renderer, [dx, dy]() {
-                    Runtime::get().renderThread->getUI().onScroll(dx, dy);
-                });
-            });
-        });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->setKeyCallback([](int key, int scancode, int action, int mods) {
-                Runtime::get().inputThread->getKeyBindHandler().onKeyEvent(key, scancode, action, mods);
-            });
-        });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->setCharCallback([](unsigned int codepoint) {
-                Runtime::get().inputThread->getKeyBindHandler().onChar(codepoint);
-            });
-        });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().setUiKeyCallback([](int key, int action) {
-                Runtime::get().renderThread->getUI().onKey(key, action);
-            });
-        });
-        MessageBus::Get().send(ThreadName::Input, []() {
-            Runtime::get().inputThread->getKeyBindHandler().setUiCharCallback([](unsigned int codepoint) {
-                Runtime::get().renderThread->getUI().onChar(codepoint);
-            });
+
+        dumpSub_ = actions_.subscribe(Action::DumpRegions, [](const ActionEvent& event) {
+            if (event.phase != Phase::Pressed) return;
+
+            // Region-dump debug switch. First press records every chunk: those
+            // already loaded are staged right away, and the rest are staged as
+            // they unload. A second press stops recording and flushes the
+            // staged regions to disk.
+            auto* world = Runtime::get().kingscraft->getWorldManager().getWorld();
+            if (!world) return;
+
+            if (world->getSaveAllChunks()) {
+                world->dumpLoadedChunks();
+                world->setSaveAllChunks(false);
+                if (!IO::Get().getBuiltinTemplates().getRegionTemplate().flush())
+                    LogUtils::error(ThreadName::GameLogic, "SaveAllChunks: flush failed");
+            } else {
+                world->setSaveAllChunks(true);
+                world->dumpLoadedChunks();
+                LogUtils::info(ThreadName::GameLogic, "SaveAllChunks: ON (recording loaded + unloaded chunks)");
+            }
         });
     }
 
     void Kingscraft::registerUICallbacks() {
         Runtime::get().renderThread->getUI().registerButtonHandler(BTN_QUIT_GAME, []() {
                 MessageBus::Get().send(ThreadName::Input, []() {
-                    Runtime::get().inputThread->setWindowClose();
+                    if (auto* input = Runtime::get().inputThread)
+                        input->setWindowClose();
                 });
             });
 
-        Runtime::get().renderThread->getUI().registerButtonHandler(BTN_ENTER_WORLD, [this]() {
-            MessageBus::Get().send(ThreadName::GameLogic, [this]() {
-                screenManager->setScreen<WorldScreen>();
+        // UI handlers execute on the Renderer; resolve the game state through
+        // Runtime on GameLogic instead of capturing this Kingscraft instance.
+        Runtime::get().renderThread->getUI().registerButtonHandler(BTN_ENTER_WORLD, []() {
+            MessageBus::Get().send(ThreadName::GameLogic, []() {
+                auto* kingscraft = Runtime::get().kingscraft;
+                if (!kingscraft) return;
+
+                kingscraft->getWorldManager().createWorld([kingscraft](bool success) {
+                    if (!success) {
+                        LogUtils::error(ThreadName::GameLogic, "Failed to create World Session");
+                        return;
+                    }
+                    kingscraft->setScreen<WorldScreen>();
+                });
             });
         });
 
         Runtime::get().renderThread->getUI().registerButtonHandler(BTN_RESPAWN, []() {
             MessageBus::Get().send(ThreadName::GameLogic, []() {
-                Runtime::get().kingscraft->getWorld().getPlayerController().respawn();
+            auto* world = Runtime::get().kingscraft->getWorldManager().getWorld();
+            if (!world) return;
+
+            world->getPlayerController().respawn();
             });
         });
     }

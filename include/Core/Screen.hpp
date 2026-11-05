@@ -16,6 +16,7 @@ namespace kc {
         virtual void cleanup() = 0;
 
         virtual void onMouseButton(int button, int action, int mods) {}
+        virtual void onScroll(double dx, double dy) {}
     };
 
 } // namespace kc

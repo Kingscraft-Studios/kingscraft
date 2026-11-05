@@ -1,34 +1,38 @@
 #include "Threads/Logger.hpp"
 
+#include <filesystem>
 #include <iostream>
 
-#include "Threads/IO.hpp"
 #include "Util/StringUtils.hpp"
 #include "Util/TimeUtil.hpp"
 
 namespace kc {
 
-    std::unique_ptr<Logger> Logger::instance_ = nullptr;
+    Logger::Logger() {
+        logFilePath_ = createLogFileName();
 
-    void Logger::Init() {
-        instance_ = std::make_unique<Logger>();
-        instance_->logFilePath_ = instance_->createLogFileName();
-        instance_->printHeader();
+        std::filesystem::create_directories("logs");
+
+        logFile_.open(logFilePath_, std::ios::out | std::ios::app);
+
+        if (!logFile_.is_open()) {
+            buildLogLine(ERROR, ThreadName::Engine, "Failed to open log file: " + logFilePath_);
+        }
+
+        printHeader();
     }
 
-    void Logger::Shutdown() {
-        if (!instance_) return;
-        instance_.reset();
-    }
+    Logger::~Logger() {
+        std::lock_guard lock(mutex_);
 
-    Logger& Logger::Get() {
-        return *instance_;
+        if (logFile_.is_open()) {
+            logFile_.flush();
+            logFile_.close();
+        }
     }
 
     void Logger::log(LogLevel level, ThreadName caller, std::string data) {
-        // TODO: FIX
-        if (!instance_) return;
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard lock(mutex_);
 
         std::string line = buildLogLine(level, caller, data);
 
@@ -38,7 +42,7 @@ namespace kc {
             std::cout << line << std::endl;
         }
 
-        IO::Get().getBuiltinTemplates().getLogTemplate().append(logFilePath_, line);
+        writeToFile(line);
     }
 
     void Logger::printHeader() {
@@ -53,7 +57,7 @@ namespace kc {
 
         std::cout << header << std::endl;
 
-        IO::Get().getBuiltinTemplates().getLogTemplate().append(logFilePath_, header);
+        writeToFile(header);
     }
 
     std::string Logger::createLogFileName() {
@@ -70,4 +74,12 @@ namespace kc {
             data
         );
     }
+
+    void Logger::writeToFile(const std::string& log) {
+        if (logFile_.is_open()) {
+            logFile_ << log << std::endl;
+            logFile_.flush();
+        }
+    }
+
 } // namespace kc

@@ -3,6 +3,7 @@
 #include "Core/Camera.hpp"
 #include "Core/World/Physics/AABB.hpp"
 #include "Core/World/SpawnFinder.hpp"
+#include "Input/ActionRouter.hpp"
 #include <vulkan/vulkan.h>
 
 #include "Core/Attributes.hpp"
@@ -11,14 +12,14 @@
 
 namespace kc {
 
-    class KeyBindHandler;
+    class InputSystem;
     class GLFWWindow;
     class World;
 
     class PlayerController {
     public:
 
-        void init(KeyBindHandler& keybinds);
+        void init(ActionRouter& actions, InputSystem& input);
         void tick(World& world, double dt);
         void updateProjection(VkExtent2D extent, float fov, float nearPlane, float farPlane);
 
@@ -61,7 +62,9 @@ namespace kc {
         bool recoverFromStuck(World& world);
 
         Camera camera_;
-        KeyBindHandler* keybinds_ = nullptr;
+        InputSystem* input_ = nullptr;
+        ContextHandle moveContext_;
+        ActionRouter::Subscription jumpSub_;
         double lastMouseX_ = 0.0;
         double lastMouseY_ = 0.0;
         bool cursorCaptured_ = false;

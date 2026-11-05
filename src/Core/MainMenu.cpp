@@ -2,6 +2,8 @@
 
 #include "Core/World/WorldScreen.hpp"
 #include "Core/Constants.hpp"
+#include "Core/Runtime.hpp"
+#include "Threads/Kingscraft.hpp"
 
 namespace kc {
 
@@ -51,9 +53,20 @@ namespace kc {
         // Apply initial layout
         uiSystem_.resize(static_cast<int>(extent_.width),
                          static_cast<int>(extent_.height));
+
+        // The menu owns the UI capture context for its whole lifetime.
+        if (actions_) {
+            uiContext_ = actions_->addContext(ContextSpec{
+                .name = "main-menu-ui",
+                .priority = 100,
+                .captureText = true,
+                .bindings = {},
+            });
+        }
     }
 
     void MainMenu::cleanup() {
+        uiContext_.reset();
         uiSystem_.removeElement(&background_);
         uiSystem_.removeElement(&title_);
         uiSystem_.removeElement(&subtitle_);

@@ -32,7 +32,6 @@ namespace kc {
         // Called by RenderThread
         void signalStop() {
             running_ = false;
-            mailbox_->stop();
             runCV_.notify_all();
         }
 
@@ -43,10 +42,11 @@ namespace kc {
 
         void gameLogicStopped();
 
+        std::shared_ptr<Mailbox> mailbox_;
+
     private:
         std::atomic<bool> running_{true};
         std::atomic<bool> runningMailbox{true};
-        std::shared_ptr<Mailbox> mailbox_;
 
         std::thread mailboxThread;
         std::condition_variable runCV_;

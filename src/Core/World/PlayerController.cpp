@@ -1,11 +1,11 @@
 #include "Core/World/PlayerController.hpp"
-#include "Core/KeyBindHandler.hpp"
 #include "Core/Keys.hpp"
 #include "Core/World/Physics/CollisionSystem.hpp"
 #include "Core/World/World.hpp"
 #include "Event/EventManager.hpp"
 #include "Event/Events/PlayerDeathEvent.hpp"
 #include "Event/Events/PlayerRespawnEvent.hpp"
+#include "Input/InputSystem.hpp"
 #include "Threads/InputThread.hpp"
 #include "Util/LogUtils.hpp"
 #include "Vulkan/GLFWWindow.hpp"
@@ -130,8 +130,8 @@ namespace kc {
         return false;
     }
 
-    void PlayerController::init(KeyBindHandler& keybinds) {
-        keybinds_ = &keybinds;
+    void PlayerController::init(ActionRouter& actions, InputSystem& input) {
+        input_ = &input;
         lastMouseX_ = Runtime::get().inputThread->getLastX();
         lastMouseY_ = Runtime::get().inputThread->getLastY();
         bodyPos_ = spawnPos_;
@@ -141,13 +141,32 @@ namespace kc {
         camera_.setPosition(bodyPos_ + glm::vec3(Attributes::PLAYER_WIDTH * 0.5f, Attributes::EYE_HEIGHT, Attributes::PLAYER_WIDTH * 0.5f));
         camera_.setRotation(0.0f, -35.0f);
 
-        keybinds_->onPress(BindLayer::Screen, {Keys::SPACE}, [this]() {
-            if (cursorCaptured_) jumpPresses_.push_back(TimeUtil::uptimeSeconds());
+        // Movement state is read from InputSystem on GameLogic; jump taps also
+        // arrive as events so the double-tap fly toggle keeps its timing.
+        moveContext_ = actions.addContext(ContextSpec{
+            .name = "player-movement",
+            .priority = 20,
+            .captureText = false,
+            .bindings = {
+                {{Keys::W}, Action::MoveForward},
+                {{Keys::S}, Action::MoveBackward},
+                {{Keys::A}, Action::MoveLeft},
+                {{Keys::D}, Action::MoveRight},
+                {{Keys::SPACE}, Action::Jump},
+                {{Keys::LEFT_SHIFT}, Action::FlyDown},
+                {{Keys::RIGHT_SHIFT}, Action::FlyDown},
+            },
+        });
+
+        jumpSub_ = actions.subscribe(Action::Jump, [this](const ActionEvent& event) {
+            if (event.phase != Phase::Pressed) return;
+            if (!cursorCaptured_) return;
+            jumpPresses_.push_back(event.time);
         });
     }
 
     void PlayerController::tick(World& world, double dt) {
-        if (!keybinds_ || !Runtime::get().inputThread->isInitialized()) return;
+        if (!input_ || !Runtime::get().inputThread->isInitialized()) return;
         if (dead_) return;
         if (!cursorCaptured_) return;
 
@@ -218,22 +237,22 @@ namespace kc {
             jumpPresses_.clear();
 
             // Gravity is suppressed by World.cpp while flying; pilot vertical.
-            if (keybinds_->isDown(Keys::W)) velocity += forwardH * Attributes::FLY_SPEED;
-            if (keybinds_->isDown(Keys::S)) velocity -= forwardH * Attributes::FLY_SPEED;
-            if (keybinds_->isDown(Keys::A)) velocity -= rightH * Attributes::FLY_SPEED;
-            if (keybinds_->isDown(Keys::D)) velocity += rightH * Attributes::FLY_SPEED;
-            if (keybinds_->isDown(Keys::SPACE)) {
+            if (input_->isActionDown(Action::MoveForward)) velocity += forwardH * Attributes::FLY_SPEED;
+            if (input_->isActionDown(Action::MoveBackward)) velocity -= forwardH * Attributes::FLY_SPEED;
+            if (input_->isActionDown(Action::MoveLeft)) velocity -= rightH * Attributes::FLY_SPEED;
+            if (input_->isActionDown(Action::MoveRight)) velocity += rightH * Attributes::FLY_SPEED;
+            if (input_->isActionDown(Action::Jump)) {
                 velocityY_ = Attributes::FLY_CLIMB_SPEED;
-            } else if (keybinds_->isDown(Keys::LEFT_SHIFT) || keybinds_->isDown(Keys::RIGHT_SHIFT)) {
+            } else if (input_->isActionDown(Action::FlyDown)) {
                 velocityY_ = -Attributes::FLY_DESCEND_SPEED;
             } else {
                 velocityY_ = 0.0f;
             }
         } else {
-            if (keybinds_->isDown(Keys::W)) velocity += forwardH * Attributes::WALK_SPEED;
-            if (keybinds_->isDown(Keys::S)) velocity -= forwardH * Attributes::WALK_SPEED;
-            if (keybinds_->isDown(Keys::A)) velocity -= rightH * Attributes::WALK_SPEED;
-            if (keybinds_->isDown(Keys::D)) velocity += rightH * Attributes::WALK_SPEED;
+            if (input_->isActionDown(Action::MoveForward)) velocity += forwardH * Attributes::WALK_SPEED;
+            if (input_->isActionDown(Action::MoveBackward)) velocity -= forwardH * Attributes::WALK_SPEED;
+            if (input_->isActionDown(Action::MoveLeft)) velocity -= rightH * Attributes::WALK_SPEED;
+            if (input_->isActionDown(Action::MoveRight)) velocity += rightH * Attributes::WALK_SPEED;
 
             bool grounded = CollisionSystem::aabbCollides(world, box.translate(glm::vec3(0.0f, -0.05f, 0.0f)));
             if (grounded) {
