@@ -7,6 +7,7 @@
 #include "UI/Overlay/UiDebugOverlay.hpp"
 #include "UI/Overlay/UiHotbarOverlay.hpp"
 #include "UI/Overlay/UiDeathScreenOverlay.hpp"
+#include "UI/Engine/UiStyleHandle.hpp"
 #include "UI/Elements/UiRect.hpp"
 #include "Event/EventSubscription.hpp"
 #include <array>
@@ -36,9 +37,13 @@ namespace kc {
         void onPlayerDeath();
         void onPlayerRespawn();
     private:
-        // Creates/removes the raw-text UI capture context. The cursor follows
-        // the same state (normal while UI text is captured, disabled otherwise).
-        void setUiCapture(bool enabled);
+        // Creates/removes the raw-text UI capture context. Capture is active
+        // while either reason is set (debug UI or death screen); the cursor is
+        // normal while UI text is captured and disabled otherwise. The reasons
+        // are tracked separately so respawning cannot cancel debug capture.
+        void updateUiCapture();
+        bool debugCapture_ = false;
+        bool deathCapture_ = false;
 
         VkExtent2D extent_{};
 
@@ -63,7 +68,7 @@ namespace kc {
         UiDeathScreenOverlay deathScreen_;
         UiRect crosshairH_;
         UiRect crosshairV_;
-        uint32_t crosshairStyle_ = 0;
+        UiStyleHandle crosshairStyle_;
     };
 
 } // namespace kc

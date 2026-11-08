@@ -50,7 +50,13 @@ namespace kc {
         void uploadElementStyles(const void* data, uint32_t firstElement, uint32_t count);
 
         // Style system
+        static constexpr uint32_t INVALID_STYLE_SLOT = 0xFFFFFFFFu;
+
+        // Registers a style and returns its pool slot, or INVALID_STYLE_SLOT
+        // when the fixed-size pool is exhausted. Freed slots are recycled.
         uint32_t registerStyle(const UiStyle& style);
+        // Returns a slot to the pool and blanks it. Slot 0 is reserved.
+        void releaseStyle(uint32_t index);
         void updateStyle(uint32_t index, const UiStyle& style);
         void markDirty(uint32_t elementId, int styleIndex = -1);
         void updateStylePool();
@@ -91,6 +97,11 @@ namespace kc {
         // Style system state
         uint32_t nextElementId_ = 0;
         std::vector<GpuStyle> stylePool_;
+        // Slots returned by releaseStyle(), ready to be handed out again.
+        // Slot 0 is reserved as the transparent fallback and never enters it.
+        std::vector<uint32_t> freeStyleSlots_;
+        // Parallel to stylePool_: whether each slot currently has an owner.
+        std::vector<bool> styleSlotAllocated_;
         std::vector<uint32_t> elementStyles_;
         std::vector<bool> styleDirty_;
         uint32_t firstDirty_ = UiRenderer::MAX_ELEMENTS;

@@ -63,13 +63,17 @@ namespace kc {
         textCapture_.store(table && table->captureText, std::memory_order_relaxed);
 
         std::array<bool, ACTION_COUNT> satisfied{};
+        std::array<bool, ACTION_COUNT> boundNow{};
         if (table) {
             for (std::size_t i = 0; i < table->entries.size(); ++i) {
                 const BindingTable::Entry& entry = table->entries[i];
+                const auto index = static_cast<std::size_t>(entry.action);
+                if (index < ACTION_COUNT) {
+                    boundNow[index] = true;
+                }
                 if (!chordSatisfied(entry.chord, keyDown_)) continue;
                 if (isSuppressed(*table, i, keyDown_)) continue;
 
-                const auto index = static_cast<std::size_t>(entry.action);
                 if (index < ACTION_COUNT) {
                     satisfied[index] = true;
                 }
@@ -82,10 +86,18 @@ namespace kc {
         for (std::size_t i = 1; i < ACTION_COUNT; ++i) {
             const bool now = satisfied[i];
             const bool was = prevSatisfied_[i];
+            const bool bound = boundNow[i];
+            const bool hadBinding = hadBinding_[i];
+            hadBinding_[i] = bound;
+
             if (now == was) continue;
 
             prevSatisfied_[i] = now;
             actionDown_[i].store(now, std::memory_order_release);
+
+            // The action just gained its first binding while the chord was
+            // already held: update state, but do not report a Pressed edge.
+            if (now && !hadBinding && bound) continue;
 
             ActionEvent event;
             event.action = static_cast<Action>(i);
@@ -119,8 +131,14 @@ namespace kc {
             if (j == index) continue;
 
             const BindingTable::Entry& other = table.entries[j];
-            if (other.chord.count <= entry.chord.count) continue;
+            const bool identical = other.chord == entry.chord;
+            // A strictly longer chord suppresses its subset (F3+F6 beats F3),
+            // and an identical chord from a strictly higher-priority context
+            // shadows this one. Equal-priority duplicates keep the entry that
+            // was registered first (stable sort order in the table).
+            if (!identical && other.chord.count <= entry.chord.count) continue;
             if (other.priority < entry.priority) continue;
+            if (identical && other.priority == entry.priority && j > index) continue;
             if (!entry.chord.isSubsetOf(other.chord)) continue;
             if (!chordSatisfied(other.chord, keys)) continue;
 

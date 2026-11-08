@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Overlay/UiOverlay.hpp"
+#include "UI/Engine/UiStyleHandle.hpp"
 #include "UI/Elements/UiRect.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiButton.hpp"
@@ -36,10 +37,11 @@ namespace kc {
         UiTextBlock title_;
         UiButton respawnButton_;
 
-        uint32_t tintStyle_ = 0;
-        uint32_t titleStyle_ = 0;
-        uint32_t btnFontStyle_ = 0;
-        uint32_t btnFontHoverStyle_ = 0;
+        UiStyleHandle tintStyle_;
+        UiStyleHandle titleStyle_;
+        UiStyleHandle btnFontStyle_;
+        UiStyleHandle btnFontHoverStyle_;
+        UiStyleHandle buttonBgStyle_;
     };
 
 } // namespace kc

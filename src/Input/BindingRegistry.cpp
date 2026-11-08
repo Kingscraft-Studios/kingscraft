@@ -101,9 +101,10 @@ namespace kc {
             }
         }
 
-        // Higher priority contexts are evaluated first; the actual conflict
-        // rule still uses the old "satisfied longer chord suppresses a subset"
-        // semantics so multi-key shortcuts keep working.
+        // Higher priority contexts are evaluated first. Suppression rules:
+        //   * a satisfied strictly-longer chord shadows its subsets, and
+        //   * a satisfied identical chord shadows one from a lower priority
+        //     context; equal-priority duplicates keep registration order.
         std::stable_sort(table->entries.begin(), table->entries.end(),
                          [](const BindingTable::Entry& a, const BindingTable::Entry& b) {
                              return a.priority > b.priority;

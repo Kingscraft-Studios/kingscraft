@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include "UI/Engine/UiEngine.hpp"
+#include "UI/Engine/UiStyleHandle.hpp"
 #include "UI/Elements/UiElement.hpp"
 #include "Engine/UiStyle.hpp"
 #include <functional>
@@ -47,7 +48,16 @@ namespace kc {
         void registerButtonHandler(std::string name, std::function<void()> handler);
 
         // Style system — delegates to engine
-        uint32_t registerStyle(const UiStyle& style);
+        //
+        // createStyle() returns a handle that releases its pool slot when the
+        // owning object dies. Use it for anything attached to a screen or
+        // overlay.
+        UiStyleHandle createStyle(const UiStyle& style);
+        // Registers a style that lives until the engine shuts down. Only for
+        // process-wide registrations (e.g. MainMenu statics) whose handles
+        // must not be destroyed during screen teardown.
+        uint32_t registerPinnedStyle(const UiStyle& style);
+        void releaseStyle(uint32_t index);
         void updateStyle(uint32_t index, const UiStyle& style);
         void updateStylePool();
         void markDirty(uint32_t elementId);
@@ -74,6 +84,9 @@ namespace kc {
         uint64_t frameIndex_ = 0;
 
         std::unique_ptr<UiEngine> engine_;
+        // Shared lifetime token for UiStyleHandle. Reset in shutdown(), which
+        // makes any handle that outlives the UI a harmless no-op.
+        std::shared_ptr<UiStyleRegistry> styleRegistry_;
         std::vector<UiElement*> elements_;
 
         VkRenderPass currentRenderPass_ = VK_NULL_HANDLE;

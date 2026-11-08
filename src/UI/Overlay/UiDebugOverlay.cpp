@@ -12,7 +12,7 @@ namespace kc {
         (void)screenW;
         (void)screenH;
 
-        styleIndex_ = ui.registerStyle(UiStyle{
+        style_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Font,
             .color1 = {1.0f, 1.0f, 1.0f, 1.0f}
         });
@@ -23,7 +23,7 @@ namespace kc {
         line1_.setText("FPS: --  Frame: --  GPU: --  [W:--  UI:--]");
         line1_.setFont("default");
         line1_.setColor({1.0f, 1.0f, 1.0f, 1.0f});
-        line1_.setStyleIndex(styleIndex_);
+        line1_.setStyleIndex(style_.index());
         line1_.setName("DebugLine1");
         group_.add(&line1_);
 
@@ -33,7 +33,7 @@ namespace kc {
         line2_.setText("Verts: --  Tris: --  Ch: --  FS: --  OD: --  BW: --");
         line2_.setFont("default");
         line2_.setColor({0.6f, 1.0f, 0.6f, 1.0f});
-        line2_.setStyleIndex(styleIndex_);
+        line2_.setStyleIndex(style_.index());
         line2_.setName("DebugLine2");
         group_.add(&line2_);
 
@@ -43,7 +43,7 @@ namespace kc {
         line3_.setText("CPU: --  [Cmd:--  Draw:--  Sub:--]  Idle:--  Clip:--");
         line3_.setFont("default");
         line3_.setColor({0.7f, 0.7f, 1.0f, 1.0f});
-        line3_.setStyleIndex(styleIndex_);
+        line3_.setStyleIndex(style_.index());
         line3_.setName("DebugLine3");
         group_.add(&line3_);
 
@@ -53,7 +53,7 @@ namespace kc {
         line4_.setText("Biome: --");
         line4_.setFont("default");
         line4_.setColor({0.6f, 1.0f, 1.0f, 1.0f});
-        line4_.setStyleIndex(styleIndex_);
+        line4_.setStyleIndex(style_.index());
         line4_.setName("DebugLine4");
         group_.add(&line4_);
 

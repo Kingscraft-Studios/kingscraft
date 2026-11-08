@@ -25,8 +25,11 @@ public:
 
     bool send(ThreadName target, std::function<void()> payload);
 
+    // Enqueues work on `target` and delivers the result to `replyTo`.
+    // Returns true when the work was enqueued, false when the target did not
+    // accept it before the timeout (the callback is then never invoked).
     template<typename T>
-    void request(ThreadName target, std::function<T()> work, ThreadName replyTo, std::function<void(T)> callback) {
+    bool request(ThreadName target, std::function<T()> work, ThreadName replyTo, std::function<void(T)> callback) {
         auto payload = std::make_shared<std::function<void()>>([work = std::move(work), replyTo, callback = std::move(callback)]() mutable {
             if constexpr (std::is_void_v<T>) {
                 work();
@@ -47,10 +50,11 @@ public:
         const auto start = std::chrono::steady_clock::now();
         while (std::chrono::steady_clock::now() - start < timeout) {
             if (send(target, [payload]() { (*payload)(); }))
-                return;
+                return true;
             std::this_thread::sleep_for(retryDelay);
         }
         log(LogLevel::WARN, "MessageBus request timed out: target thread not responding");
+        return false;
     }
 
 private:

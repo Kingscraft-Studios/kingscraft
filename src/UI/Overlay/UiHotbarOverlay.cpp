@@ -10,15 +10,15 @@ namespace kc {
     void UiHotbarOverlay::init(UiWrapper& ui, float screenW, float screenH) {
         screenW_ = screenW;
         screenH_ = screenH;
-        bgStyle_ = ui.registerStyle(UiStyle{
+        bgStyle_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = {0.1f, 0.1f, 0.1f, 0.8f},
         });
-        slotStyle_ = ui.registerStyle(UiStyle{
+        slotStyle_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = {0.5f, 0.5f, 0.5f, 0.5f},
         });
-        selectionStyle_ = ui.registerStyle(UiStyle{
+        selectionStyle_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = {1.0f, 1.0f, 1.0f, 0.8f},
         });
@@ -58,13 +58,13 @@ namespace kc {
 
         for (int i = 0; i < SLOT_COUNT; ++i) {
             if (i < 7) {
-                iconStyles_[i] = ui.registerStyle(UiStyle{
+                iconStyles_[i] = ui.createStyle(UiStyle{
                     .mode = RenderMode::Texture,
                     .color1 = {1.0f, 1.0f, 1.0f, 1.0f},
                     .textureLayer = static_cast<float>(layers[i]),
                 });
             } else {
-                iconStyles_[i] = ui.registerStyle(UiStyle{
+                iconStyles_[i] = ui.createStyle(UiStyle{
                     .mode = RenderMode::Solid,
                     .color1 = {0.3f, 0.3f, 0.3f, 0.5f},
                 });
@@ -77,13 +77,13 @@ namespace kc {
 
         bg_.setAnchor({0.5f, 1.0f}, {anchorX - pad, -SLOT_SIZE - BOTTOM_MARGIN - pad});
         bg_.setSize({totalW + pad * 2, SLOT_SIZE + pad * 2});
-        bg_.setStyleIndex(bgStyle_);
+        bg_.setStyleIndex(bgStyle_.index());
         bg_.setName("HotbarBg");
         group_.add(&bg_);
 
         selection_.setAnchor({0.5f, 1.0f}, {anchorX, -SLOT_SIZE - BOTTOM_MARGIN});
         selection_.setSize({SLOT_SIZE, SLOT_SIZE});
-        selection_.setStyleIndex(selectionStyle_);
+        selection_.setStyleIndex(selectionStyle_.index());
         selection_.setName("HotbarSel");
         group_.add(&selection_);
 
@@ -92,13 +92,13 @@ namespace kc {
 
             slots_[i].setAnchor({0.5f, 1.0f}, {offsetX, -SLOT_SIZE - BOTTOM_MARGIN});
             slots_[i].setSize({SLOT_SIZE, SLOT_SIZE});
-            slots_[i].setStyleIndex(slotStyle_);
+            slots_[i].setStyleIndex(slotStyle_.index());
             slots_[i].setName("HotbarSlot_" + std::to_string(i));
             group_.add(&slots_[i]);
 
             slotIcons_[i].setAnchor({0.5f, 1.0f}, {offsetX + 2, -SLOT_SIZE - BOTTOM_MARGIN + 2});
             slotIcons_[i].setSize({SLOT_SIZE - 4, SLOT_SIZE - 4});
-            slotIcons_[i].setStyleIndex(iconStyles_[i]);
+            slotIcons_[i].setStyleIndex(iconStyles_[i].index());
             slotIcons_[i].setName("HotbarIcon_" + std::to_string(i));
             group_.add(&slotIcons_[i]);
 
@@ -108,7 +108,7 @@ namespace kc {
             slotNumbers_[i].setFont("default");
             slotNumbers_[i].setFontSize(12.0f);
             slotNumbers_[i].setColor({1.0f, 1.0f, 1.0f, 0.7f});
-            slotNumbers_[i].setStyleIndex(slotStyle_);
+            slotNumbers_[i].setStyleIndex(slotStyle_.index());
             slotNumbers_[i].setName("HotbarNum_" + std::to_string(i));
             group_.add(&slotNumbers_[i]);
         }
@@ -136,7 +136,7 @@ namespace kc {
         };
 
         for (int i = 0; i < 7; ++i) {
-            ui.updateStyle(iconStyles_[i], UiStyle{
+            iconStyles_[i].update(UiStyle{
                 .mode = RenderMode::Texture,
                 .color1 = {1.0f, 1.0f, 1.0f, 1.0f},
                 .textureLayer = static_cast<float>(layers[i]),

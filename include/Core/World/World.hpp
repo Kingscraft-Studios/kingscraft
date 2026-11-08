@@ -148,10 +148,6 @@ namespace kc {
         // False when world.kcw failed to load (corrupt / future version): the
         // unreadable file is left untouched on shutdown instead of overwritten.
         bool persistMetadata_ = false;
-        // Set once the async world.kcw load has resolved (any result). The
-        // first World::tick waits for this, so an ultra-fast ENTER_WORLD click
-        // can never stream chunks or run physics on the unloaded defaults.
-        bool loadResolved_ = false;
         uint64_t worldTime_ = 0;
         std::unordered_map<uint64_t, std::unique_ptr<Chunk>> chunks_;
         std::array<std::vector<std::unique_ptr<Chunk>>, CLEANUP_DELAY + 1> pendingCleanup_;

@@ -23,6 +23,7 @@
 #include "Threads/InputThread.hpp"
 #include "Threads/RenderThread.hpp"
 #include "Threads/Engine.hpp"
+#include "Util/LogUtils.hpp"
 
 namespace kc {
 
@@ -41,12 +42,20 @@ namespace kc {
     }
 
     void WorldScreen::init() {
-        auto& world = Runtime::get().kingscraft->getWorld();
+        World* worldPtr = Runtime::get().kingscraft->getWorldManager().getWorld();
+        if (!worldPtr) {
+            // Should be unreachable: WorldManager::createWorld's callback only
+            // runs after the world is published. Fail safe rather than deref.
+            LogUtils::error(ThreadName::GameLogic,
+                "WorldScreen::init: no active world; aborting screen setup");
+            return;
+        }
+        World& world = *worldPtr;
         auto& ui = Runtime::get().renderThread->getUI();
         ui.setBlockTexture(Runtime::get().renderThread->getTexCache().getImageView(), Runtime::get().renderThread->getTexCache().getSampler());
 
         world.getPlayerController().setCaptured(true);
-        setUiCapture(false);
+        updateUiCapture();
 
         debugOverlay_ = std::make_shared<UiDebugOverlay>();
         debugOverlay_->init(ui, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
@@ -54,18 +63,18 @@ namespace kc {
         hotbar_.init(ui, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
         deathScreen_.init(ui, static_cast<float>(extent_.width), static_cast<float>(extent_.height));
 
-        crosshairStyle_ = ui.registerStyle(UiStyle{
+        crosshairStyle_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = {1.0f, 1.0f, 1.0f, 0.9f},
         });
         crosshairH_.setAnchor({0.5f, 0.5f}, {-10.0f, -1.0f});
         crosshairH_.setSize({20.0f, 2.0f});
-        crosshairH_.setStyleIndex(crosshairStyle_);
+        crosshairH_.setStyleIndex(crosshairStyle_.index());
         crosshairH_.setName("CrosshairH");
         ui.addElement(&crosshairH_);
         crosshairV_.setAnchor({0.5f, 0.5f}, {-1.0f, -10.0f});
         crosshairV_.setSize({2.0f, 20.0f});
-        crosshairV_.setStyleIndex(crosshairStyle_);
+        crosshairV_.setStyleIndex(crosshairStyle_.index());
         crosshairV_.setName("CrosshairV");
         ui.addElement(&crosshairV_);
         ui.resize(static_cast<int>(extent_.width), static_cast<int>(extent_.height));
@@ -106,7 +115,8 @@ namespace kc {
         }
     }
 
-    void WorldScreen::setUiCapture(bool enabled) {
+    void WorldScreen::updateUiCapture() {
+        const bool enabled = debugCapture_ || deathCapture_;
         if (enabled) {
             if (!uiContext_) {
                 uiContext_ = Runtime::get().kingscraft->getActionRouter().addContext(ContextSpec{
@@ -137,16 +147,21 @@ namespace kc {
             pauseRequested_ = false;
             auto* kingscraft = Runtime::get().kingscraft;
             kingscraft->getWorldManager().destroyWorld();
-            kingscraft->setScreen<MainMenu>(kingscraft->getActionRouter());
+            // Deferred: never destroy this screen while its tick() is on the
+            // stack. ScreenManager swaps it in after we return.
+            kingscraft->getScreenManager().queueScreen<MainMenu>(kingscraft->getActionRouter());
             return;
         }
 
-        auto& world = Runtime::get().kingscraft->getWorld();
+        World* worldPtr = Runtime::get().kingscraft->getWorldManager().getWorld();
+        if (!worldPtr) return;
+        World& world = *worldPtr;
         bool debug = Runtime::get().renderThread->getUI().isDebugModeOn();
 
         if (debug != wasDebugOn_ && !world.getPlayerController().isDead()) {
             wasDebugOn_ = debug;
-            setUiCapture(debug);
+            debugCapture_ = debug;
+            updateUiCapture();
             if (debug) {
                 world.getPlayerController().setCaptured(false);
             } else {
@@ -170,23 +185,40 @@ namespace kc {
 }
 
 void WorldScreen::onPlayerDeath() {
-        auto& world = Runtime::get().kingscraft->getWorld();
-        setUiCapture(true);
+        World* worldPtr = Runtime::get().kingscraft->getWorldManager().getWorld();
+        if (!worldPtr) return;
+        World& world = *worldPtr;
+        deathCapture_ = true;
+        updateUiCapture();
         world.getPlayerController().setCaptured(false);
         world.getPlayerController().resetMouse();
         deathScreen_.show(Runtime::get().renderThread->getUI());
     }
 
     void WorldScreen::onPlayerRespawn() {
-        auto& world = Runtime::get().kingscraft->getWorld();
-        setUiCapture(false);
-        world.getPlayerController().setCaptured(true);
+        World* worldPtr = Runtime::get().kingscraft->getWorldManager().getWorld();
+        if (!worldPtr) return;
+        World& world = *worldPtr;
+        deathCapture_ = false;
+        updateUiCapture();
+        // Debug capture may still be active after respawn; keep the cursor
+        // usable in that case instead of blindly re-capturing it.
+        world.getPlayerController().setCaptured(!(debugCapture_ || deathCapture_));
         world.getPlayerController().resetMouse();
         deathScreen_.hide(Runtime::get().renderThread->getUI());
     }
 
 void WorldScreen::render(FrameScene& scene) {
-    auto& world = Runtime::get().kingscraft->getWorld();
+    World* worldPtr = Runtime::get().kingscraft->getWorldManager().getWorld();
+    if (!worldPtr) {
+        // World destroyed between ticks (or screen outliving its session):
+        // submit an empty sky frame rather than dereferencing a null world.
+        scene.background = WorldBackground::Sky;
+        scene.terrain.draws.clear();
+        scene.terrain.renderTerrain = false;
+        return;
+    }
+    World& world = *worldPtr;
     auto& settings = RendererSettings::get();
 
     // Explicit, and independent of how many chunks survived culling. The world
@@ -205,7 +237,7 @@ void WorldScreen::render(FrameScene& scene) {
         if (world.getPlayerController().isCursorCaptured()) {
             const Camera& cam = world.getPlayerController().getCamera();
             RaycastHit hit = raycastBlock(cam.getPosition(), cam.getForward(), 8.0f,
-                                          Runtime::get().kingscraft->getWorld());
+                                          world);
             if (hit.hit) {
                 scene.highlight.enabled = true;
                 scene.highlight.position = glm::vec3(static_cast<float>(hit.x),
@@ -217,10 +249,10 @@ void WorldScreen::render(FrameScene& scene) {
         double frustumMs = 0.0, drawMs = 0.0;
         uint32_t visibleChunks = 0, visibleSubChunks = 0;
         uint32_t occlusionTested = 0, occlusionRemoved = 0;
-        terrainRenderer_.render(scene, Runtime::get().kingscraft->getWorld().getLoadedChunks(),
+        terrainRenderer_.render(scene, world.getLoadedChunks(),
                                 viewProj, world.getPlayerController().getCamera().getPosition(),
                                 settings.enableFrustumCulling,
-                                worldChunkLookup, &Runtime::get().kingscraft->getWorld(),
+                                worldChunkLookup, &world,
                                 &frustumMs, &drawMs, &visibleChunks,
                                 &visibleSubChunks, &occlusionTested,
                                 &occlusionRemoved);
@@ -276,7 +308,9 @@ void WorldScreen::render(FrameScene& scene) {
 
     void WorldScreen::onMouseButton(int button, int action, int mods) {
         (void)mods;
-        auto& world = Runtime::get().kingscraft->getWorld();
+        World* worldPtr = Runtime::get().kingscraft->getWorldManager().getWorld();
+        if (!worldPtr) return;
+        World& world = *worldPtr;
         if (action != GLFW_PRESS) return;
         if (!world.getPlayerController().isCursorCaptured()) return;
 

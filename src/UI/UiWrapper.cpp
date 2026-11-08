@@ -24,11 +24,20 @@ namespace kc {
 
         engine_->loadFont("resources/fonts/Arial.ttf", "default");
 
+        if (!styleRegistry_) {
+            styleRegistry_ = std::make_shared<UiStyleRegistry>(
+                [this](uint32_t slot) { releaseStyle(slot); },
+                [this](uint32_t slot, const UiStyle& style) { updateStyle(slot, style); });
+        }
+
         initialized_ = true;
     }
 
     void UiWrapper::shutdown() {
         std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        // Drop the registry first: handles that outlive the UI then expire
+        // instead of calling back into a torn-down engine.
+        styleRegistry_.reset();
         if (!initialized_) return;
         elements_.clear();
         engine_->shutdown();
@@ -211,9 +220,24 @@ namespace kc {
         scrollCallback_ = std::move(cb);
     }
 
-    uint32_t UiWrapper::registerStyle(const UiStyle& style) {
+    UiStyleHandle UiWrapper::createStyle(const UiStyle& style) {
         std::lock_guard<std::recursive_mutex> lock(uiMutex_);
-        return engine_ ? engine_->registerStyle(style) : 0;
+        if (!engine_ || !styleRegistry_) return {};
+        const uint32_t slot = engine_->registerStyle(style);
+        if (slot == UiEngine::INVALID_STYLE_SLOT) return {};
+        return UiStyleHandle(styleRegistry_, slot);
+    }
+
+    uint32_t UiWrapper::registerPinnedStyle(const UiStyle& style) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        if (!engine_) return 0;
+        const uint32_t slot = engine_->registerStyle(style);
+        return slot == UiEngine::INVALID_STYLE_SLOT ? 0u : slot;
+    }
+
+    void UiWrapper::releaseStyle(uint32_t index) {
+        std::lock_guard<std::recursive_mutex> lock(uiMutex_);
+        if (engine_) engine_->releaseStyle(index);
     }
 
     void UiWrapper::updateStyle(uint32_t index, const UiStyle& style) {

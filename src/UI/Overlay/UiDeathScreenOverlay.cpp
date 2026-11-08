@@ -10,35 +10,36 @@ namespace kc {
         screenW_ = screenW;
         screenH_ = screenH;
 
-        tintStyle_ = ui.registerStyle(UiStyle{
+        tintStyle_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = DEATH_TINT,
         });
-        titleStyle_ = ui.registerStyle(UiStyle{
+        titleStyle_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Font,
             .color1 = DEATH_RED,
         });
-        btnFontStyle_ = ui.registerStyle(UiStyle{
+        btnFontStyle_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Font,
             .color1 = DEATH_RED,
         });
-        btnFontHoverStyle_ = ui.registerStyle(UiStyle{
+        btnFontHoverStyle_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Font,
             .color1 = {1.0f, 1.0f, 1.0f, 1.0f},
         });
 
         tint_.setFillParent();
-        tint_.setStyleIndex(tintStyle_);
+        tint_.setStyleIndex(tintStyle_.index());
         tint_.setName("DeathTint");
         tint_.setVisible(false);
         group_.add(&tint_);
 
         buttonBg_.setAnchor({0.5f, 0.5f}, {-140.0f, -25.0f});
         buttonBg_.setSize({280.0f, 50.0f});
-        buttonBg_.setStyleIndex(ui.registerStyle(UiStyle{
+        buttonBgStyle_ = ui.createStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = BLOOD_DARK_TRANSP,
-        }));
+        });
+        buttonBg_.setStyleIndex(buttonBgStyle_.index());
         buttonBg_.setName("RespawnButtonBg");
         buttonBg_.setVisible(false);
         group_.add(&buttonBg_);
@@ -49,7 +50,7 @@ namespace kc {
         title_.setFont("default");
         title_.setFontSize(80.0f);
         title_.setColor(DEATH_RED);
-        title_.setStyleIndex(titleStyle_);
+        title_.setStyleIndex(titleStyle_.index());
         title_.setName("DeathTitle");
         title_.setVisible(false);
         group_.add(&title_);
@@ -63,8 +64,8 @@ namespace kc {
         respawnButton_.setHoverColor(TRANSPARENT);
         respawnButton_.setNormalTextColor(DEATH_RED);
         respawnButton_.setHoverTextColor({1.0f, 1.0f, 1.0f, 1.0f});
-        respawnButton_.setStyleIndex(btnFontStyle_);
-        respawnButton_.setHoverStyleIndex(btnFontHoverStyle_);
+        respawnButton_.setStyleIndex(btnFontStyle_.index());
+        respawnButton_.setHoverStyleIndex(btnFontHoverStyle_.index());
         respawnButton_.setHandlerName(BTN_RESPAWN);
         respawnButton_.setName("RespawnButton");
         respawnButton_.setVisible(false);

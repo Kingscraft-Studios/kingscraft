@@ -9,6 +9,14 @@ namespace kc {
           descriptorManager_(descriptorManager),
           extent_(extent) {
         stylePool_.reserve(UiRenderer::MAX_STYLES);
+        // Slot 0 is a permanently reserved fully transparent style. Invalid
+        // UiStyleHandles (and elements left pointing at a released slot) resolve
+        // here, so the vertex shader always reads a valid entry.
+        UiStyle fallback;
+        fallback.color1 = glm::vec4(0.0f);
+        stylePool_.push_back(fallback.toGpu());
+        styleSlotAllocated_.push_back(true);
+
         elementStyles_.resize(UiRenderer::MAX_ELEMENTS, 0);
         styleDirty_.resize(UiRenderer::MAX_ELEMENTS, false);
     }
@@ -88,10 +96,43 @@ namespace kc {
     // ---- Style System ----
 
     uint32_t UiEngine::registerStyle(const UiStyle& style) {
-        uint32_t index = static_cast<uint32_t>(stylePool_.size());
-        stylePool_.push_back(style.toGpu());
+        uint32_t index;
+        if (!freeStyleSlots_.empty()) {
+            index = freeStyleSlots_.back();
+            freeStyleSlots_.pop_back();
+            stylePool_[index] = style.toGpu();
+            styleSlotAllocated_[index] = true;
+        } else {
+            if (stylePool_.size() >= UiRenderer::MAX_STYLES) {
+                static bool warned = false;
+                if (!warned) {
+                    warned = true;
+                    Logger::Get().log(LogLevel::WARN, ThreadName::Renderer,
+                        "UI style pool exhausted (UiRenderer::MAX_STYLES); style not registered");
+                }
+                return INVALID_STYLE_SLOT;
+            }
+            index = static_cast<uint32_t>(stylePool_.size());
+            stylePool_.push_back(style.toGpu());
+            styleSlotAllocated_.push_back(true);
+        }
         stylePoolDirty_ = true;
         return index;
+    }
+
+    void UiEngine::releaseStyle(uint32_t index) {
+        // Slot 0 is the permanent fallback and cannot be released.
+        if (index == 0 || index >= stylePool_.size()) return;
+        if (!styleSlotAllocated_[index]) return;
+
+        // Blank the slot before recycling it: an element that still stores this
+        // index must draw nothing rather than the next owner's style.
+        UiStyle fallback;
+        fallback.color1 = glm::vec4(0.0f);
+        stylePool_[index] = fallback.toGpu();
+        styleSlotAllocated_[index] = false;
+        freeStyleSlots_.push_back(index);
+        stylePoolDirty_ = true;
     }
 
     void UiEngine::updateStyle(uint32_t index, const UiStyle& style) {

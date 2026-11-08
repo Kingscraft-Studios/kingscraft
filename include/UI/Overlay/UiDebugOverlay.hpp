@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Overlay/UiOverlay.hpp"
+#include "UI/Engine/UiStyleHandle.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiGroup.hpp"
 #include "Util/TimeUtil.hpp"
@@ -43,7 +44,7 @@ namespace kc {
         UiTextBlock line2_;
         UiTextBlock line3_;
         UiTextBlock line4_;
-        uint32_t styleIndex_ = 0;
+        UiStyleHandle style_;
         double lastTime_ = 0.0;
         double elapsed_ = 0.0;
         int frameCount_ = 0;

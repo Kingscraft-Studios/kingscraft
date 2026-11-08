@@ -10,7 +10,6 @@
 #include "Core/ScreenManager.hpp"
 #include "Core/World/Biomes/BiomeProvider.hpp"
 #include "Core/World/TerrainGenerator.hpp"
-#include "Core/World/World.hpp"
 #include "Core/World/WorldManager.hpp"
 #include "Input/ActionRouter.hpp"
 #include "Renderer/RendererSettings.hpp"
@@ -33,9 +32,6 @@ public:
     // GameLogic-only action dispatcher. Input actions arrive here as POD
     // events; handlers always run on this thread.
     ActionRouter& getActionRouter() { return actions_; }
-
-    // Temporary Compatibility Accessor
-    World& getWorld() { return *worldManager.getWorld(); }
 
     template<typename T, typename... Args>
     void setScreen(Args&&... args) {

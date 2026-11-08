@@ -29,9 +29,9 @@ namespace kc {
         const std::uint64_t requestId = ++requestGeneration;
         const std::weak_ptr lifetime = lifetimeToken;
 
-        MessageBus::Get().request<WorldMetadataTemplate::LoadOutcome>(ThreadName::Engine, []() {
+        const bool enqueued = MessageBus::Get().request<WorldMetadataTemplate::LoadOutcome>(ThreadName::Engine, []() {
             return IO::Get().getBuiltinTemplates().getWorldMetadataTemplate().load();
-        }, ThreadName::GameLogic, [this, lifetime, requestId, callback = std::move(callback)] (WorldMetadataTemplate::LoadOutcome outcome) mutable {
+        }, ThreadName::GameLogic, [this, lifetime, requestId, callback] (WorldMetadataTemplate::LoadOutcome outcome) mutable {
 
             // Manager may have been destroyed while the request was pending.
             if (lifetime.expired())
@@ -107,6 +107,16 @@ namespace kc {
                 callback(success);
             }
         });
+
+        if (!enqueued) {
+            // The Engine never accepted the request, so no reply will ever
+            // arrive. Clear the flag and let the caller retry.
+            creating = false;
+            LogUtils::warn(ThreadName::GameLogic,
+                "WorldManager: metadata request could not be enqueued; creation aborted");
+            if (callback) callback(false);
+            return false;
+        }
 
         return true;
     }

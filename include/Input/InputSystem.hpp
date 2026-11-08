@@ -46,6 +46,10 @@ namespace kc {
 
         KeyState keyDown_{};
         std::array<bool, ACTION_COUNT> prevSatisfied_{};
+        // Whether the action had any binding in the previous update. Used to
+        // suppress the synthetic Pressed edge when a context is added while
+        // the chord is already held (e.g. holding Space during world load).
+        std::array<bool, ACTION_COUNT> hadBinding_{};
         std::array<std::atomic<bool>, ACTION_COUNT> actionDown_{};
         std::atomic<bool> textCapture_{false};
     };

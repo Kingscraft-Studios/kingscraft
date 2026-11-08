@@ -9,6 +9,9 @@ namespace kc {
             if (count == MAX_KEYS) break;
             keys[count++] = key;
         }
+        // Canonical order so equality/subset checks are insertion-order
+        // independent (e.g. {F3, F6} == {F6, F3}).
+        std::sort(keys.begin(), keys.begin() + count);
     }
 
     bool Chord::contains(int key) const {

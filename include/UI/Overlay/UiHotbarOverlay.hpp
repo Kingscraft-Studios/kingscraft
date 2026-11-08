@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Overlay/UiOverlay.hpp"
+#include "UI/Engine/UiStyleHandle.hpp"
 #include "UI/Elements/UiRect.hpp"
 #include "UI/Elements/UiTextBlock.hpp"
 #include "UI/Elements/UiImage.hpp"
@@ -57,10 +58,10 @@ namespace kc {
 
         RegistryKey<Block> slotBlocks_[SLOT_COUNT] = {};
 
-        uint32_t bgStyle_ = 0;
-        uint32_t slotStyle_ = 0;
-        uint32_t selectionStyle_ = 0;
-        uint32_t iconStyles_[SLOT_COUNT] = {};
+        UiStyleHandle bgStyle_;
+        UiStyleHandle slotStyle_;
+        UiStyleHandle selectionStyle_;
+        UiStyleHandle iconStyles_[SLOT_COUNT];
     };
 
 } // namespace kc

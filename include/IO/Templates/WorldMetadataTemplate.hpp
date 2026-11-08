@@ -61,6 +61,18 @@ namespace kc {
 
         LoadOutcome load() {
             LoadOutcome outcome;
+            // A staged write is newer than the file: flush() only runs at IO
+            // shutdown, so without this every pause -> re-enter would resurrect
+            // the previous session's player/spawn/time (or, on a first-ever
+            // world, run the new-world spawn sweep again). Same rule as
+            // RegionTemplate::load().
+            if (pending_) {
+                outcome.metadata = metadata_;
+                outcome.metadata.settings.shape.clampToValidRanges();
+                outcome.result = LoadResult::Ok;
+                return outcome;
+            }
+
             // A missing world.kcw is a brand-new world, not an error — read quietly.
             auto fileData = readBytes(worldPath, MissingFile::Ignore);
             if (!fileData || fileData->empty()) return outcome;

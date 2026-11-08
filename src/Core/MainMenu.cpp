@@ -18,27 +18,27 @@ namespace kc {
 
     static void ensureStyles(UiWrapper& ui) {
         if (g_stylesInit) return;
-        g_styleBg = ui.registerStyle(UiStyle{
+        g_styleBg = ui.registerPinnedStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = BG_DARK,
         });
-        g_styleTitle = ui.registerStyle(UiStyle{
+        g_styleTitle = ui.registerPinnedStyle(UiStyle{
             .mode = RenderMode::Font,
             .color1 = GOLD
         });
-        g_styleSubtitle = ui.registerStyle(UiStyle{
+        g_styleSubtitle = ui.registerPinnedStyle(UiStyle{
             .mode = RenderMode::Font,
             .color1 = GOLD_DARK
         });
-        g_styleBtnText = ui.registerStyle(UiStyle{
+        g_styleBtnText = ui.registerPinnedStyle(UiStyle{
             .mode = RenderMode::Font,
             .color1 = GOLD_DARK
         });
-        g_styleBtnTextHover = ui.registerStyle(UiStyle{
+        g_styleBtnTextHover = ui.registerPinnedStyle(UiStyle{
             .mode = RenderMode::Font,
             .color1 = GOLD
         });
-        g_styleSelBar = ui.registerStyle(UiStyle{
+        g_styleSelBar = ui.registerPinnedStyle(UiStyle{
             .mode = RenderMode::Solid,
             .color1 = GOLD
         });

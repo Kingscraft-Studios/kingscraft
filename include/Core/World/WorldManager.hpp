@@ -28,8 +28,11 @@ namespace kc {
         bool hasWorld() const { return static_cast<bool>(world); }
         bool isCreating() const { return creating; }
 
-        World* getWorld() { return world.get(); }
-        const World* getWorld() const { return world.get(); }
+        // Returns the active world, or nullptr when no world session exists.
+        // Callers must null-check; there is intentionally no reference-returning
+        // accessor.
+        [[nodiscard]] World* getWorld() { return world.get(); }
+        [[nodiscard]] const World* getWorld() const { return world.get(); }
 
         DefaultTerrainGenerator* getTerrainGenerator() {
             return terrainGenerator.get();

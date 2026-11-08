@@ -209,6 +209,23 @@ namespace kc {
         for (auto& bucket : pendingCleanup_) {
             bucket.clear();
         }
+
+        // Release GPU residency and notify chunk listeners for every resident
+        // chunk before chunks_ is destroyed with the object. unloadChunk() is
+        // not used here: the metadata/region saves above already covered this
+        // session, and it would mutate the containers while iterating.
+        for (const auto& [key, chunk] : chunks_) {
+            (void)chunk;
+            const int gx = static_cast<int>(key >> 32);
+            const int gz = static_cast<int>(static_cast<int32_t>(key & 0xFFFFFFFF));
+
+            MessageBus::Get().send(ThreadName::Renderer, [key]() {
+                if (auto* renderer = Runtime::get().renderThread)
+                    renderer->getUploader().unload(key);
+            });
+
+            EventManager::get().callEvent<ChunkUnloadedEvent>(gx, gz);
+        }
     }
 
     int World::worldToGrid(float worldCoord, int chunkSize) {
