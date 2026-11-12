@@ -140,7 +140,7 @@ namespace kc {
             stateFor(k);      // pulls the edit into the region state
             if (!flushRegion(k))
                 LogUtils::error(ThreadName::Engine,
-                    StringUtils::build("KCR save failed (r.", regionXOfKey(k), ".",
+                    "Regions", StringUtils::build("KCR save failed (r.", regionXOfKey(k), ".",
                                         regionZOfKey(k), ".kcr)"));
         }
 
@@ -205,7 +205,7 @@ namespace kc {
             std::vector<char> payload;
             if (!kcr::extractChunkPayload(record, recordSize, gridX, gridZ, payload)) {
                 LogUtils::warn(ThreadName::Engine,
-                    StringUtils::build("KCR bad chunk record, ignoring (", gridX, ",",
+                    "Regions", StringUtils::build("KCR bad chunk record, ignoring (", gridX, ",",
                                         gridZ, ")"));
                 return {};
             }
@@ -272,14 +272,14 @@ namespace kc {
             if (size == 0) return;   // brand-new region
             if (size < kcr::REGION_DATA_OFFSET) {
                 LogUtils::warn(ThreadName::Engine,
-                    StringUtils::build("KCR too small, ignoring (r.", rX, ".", rZ, ".kcr)"));
+                    "Regions", StringUtils::build("KCR too small, ignoring (r.", rX, ".", rZ, ".kcr)"));
                 return;
             }
 
             auto head = readBytes(path, 0, kcr::REGION_DATA_OFFSET);
             if (!head || head->size() < kcr::REGION_DATA_OFFSET) {
                 LogUtils::warn(ThreadName::Engine,
-                    StringUtils::build("KCR header read failed (r.", rX, ".", rZ, ".kcr)"));
+                    "Regions", StringUtils::build("KCR header read failed (r.", rX, ".", rZ, ".kcr)"));
                 return;
             }
 
@@ -287,12 +287,12 @@ namespace kc {
             kcr::KcrHeader h;
             if (!kcr::readRegionHeader(r, h)) {
                 LogUtils::warn(ThreadName::Engine,
-                    StringUtils::build("KCR bad header, ignoring (r.", rX, ".", rZ, ".kcr)"));
+                    "Regions", StringUtils::build("KCR bad header, ignoring (r.", rX, ".", rZ, ".kcr)"));
                 return;
             }
             if (h.regionX != rX || h.regionZ != rZ) {
                 LogUtils::warn(ThreadName::Engine,
-                    StringUtils::build("KCR region coords mismatch, ignoring (r.", rX, ".",
+                    "Regions", StringUtils::build("KCR region coords mismatch, ignoring (r.", rX, ".",
                                         rZ, ".kcr)"));
                 return;
             }
@@ -304,7 +304,7 @@ namespace kc {
                 if (!kcr::readDirEntry(r, e, crcOk)) break;
                 if (!crcOk) {
                     LogUtils::warn(ThreadName::Engine,
-                        StringUtils::build("KCR directory entry CRC mismatch ", i, " (r.", rX, ".",
+                        "Regions", StringUtils::build("KCR directory entry CRC mismatch ", i, " (r.", rX, ".",
                                             rZ, ".kcr)"));
                     e = kcr::DirEntry{};
                     continue;
@@ -316,7 +316,7 @@ namespace kc {
                 if (e.offset < kcr::REGION_DATA_OFFSET || e.offset > size ||
                     e.size > size - e.offset) {
                     LogUtils::warn(ThreadName::Engine,
-                        StringUtils::build("KCR bad directory entry ", i, " (r.", rX, ".",
+                        "Regions", StringUtils::build("KCR bad directory entry ", i, " (r.", rX, ".",
                                             rZ, ".kcr)"));
                     e = kcr::DirEntry{};
                     continue;
@@ -351,11 +351,11 @@ namespace kc {
             if (base < kcr::REGION_DATA_OFFSET || !s.headerOk) {
                 if (base > kcr::REGION_DATA_OFFSET)
                     LogUtils::warn(ThreadName::Engine,
-                        StringUtils::build("KCR invalid header, rebuilding (r.", rX, ".", rZ,
+                        "Regions", StringUtils::build("KCR invalid header, rebuilding (r.", rX, ".", rZ,
                                             ".kcr)"));
                 else if (base > 0)
                     LogUtils::warn(ThreadName::Engine,
-                        StringUtils::build("KCR truncated, rebuilding (r.", rX, ".", rZ,
+                        "Regions", StringUtils::build("KCR truncated, rebuilding (r.", rX, ".", rZ,
                                             ".kcr)"));
                 // The cache is rebuilt with the file: unreadable old slots are gone.
                 s.dir = {};
@@ -371,7 +371,7 @@ namespace kc {
                 fresh.insert(fresh.end(), kcr::DIRECTORY_SIZE, 0);
                 if (!writeBytes(path, fresh)) {
                     LogUtils::error(ThreadName::Engine,
-                        StringUtils::build("KCR cannot create region file (r.", rX, ".", rZ, ".kcr)"));
+                        "Regions", StringUtils::build("KCR cannot create region file (r.", rX, ".", rZ, ".kcr)"));
                     return false;
                 }
                 base = kcr::REGION_DATA_OFFSET;
@@ -403,7 +403,7 @@ namespace kc {
             }
             if (!writeBytes(path, base, blob)) {
                 LogUtils::error(ThreadName::Engine,
-                    StringUtils::build("KCR record append failed (r.", rX, ".", rZ, ".kcr)"));
+                    "Regions", StringUtils::build("KCR record append failed (r.", rX, ".", rZ, ".kcr)"));
                 return false;
             }
 
@@ -412,7 +412,7 @@ namespace kc {
             if (!writeBytes(path, kcr::REGION_HEADER_SIZE,
                             kcr::serializeDirectory(s.dir.data(), s.dir.size()))) {
                 LogUtils::error(ThreadName::Engine,
-                    StringUtils::build("KCR directory update failed (r.", rX, ".", rZ, ".kcr)"));
+                    "Regions", StringUtils::build("KCR directory update failed (r.", rX, ".", rZ, ".kcr)"));
                 return false;
             }
             std::vector<char> countBytes;
@@ -420,7 +420,7 @@ namespace kc {
             cw.u32(s.presentCount);
             if (!writeBytes(path, kcr::CHUNK_COUNT_OFFSET, countBytes)) {
                 LogUtils::error(ThreadName::Engine,
-                    StringUtils::build("KCR header count update failed (r.", rX, ".", rZ, ".kcr)"));
+                    "Regions", StringUtils::build("KCR header count update failed (r.", rX, ".", rZ, ".kcr)"));
                 return false;
             }
 
@@ -459,7 +459,7 @@ namespace kc {
                 if (it == states_.end()) break;   // only 'keep' left — nothing to drop
                 if (it->second.dirty && !persistRegion(oldestKey, it->second)) {
                     LogUtils::error(ThreadName::Engine,
-                        StringUtils::build("KCR region eviction deferred: save failed (r.",
+                        "Regions", StringUtils::build("KCR region eviction deferred: save failed (r.",
                                             regionXOfKey(oldestKey), ".", regionZOfKey(oldestKey),
                                             ".kcr)"));
                     break;
@@ -483,13 +483,13 @@ namespace kc {
             }
             if (physical > 0 && physical > live) {
                 LogUtils::info(ThreadName::Engine,
-                    StringUtils::build("KCR regions: ", regions, " physical=",
+                    "Regions", StringUtils::build("KCR regions: ", regions, " physical=",
                                         static_cast<unsigned long long>(physical),
                                         " live=", static_cast<unsigned long long>(live),
                                         " garbage=", static_cast<unsigned long long>(physical - live)));
             } else if (regions > 0) {
                 LogUtils::info(ThreadName::Engine,
-                    StringUtils::build("KCR regions: ", regions, " physical=",
+                    "Regions", StringUtils::build("KCR regions: ", regions, " physical=",
                                         static_cast<unsigned long long>(physical),
                                         " live=", static_cast<unsigned long long>(live)));
             }

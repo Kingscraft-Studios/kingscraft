@@ -50,14 +50,14 @@ namespace kc {
 
         if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
             LogUtils::error(ThreadName::Engine,
-                StringUtils::build("[ShaderCompiler] Failed to compile ", name, ": ",
+                "Shaders", StringUtils::build("Failed to compile ", name, ": ",
                                      result.GetErrorMessage()));
             return std::nullopt;
         }
 
         if (result.GetNumWarnings() > 0) {
             LogUtils::warn(ThreadName::Engine,
-                StringUtils::build("[ShaderCompiler] ", name, " compiled with ",
+                "Shaders", StringUtils::build(name, " compiled with ",
                                      result.GetNumWarnings(), " warning(s)"));
         }
 

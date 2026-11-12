@@ -11,7 +11,7 @@ namespace kc {
     void IO::Shutdown() {
         if (!instance_) return;
         if (!instance_->builtInTemplates.flush())
-            LogUtils::error(ThreadName::Engine, "IO shutdown flush failed");
+            LogUtils::error(ThreadName::Engine, "IO", "IO shutdown flush failed");
         instance_.reset();
     }
 

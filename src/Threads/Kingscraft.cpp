@@ -112,6 +112,11 @@ namespace kc {
 
         cpuTickMs_ = (TimeUtil::uptimeSeconds() - tickStart) * 1000.0;
 
+        // Tick the profiler on the same thread that starts and feeds it, so the
+        // capture's sample vectors are never read while feedFrame() appends.
+        if (auto* renderThread = Runtime::get().renderThread)
+            renderThread->getProfilerCapture().tick(dt_);
+
         // Publish diagnostics from the LAST tick's CPU metrics (cpu_ still holds
         // them) plus the renderer's latest GPU sample, before this tick mutates
         // cpu_. Fires MetricsUpdateEvent for the listeners (profiler fed every
@@ -227,11 +232,11 @@ namespace kc {
                 world->dumpLoadedChunks();
                 world->setSaveAllChunks(false);
                 if (!IO::Get().getBuiltinTemplates().getRegionTemplate().flush())
-                    LogUtils::error(ThreadName::GameLogic, "SaveAllChunks: flush failed");
+                    LogUtils::error(ThreadName::GameLogic, "World", "SaveAllChunks: flush failed");
             } else {
                 world->setSaveAllChunks(true);
                 world->dumpLoadedChunks();
-                LogUtils::info(ThreadName::GameLogic, "SaveAllChunks: ON (recording loaded + unloaded chunks)");
+                LogUtils::info(ThreadName::GameLogic, "World", "SaveAllChunks: ON (recording loaded + unloaded chunks)");
             }
         });
     }
@@ -253,7 +258,7 @@ namespace kc {
 
                 kingscraft->getWorldManager().createWorld([kingscraft](bool success) {
                     if (!success) {
-                        LogUtils::error(ThreadName::GameLogic, "Failed to create World Session");
+                        LogUtils::error(ThreadName::GameLogic, "World", "Failed to create World Session");
                         return;
                     }
                     kingscraft->setScreen<WorldScreen>();

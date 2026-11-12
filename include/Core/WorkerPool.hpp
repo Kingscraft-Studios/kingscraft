@@ -31,7 +31,7 @@ namespace kc {
             static_assert(std::is_base_of_v<BaseThread, T>, "T must derive from BaseThread");
 
             if (findWorker(worker) != nullptr) {
-                LogUtils::error(ThreadName::WorkerPool, "Thread Already Exists!");
+                LogUtils::error(ThreadName::WorkerPool, "Worker Pool", "Thread already exists");
                 return nullptr;
             }
 

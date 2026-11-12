@@ -1,5 +1,7 @@
 #pragma once
 #include <chrono>
+#include <ctime>
+#include <string>
 
 namespace kc {
 
@@ -45,8 +47,11 @@ public:
     }
 
     static std::string getCurrentSystemTime(TimeFormat mode) {
-        auto now = std::chrono::system_clock::now();
-        time_t now_time = std::chrono::system_clock::to_time_t(now);
+        return format(std::chrono::system_clock::now(), mode);
+    }
+
+    static std::string format(std::chrono::system_clock::time_point timePoint, TimeFormat mode) {
+        time_t now_time = std::chrono::system_clock::to_time_t(timePoint);
 
         std::tm tm{};
         localtime_r(&now_time, &tm);

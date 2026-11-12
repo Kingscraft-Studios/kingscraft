@@ -33,7 +33,7 @@ namespace kc {
         const auto sources = shaderTemplate.listSources(SHADER_SOURCE_DIR, true);
 
         LogUtils::info(ThreadName::Engine,
-            StringUtils::build("[ShaderCache] Discovering shaders in ", SHADER_SOURCE_DIR,
+            "Shaders", StringUtils::build("Discovering shaders in ", SHADER_SOURCE_DIR,
                                  " (", sources.size(), sources.size() == 1 ? " source)" : " sources)"));
 
         std::size_t compiled = 0;
@@ -44,7 +44,7 @@ namespace kc {
             const auto stage = ShaderCompiler::stageFromExtension(rel);
             if (!stage) {
                 LogUtils::error(ThreadName::Engine,
-                    StringUtils::build("[ShaderCache] Unsupported shader extension: ", rel));
+                    "Shaders", StringUtils::build("Unsupported shader extension: ", rel));
                 ++failed;
                 continue;
             }
@@ -56,7 +56,7 @@ namespace kc {
 
             if (shaders.contains(key)) {
                 LogUtils::error(ThreadName::Engine,
-                    StringUtils::build("[ShaderCache] Duplicate shader name '", key,
+                    "Shaders", StringUtils::build("Duplicate shader name '", key,
                                          "' (from ", rel, "); aborting startup"));
                 throw std::runtime_error("ShaderCache: duplicate shader name: " + key);
             }
@@ -64,7 +64,7 @@ namespace kc {
             auto bytes = shaderTemplate.load(sourcePath);
             if (bytes.empty()) {
                 LogUtils::error(ThreadName::Engine,
-                    StringUtils::build("[ShaderCache] Failed to read source ", sourcePath));
+                    "Shaders", StringUtils::build("Failed to read source ", sourcePath));
                 ++failed;
                 continue;
             }
@@ -75,7 +75,7 @@ namespace kc {
             std::vector<char> spv;
             if (loadCached(key, cacheName, hash, spv)) {
                 LogUtils::info(ThreadName::Engine,
-                    StringUtils::build("[ShaderCache] ", key, " up to date (cached, ",
+                    "Shaders", StringUtils::build(key, " up to date (cached, ",
                                          spv.size(), " bytes)"));
                 shaders[key] = std::move(spv);
                 ++cached;
@@ -96,14 +96,14 @@ namespace kc {
             IO::Get().getBuiltinTemplates().getCacheTemplate().write(cacheName, header, *compiledSpv);
 
             LogUtils::info(ThreadName::Engine,
-                StringUtils::build("[ShaderCache] Compiled ", key, " (", compiledSpv->size(),
+                "Shaders", StringUtils::build("Compiled ", key, " (", compiledSpv->size(),
                                      " bytes SPIR-V, hash ", hexDigest(hash), ")"));
             shaders[key] = std::move(*compiledSpv);
             ++compiled;
         }
 
         LogUtils::info(ThreadName::Engine,
-            StringUtils::build("[ShaderCache] Ready: ", shaders.size(),
+            "Shaders", StringUtils::build("Ready: ", shaders.size(),
                                  shaders.size() == 1 ? " shader (" : " shaders (",
                                  compiled, " compiled, ", cached, " cached, ", failed, " failed)"));
     }
@@ -117,7 +117,7 @@ namespace kc {
         const auto it = shaders.find(key);
         if (it == shaders.end()) {
             LogUtils::error(ThreadName::Engine,
-                StringUtils::build("[ShaderCache] Shader not loaded: ", key));
+                "Shaders", StringUtils::build("Shader not loaded: ", key));
             throw std::runtime_error("ShaderCache: shader not loaded: " + key);
         }
         return it->second;
@@ -135,14 +135,14 @@ namespace kc {
 
         if (!validator_.validate(header, hash)) {
             LogUtils::info(ThreadName::Engine,
-                StringUtils::build("[ShaderCache] ", key, " stale; recompiling"));
+                "Shaders", StringUtils::build(key, " stale; recompiling"));
             return false;
         }
 
         auto payload = cacheTemplate.readPayload(cacheName, sizeof(ShaderCacheHeader), MissingFile::Ignore);
         if (!payload || payload->empty()) {
             LogUtils::warn(ThreadName::Engine,
-                StringUtils::build("[ShaderCache] ", cacheName, " payload missing/empty; recompiling"));
+                "Shaders", StringUtils::build(cacheName, " payload missing/empty; recompiling"));
             return false;
         }
 

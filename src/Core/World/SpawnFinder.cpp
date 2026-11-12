@@ -140,7 +140,7 @@ namespace kc {
 
             reset();   // this sweep is finished; the next request starts fresh
             LogUtils::info(ThreadName::GameLogic,
-                "spawn: placed on dry land at (" + std::to_string(wx) + ", " +
+                "World", "Spawn placed on dry land at (" + std::to_string(wx) + ", " +
                 std::to_string(surfaceY) + ", " + std::to_string(wz) + ")");
 
             Result result;
@@ -166,7 +166,7 @@ namespace kc {
                 const int inspected = inspected_;
                 reset();
                 LogUtils::warn(ThreadName::GameLogic,
-                    "spawn: no dry land within " + std::to_string(spawnSearchChunks) +
+                    "World", "No dry land within " + std::to_string(spawnSearchChunks) +
                     " chunks (" + std::to_string(inspected) +
                     " loaded chunks inspected); settling on the shallowest water at (" +
                     std::to_string(wx) + ", " + std::to_string(surfaceY) + ", " +

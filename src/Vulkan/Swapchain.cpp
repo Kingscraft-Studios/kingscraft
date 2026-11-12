@@ -149,12 +149,12 @@ namespace kc {
 
         for (const auto &mode : availablePresentModes) {
             if (mode == preferred) {
-                LogUtils::info(ThreadName::Renderer, vsync ? "Present Mode: FIFO (V-Sync ON)" : "Present Mode: Immediate (V-Sync OFF)");
+                LogUtils::info(ThreadName::Renderer, "Vulkan", vsync ? "Present Mode: FIFO (V-Sync ON)" : "Present Mode: Immediate (V-Sync OFF)");
                 return mode;
             }
         }
 
-        LogUtils::info(ThreadName::Renderer, "Present Mode: FIFO (V-Sync ON, fallback)");
+        LogUtils::info(ThreadName::Renderer, "Vulkan", "Present Mode: FIFO (V-Sync ON, fallback)");
         return VK_PRESENT_MODE_FIFO_KHR;
     }
 

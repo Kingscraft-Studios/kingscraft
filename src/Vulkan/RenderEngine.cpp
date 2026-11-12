@@ -77,7 +77,6 @@ namespace kc {
 
             drawFrame(scene);
             chunkProcessor.collectDestroyedChunks(scene.terrain.draws);
-            profilingCapture_.tick(scene.stats.delta);
 
             int maxFps = RendererSettings::get().maxFps;
             if (maxFps > 0) {
@@ -102,8 +101,8 @@ namespace kc {
             const double frameEnd = TimeUtil::uptimeSeconds();
             gpuMetrics_.workMs = (frameEnd - tickStart) * 1000.0;
             gpuMetrics_.frameIntervalMs = gpuMetrics_.workMs + gpuMetrics_.gapMs;
-            // Tail after the queue submit: collectDestroyedChunks, the profiling
-            // tick, the max-Fps sleep and the metrics publish itself.
+            // Tail after the queue submit: collectDestroyedChunks, the max-Fps
+            // sleep and the metrics publish itself.
             gpuMetrics_.postMs = gpuMetrics_.workMs - gpuMetrics_.mailboxMs
                                - gpuMetrics_.beginMs - gpuMetrics_.cpuFrameMs
                                - gpuMetrics_.cpuSubmitMs;

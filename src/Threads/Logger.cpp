@@ -1,7 +1,9 @@
 #include "Threads/Logger.hpp"
 
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 
 #include "Util/StringUtils.hpp"
 #include "Util/TimeUtil.hpp"
@@ -16,7 +18,7 @@ namespace kc {
         logFile_.open(logFilePath_, std::ios::out | std::ios::app);
 
         if (!logFile_.is_open()) {
-            buildLogLine(ERROR, ThreadName::Engine, "Failed to open log file: " + logFilePath_);
+            log(ERROR, ThreadName::Engine, "Core", "Failed to open log file: " + logFilePath_);
         }
 
         printHeader();
@@ -31,10 +33,10 @@ namespace kc {
         }
     }
 
-    void Logger::log(LogLevel level, ThreadName caller, std::string data) {
+    void Logger::log(LogLevel level, ThreadName caller, std::string_view category, std::string data) {
         std::lock_guard lock(mutex_);
 
-        std::string line = buildLogLine(level, caller, data);
+        std::string line = buildLogLine(level, caller, category, data);
 
         if (level == LogLevel::ERROR || level == LogLevel::WARN) {
             std::cerr << line << std::endl;
@@ -46,18 +48,21 @@ namespace kc {
     }
 
     void Logger::printHeader() {
-        std::string header =
-            "[DEBUG] ============================================================\n"
-            "[DEBUG] Kingscraft Engine Logs Initialized\n"
-            "[DEBUG] Version    : 1.0.0-PreAlpha\n"
-            "[DEBUG] Build      : Debug\n"
-            "[DEBUG] Platform   : Linux\n"
-            "[DEBUG] Start Time : " + TimeUtil::getCurrentSystemTime(TimeFormat::Logger) +
-            "\n[DEBUG] ============================================================\n";
+        const std::string lines[] = {
+            "============================================================",
+            "Kingscraft Engine Logs Initialized",
+            "Version    : 1.0.0-PreAlpha",
+            "Build      : Debug",
+            "Platform   : Linux",
+            "Start Time : " + TimeUtil::getCurrentSystemTime(TimeFormat::Logger),
+            "============================================================"
+        };
 
-        std::cout << header << std::endl;
-
-        writeToFile(header);
+        for (const auto& line : lines) {
+            const std::string header = buildLogLine(DEBUG, ThreadName::Engine, "Core", line);
+            std::cout << header << std::endl;
+            writeToFile(header);
+        }
     }
 
     std::string Logger::createLogFileName() {
@@ -66,11 +71,15 @@ namespace kc {
 
     std::string Logger::buildLogLine(LogLevel level,
                                  ThreadName caller,
+                                 std::string_view category,
                                  const std::string& data) {
+        std::ostringstream uptime;
+        uptime << std::fixed << std::setprecision(3) << TimeUtil::uptimeSeconds();
+
         return StringUtils::build(
-            "[", TimeUtil::uptimeSeconds(), " ",
-            logLevelToString(level), "]: ",
-            "[", threadToString(caller), "] ",
+            "[", uptime.str(), "/",
+            logLevelToString(level), "] [",
+            threadToString(caller), "/", category, "] ",
             data
         );
     }

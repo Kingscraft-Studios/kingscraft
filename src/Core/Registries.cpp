@@ -2,8 +2,7 @@
 
 #include "Bus/MessageBus.hpp"
 #include "Bus/Mailbox.hpp"
-#include "Core/Blocks/Blocks.hpp"
-#include "Core/Registry.hpp"
+#include "Core/RegistryCatalog.hpp"
 #include "Core/WorkerPool.hpp"
 #include "Event/EventManager.hpp"
 #include "Util/LogUtils.hpp"
@@ -11,7 +10,7 @@
 #include <chrono>
 #include <stdexcept>
 
-#include "Core/World/Biomes/Biomes.hpp"
+#include "Util/StringUtils.hpp"
 
 namespace kc {
     std::atomic<bool> Registries::built_{false};
@@ -50,7 +49,7 @@ namespace kc {
             std::lock_guard<std::mutex> lock(buildMutex_);
 
             const auto started = std::chrono::steady_clock::now();
-            LogUtils::info(ThreadName::Registry, "Registry reload starting...");
+            LogUtils::info(ThreadName::Worker, "Registry", "Registry reload starting...");
 
             try {
                 clearAllRegistry();
@@ -61,22 +60,20 @@ namespace kc {
 
                 const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
 
-                LogUtils::info(ThreadName::Registry, StringUtils::build("Registry reload completed in ", elapsed, "ms."));
+                LogUtils::info(ThreadName::Worker, "Registry", StringUtils::build("Registry reload completed in ", elapsed, "ms."));
             } catch (const std::runtime_error& e) {
-                LogUtils::error(ThreadName::Registry, StringUtils::build("Registry reload failed: ", e.what()));
+                LogUtils::error(ThreadName::Worker, "Registry", StringUtils::build("Registry reload failed: ", e.what()));
             } catch (...) {
-                LogUtils::error(ThreadName::Registry, "Registry reload failed with an unknown exception.");
+                LogUtils::error(ThreadName::Worker, "Registry", "Registry reload failed with an unknown exception.");
             }
         });
     }
 
     void Registries::addAllRegistry(int& pending) {
-        Blocks::registerBlocks(pending);
-        Biomes::registerBiomes(pending);
+        RegistryCatalog::buildAll(pending);
     }
 
     void Registries::clearAllRegistry() {
-        Registry<Biome>::getRegistry().clear();
-        Registry<Block>::getRegistry().clear();
+        RegistryCatalog::clearAll();
     }
 } // namespace kc

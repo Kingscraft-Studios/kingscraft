@@ -538,10 +538,7 @@ namespace kc {
         }
     }
 
-    // Reports how many chunks/second generation and meshing are each turning
-    // over. Without this, a parallelisation change is unmeasurable from the
-    // outside: the world just looks slow and you cannot tell which stage is the
-    // one holding things up.
+    // Refreshes the streaming throughput snapshots used by diagnostics.
     void World::logThroughput() {
         using namespace std::chrono;
         static constexpr uint64_t windowMicros = 2'000'000;   // 2 seconds
@@ -564,32 +561,11 @@ namespace kc {
         const uint64_t gen = genChunksDone_.load(std::memory_order_relaxed);
         const uint64_t mesh = meshChunksDone_.load(std::memory_order_relaxed);
 
-        const uint64_t dGen = gen >= lastGenCount_ ? gen - lastGenCount_ : 0;
-        const uint64_t dMesh = mesh >= lastMeshCount_ ? mesh - lastMeshCount_ : 0;
-
-        // Region-load contention and prefetch effectiveness (R4): measured over
-        // the same window so a change can be judged rather than guessed.
+        // Keep the per-window snapshots current so the counters remain usable
+        // for future diagnostics.
         auto& regions = IO::Get().getBuiltinTemplates().getRegionTemplate();
         const uint64_t loads = regions.getLoadCalls();
         const uint64_t lockWaitNs = regions.getLoadLockWaitNs();
-        const uint64_t dLoads = loads >= lastRegionLoads_ ? loads - lastRegionLoads_ : 0;
-        const uint64_t dLockWaitNs = lockWaitNs >= lastRegionLockWaitNs_
-                                     ? lockWaitNs - lastRegionLockWaitNs_ : 0;
-
-        const uint64_t hits = prefetchHits_.load(std::memory_order_relaxed);
-        const uint64_t qCancel = prefetchQueuedCancels_.load(std::memory_order_relaxed);
-        const uint64_t iCancel = prefetchInflightCancels_.load(std::memory_order_relaxed);
-
-        if (dLoads > 0) {
-            LogUtils::info(ThreadName::Engine,
-                StringUtils::build("Chunk throughput: gen=", static_cast<unsigned long long>(dGen),
-                                   "/s mesh=", static_cast<unsigned long long>(dMesh),
-                                   "/s | regionLoads=", static_cast<unsigned long long>(dLoads),
-                                   " lockWaitUs=", static_cast<unsigned long long>(dLockWaitNs / 1000),
-                                   " | prefetch hit=", static_cast<unsigned long long>(hits),
-                                   " qCancel=", static_cast<unsigned long long>(qCancel),
-                                   " iCancel=", static_cast<unsigned long long>(iCancel)));
-        }
 
         lastGenCount_ = gen;
         lastMeshCount_ = mesh;

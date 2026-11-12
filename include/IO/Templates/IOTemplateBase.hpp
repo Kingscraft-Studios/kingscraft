@@ -45,7 +45,7 @@ namespace kc {
         static std::string joinLines(const std::vector<std::string>& lines);
         static bool isDirective(const std::string& line);
 
-    private:
+    protected:
         DiskLayer& disk_;
     };
 }

@@ -20,7 +20,7 @@ namespace kc {
 
     bool WorldManager::createWorld(CreateCallback callback) {
         if (world || creating) {
-            LogUtils::warn(ThreadName::GameLogic, "WorldManager: world already exists or creation is in progress");
+            LogUtils::warn(ThreadName::GameLogic, "World", "World already exists or creation is in progress");
             return false;
         }
 
@@ -78,10 +78,10 @@ namespace kc {
                         metadata.spawnPos = spawnPosition;
                         metadata.playerPos = spawnPosition;
 
-                        LogUtils::info(ThreadName::GameLogic, "WorldManager: new spawn placed on land at (" + std::to_string(landX) + ", " +
+                        LogUtils::info(ThreadName::GameLogic, "World", "New spawn placed on land at (" + std::to_string(landX) + ", " +
                                 std::to_string(landY) + ", " + std::to_string(landZ) + ")");
                     } else {
-                        LogUtils::warn(ThreadName::GameLogic, "WorldManager: no dry land found within " +
+                        LogUtils::warn(ThreadName::GameLogic, "World", "No dry land found within " +
                                 std::to_string(spawnSearchRadius) + " blocks; keeping configured spawn");
                     }
                 }
@@ -95,12 +95,12 @@ namespace kc {
                 this->terrainGenerator = std::move(newTerrainGenerator);
                 this->world = std::move(newWorld);
 
-                LogUtils::info(ThreadName::GameLogic,"WorldManager: world session created");
+                LogUtils::info(ThreadName::GameLogic,"World", "World session created");
 
                 success = true;
 
             } catch (const std::exception& e) {
-                LogUtils::error(ThreadName::GameLogic,"WorldManager: failed to create world: " + std::string(e.what()));
+                LogUtils::error(ThreadName::GameLogic,"World", "Failed to create world: " + std::string(e.what()));
             }
 
             if (callback) {
@@ -113,7 +113,7 @@ namespace kc {
             // arrive. Clear the flag and let the caller retry.
             creating = false;
             LogUtils::warn(ThreadName::GameLogic,
-                "WorldManager: metadata request could not be enqueued; creation aborted");
+                "World", "Metadata request could not be enqueued; creation aborted");
             if (callback) callback(false);
             return false;
         }
@@ -137,6 +137,6 @@ namespace kc {
         // World stores a reference to this generator.
         terrainGenerator.reset();
 
-        LogUtils::info(ThreadName::GameLogic, "WorldManager: world session destroyed");
+        LogUtils::info(ThreadName::GameLogic, "World", "World session destroyed");
     }
 }

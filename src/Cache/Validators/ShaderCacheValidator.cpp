@@ -8,18 +8,18 @@ namespace kc {
                                         const std::array<uint8_t, 16>& sourceHash) const {
         if (header.magic != SHADER_CACHE_MAGIC) {
             LogUtils::warn(ThreadName::Engine,
-                StringUtils::build("[ShaderCache] Rejected: Invalid Magic. Expected: ", SHADER_CACHE_MAGIC));
+                "Shaders", StringUtils::build("Rejected: Invalid Magic. Expected: ", SHADER_CACHE_MAGIC));
             return false;
         }
 
         if (header.version != SHADER_CACHE_VERSION) {
             LogUtils::info(ThreadName::Engine,
-                StringUtils::build("[ShaderCache] Rejected: Cache Version Mismatch. Expected: ", SHADER_CACHE_VERSION));
+                "Shaders", StringUtils::build("Rejected: Cache Version Mismatch. Expected: ", SHADER_CACHE_VERSION));
             return false;
         }
 
         if (header.sourceHash != sourceHash) {
-            LogUtils::info(ThreadName::Engine, "[ShaderCache] Rejected: Source Changed");
+            LogUtils::info(ThreadName::Engine, "Shaders", "Rejected: Source Changed");
             return false;
         }
 

@@ -186,8 +186,8 @@ namespace kc {
         // Streaming throughput counters. Generation is now several threads and
         // meshing is still one, so the interesting question after this change is
         // no longer "is generation slow" but "has generation simply handed the
-        // bottleneck to the mesher". logThroughput() answers that once every
-        // couple of seconds so the answer does not have to be guessed at.
+        // bottleneck to the mesher". logThroughput() keeps the per-window
+        // snapshots current for diagnostics.
         std::atomic<uint64_t> genChunksDone_{0};
         std::atomic<uint64_t> meshChunksDone_{0};
         std::atomic<uint64_t> throughputLogMicros_{0};

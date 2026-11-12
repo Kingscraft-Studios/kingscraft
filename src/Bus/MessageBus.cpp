@@ -61,7 +61,7 @@ void MessageBus::log(LogLevel level, const std::string& line) {
 
     // No need to Check if Mailbox Exists
     mailbox->push({ThreadName::Engine, [level, line]() {
-        Logger::Get().log(level, ThreadName::MessageBus, line);
+        Logger::Get().log(level, ThreadName::Engine, "Message Bus", line);
     }});
 }
 } // namespace kc

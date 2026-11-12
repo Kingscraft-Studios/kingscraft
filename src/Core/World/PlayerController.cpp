@@ -122,7 +122,7 @@ namespace kc {
                                                      Attributes::EYE_HEIGHT,
                                                      Attributes::PLAYER_WIDTH * 0.5f));
             LogUtils::warn(ThreadName::GameLogic,
-                "player: recovered from being stuck, lifted to y=" + std::to_string(y));
+                "Player", "Recovered from being stuck, lifted to y=" + std::to_string(y));
             return true;
         }
 
@@ -309,7 +309,7 @@ namespace kc {
             if (stuckSeconds_ >= stuckSeconds && !stuckLogged_) {
                 stuckLogged_ = true;
                 LogUtils::warn(ThreadName::GameLogic,
-                    "player: unable to move for "
+                    "Player", "Unable to move for "
                     + std::to_string(static_cast<int>(stuckSeconds))
                     + "s (freed=" + (freed ? "yes" : "no")
                     + ", embedded=" + (embedded ? "yes" : "no") + ")");

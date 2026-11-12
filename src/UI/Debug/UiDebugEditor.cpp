@@ -27,7 +27,7 @@ namespace kc {
         hoveredElement_ = nullptr;
         isDragging_ = false;
         activeHandle_ = DragHandle::None;
-        LogUtils::info(ThreadName::Renderer, StringUtils::build("[Debug] Editing mode: ", enabled_ ? "ON" : "OFF"));
+        LogUtils::info(ThreadName::Renderer, "Debug", StringUtils::build("Editing mode: ", enabled_ ? "ON" : "OFF"));
     }
 
     bool UiDebugEditor::isDebugOverlay(const UiElement* el) const {
@@ -250,7 +250,7 @@ namespace kc {
 
     void UiDebugEditor::logElementState() const {
         if (!selectedElement_) {
-            LogUtils::info(ThreadName::Renderer, "No element selected. Select an element first");
+            LogUtils::info(ThreadName::Renderer, "Debug", "No element selected. Select an element first");
             return;
         }
 
@@ -261,37 +261,37 @@ namespace kc {
         glm::vec2 sz = el->getSize();
 
         LogUtils::debug(ThreadName::Renderer,
-    StringUtils::build("--- Element State ---"));
+            "Debug", StringUtils::build("--- Element State ---"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringUtils::build("Name: \"", el->getName(), "\""));
+            "Debug", StringUtils::build("Name: \"", el->getName(), "\""));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringUtils::build(".setAnchor({", n.x, "f, ", n.y, "f}, {", off.x, "f, ", off.y, "f});"));
+            "Debug", StringUtils::build(".setAnchor({", n.x, "f, ", n.y, "f}, {", off.x, "f, ", off.y, "f});"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringUtils::build(".setNormalizedSize({", ns.x, "f, ", ns.y, "f});"));
+            "Debug", StringUtils::build(".setNormalizedSize({", ns.x, "f, ", ns.y, "f});"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringUtils::build(".setSize({", sz.x, "f, ", sz.y, "f})  (current pixel)"));
+            "Debug", StringUtils::build(".setSize({", sz.x, "f, ", sz.y, "f})  (current pixel)"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringUtils::build("Visible: ", el->isVisible() ? "true" : "false"));
+            "Debug", StringUtils::build("Visible: ", el->isVisible() ? "true" : "false"));
 
         LogUtils::debug(ThreadName::Renderer,
-            StringUtils::build("Style index: ", el->getStyleIndex(),
+            "Debug", StringUtils::build("Style index: ", el->getStyleIndex(),
                                  "  Active: ", el->getActiveStyleIndex()));
 
         if (!el->getText().empty()) {
             LogUtils::debug(ThreadName::Renderer,
-                StringUtils::build("Text: \"", el->getText(), "\""));
+                "Debug", StringUtils::build("Text: \"", el->getText(), "\""));
 
             LogUtils::debug(ThreadName::Renderer,
-                StringUtils::build("Centered: ", el->isTextCentered() ? "true" : "false"));
+                "Debug", StringUtils::build("Centered: ", el->isTextCentered() ? "true" : "false"));
         }
 
         LogUtils::debug(ThreadName::Renderer,
-            "--- End ---");
+            "Debug", "--- End ---");
     }
 
     void UiDebugEditor::ensureOverlayResources() {

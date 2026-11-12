@@ -47,7 +47,7 @@ namespace kc {
             // Should be unreachable: WorldManager::createWorld's callback only
             // runs after the world is published. Fail safe rather than deref.
             LogUtils::error(ThreadName::GameLogic,
-                "WorldScreen::init: no active world; aborting screen setup");
+                "World", "WorldScreen::init: no active world; aborting screen setup");
             return;
         }
         World& world = *worldPtr;

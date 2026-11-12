@@ -8,7 +8,7 @@
 namespace kc {
     DiskOperations::DiskOperations(const std::string& path, const std::ios::openmode mode) : path_(path), mode_(mode), file(openFile(path, mode_)) {
         if (!file.is_open()) {
-            LogUtils::error(ThreadName::Engine, StringUtils::build("Read Failed: Unable to Open File (", path, ")"));
+            LogUtils::error(ThreadName::Engine, "IO", StringUtils::build("Read Failed: Unable to Open File (", path, ")"));
         }
     }
 
@@ -162,14 +162,14 @@ namespace kc {
         file.open(path_, mode_ | std::ios::trunc);
 
         if (!file.is_open()) {
-            LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed: Unable to reopen file (", path_, ")"));
+            LogUtils::error(ThreadName::Engine, "IO", StringUtils::build("Write Failed: Unable to reopen file (", path_, ")"));
             return false;
         }
 
         file.write(data.data(), static_cast<std::streamsize>(data.size()));
 
         if (!file) {
-            LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed: ", path_));
+            LogUtils::error(ThreadName::Engine, "IO", StringUtils::build("Write Failed: ", path_));
             file.clear();
             file.close();
             file.open(path_, mode_);
@@ -179,7 +179,7 @@ namespace kc {
         file.flush();
 
         if (!file) {
-            LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed (flush): ", path_));
+            LogUtils::error(ThreadName::Engine, "IO", StringUtils::build("Write Failed (flush): ", path_));
             file.clear();
             file.close();
             file.open(path_, mode_);
@@ -192,7 +192,7 @@ namespace kc {
         file.open(path_, mode_);
 
         if (!file.is_open()) {
-            LogUtils::error(ThreadName::Engine, StringUtils::build("Write Failed: Unable to reopen file (", path_, ")"));
+            LogUtils::error(ThreadName::Engine, "IO", StringUtils::build("Write Failed: Unable to reopen file (", path_, ")"));
             return false;
         }
 

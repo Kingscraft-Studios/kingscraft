@@ -8,9 +8,15 @@
 #include "Core/Blocks/SandstoneBlock.hpp"
 #include "Core/Blocks/GravelBlock.hpp"
 #include "Core/Blocks/WaterBlock.hpp"
+#include "Core/RegistryCatalog.hpp"
 #include "Threads/Logger.hpp"
 
 namespace kc {
+
+    namespace {
+        [[maybe_unused]] const RegistryCatalog::Registration<Block> kBlocksRegistration{
+            "blocks", &Blocks::registerBlocks, 0};
+    }
 
     void Blocks::registerBlocks(int& pending) {
         auto& registry = Registry<Block>::getRegistry();

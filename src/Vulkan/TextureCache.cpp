@@ -53,11 +53,11 @@ namespace kc {
         }
 
         void warn(const std::string& message) {
-            LogUtils::warn(ThreadName::Renderer, "[Textures] " + message);
+            LogUtils::warn(ThreadName::Renderer, "Textures", message);
         }
 
         void error(const std::string& message) {
-            LogUtils::error(ThreadName::Renderer, "[Textures] " + message);
+            LogUtils::error(ThreadName::Renderer, "Textures", message);
         }
 
     } // namespace
@@ -244,7 +244,7 @@ namespace kc {
         }
 
         LogUtils::info(ThreadName::Renderer,
-            "[Textures] atlas rebuilt: " + std::to_string(built->layerCount) + " layers (" +
+            "Textures", "atlas rebuilt: " + std::to_string(built->layerCount) + " layers (" +
             std::to_string(fallbackCount) + " fallback, " + std::to_string(resizedCount) +
             " resized) " + std::to_string(built->width) + "x" + std::to_string(built->height) +
             " mips " + std::to_string(built->mipLevels));

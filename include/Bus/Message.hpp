@@ -11,7 +11,7 @@ enum class ThreadName {
     Input,
     GameLogic,
     WorkerPool,
-    MessageBus
+    Worker
 };
 
 struct Message {

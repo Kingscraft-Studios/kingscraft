@@ -3,6 +3,7 @@
 #include <fstream>
 #include <mutex>
 #include <string>
+#include <string_view>
 
 #include "Bus/Mailbox.hpp"
 #include "Bus/Message.hpp"
@@ -30,12 +31,12 @@ namespace kc {
         Logger(const Logger&) = delete;
         Logger& operator=(const Logger&) = delete;
 
-        void log(LogLevel level, ThreadName sender, std::string data);
+        void log(LogLevel level, ThreadName sender, std::string_view category, std::string data);
 
     private:
         std::mutex mutex_;
         std::string createLogFileName();
-        std::string buildLogLine(LogLevel level, ThreadName caller, const std::string& data);
+        std::string buildLogLine(LogLevel level, ThreadName caller, std::string_view category, const std::string& data);
 
         void printHeader();
         void writeToFile(const std::string& log);
@@ -60,7 +61,7 @@ namespace kc {
             case ThreadName::Input: return "Input";
             case ThreadName::GameLogic: return "GameLogic";
             case ThreadName::WorkerPool: return "WorkerPool";
-            case ThreadName::MessageBus: return "MessageBus";
+            case ThreadName::Worker: return "Worker";
             }
 
             return "Unknown";

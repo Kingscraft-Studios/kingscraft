@@ -6,8 +6,14 @@
 #include "Core/World/Biomes/MountainsBiome.hpp"
 #include "Core/World/Biomes/OceanBiome.hpp"
 #include "Core/World/Biomes/RiverBiome.hpp"
+#include "Core/RegistryCatalog.hpp"
 
 namespace kc {
+    namespace {
+        [[maybe_unused]] const RegistryCatalog::Registration<Biome> kBiomesRegistration{
+            "biomes", &Biomes::registerBiomes, 1};
+    }
+
     void Biomes::registerBiomes(int& pending) {
         auto& registry = Registry<Biome>::getRegistry();
 

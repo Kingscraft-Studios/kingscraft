@@ -45,6 +45,8 @@ namespace kc {
         Runtime::get().kingscraft = WorkerPool::get().startPersistentWorker<Kingscraft>(Workers::Kingscraft);
 
         diagnostics.start();
+
+        LogUtils::info(ThreadName::Engine, "Core", "Engine initialized");
     }
 
     void Engine::gameLogicStopped() {
@@ -53,7 +55,7 @@ namespace kc {
     }
 
     void Engine::Shutdown() {
-        LogUtils::info(ThreadName::Engine, "Shutting down");
+        LogUtils::info(ThreadName::Engine, "Core", "Engine shutting down");
 
         WorkerPool::get().stopPersistentWorker(Workers::Kingscraft);
         WorkerPool::get().stopPersistentWorker(Workers::Renderer);

@@ -17,7 +17,7 @@ namespace kc {
             auto bytes = readBytes(path, MissingFile::Warn);
             if (!bytes || bytes->empty()) {
                 LogUtils::error(ThreadName::Engine,
-                    StringUtils::build("FontTemplate: Failed to load font (", path, ")"));
+                    "IO", StringUtils::build("Failed to load font (", path, ")"));
                 return {};
             }
             return std::vector<unsigned char>(bytes->begin(), bytes->end());

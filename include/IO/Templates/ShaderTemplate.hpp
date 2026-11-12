@@ -19,7 +19,7 @@ namespace kc {
             auto bytes = readBytes(path, MissingFile::Warn);
             if (!bytes || bytes->empty()) {
                 LogUtils::error(ThreadName::Engine,
-                    StringUtils::build("ShaderTemplate: Failed to load shader (", path, ")"));
+                    "Shaders", StringUtils::build("Failed to load shader (", path, ")"));
                 return {};
             }
             return std::move(*bytes);

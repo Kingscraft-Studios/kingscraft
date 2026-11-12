@@ -8,7 +8,7 @@ namespace kc {
 
     bool PipelineCacheStorage::load() {
         if (!IO::Get().getBuiltinTemplates().getCacheTemplate().readHeader(PIPELINE_CACHE_FILENAME, header_)) {
-            LogUtils::info(ThreadName::Engine, "[PipelineCache] No cache found, starting fresh.");
+            LogUtils::info(ThreadName::Engine, "Pipeline Cache", "No cache found, starting fresh.");
             return false;
         }
 
@@ -18,7 +18,7 @@ namespace kc {
 
         auto payload = IO::Get().getBuiltinTemplates().getCacheTemplate().readPayload(PIPELINE_CACHE_FILENAME, sizeof(PipelineCacheHeader));
         if (!payload || payload->empty()) {
-            LogUtils::warn(ThreadName::Engine, "[PipelineCache] Cache payload is missing or empty.");
+            LogUtils::warn(ThreadName::Engine, "Pipeline Cache", "Cache payload is missing or empty.");
             return false;
         }
 

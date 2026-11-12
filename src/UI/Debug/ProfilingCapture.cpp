@@ -1,19 +1,15 @@
 #include "UI/Debug/ProfilingCapture.hpp"
-#include "Vulkan/GLFWWindow.hpp"
 #include <GLFW/glfw3.h>
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <cmath>
-#include <cstddef>
 #include <cstdio>
-#include <cstdlib>
-#include <fstream>
 #include <string>
 
 #include "Bus/MessageBus.hpp"
 #include "Core/Runtime.hpp"
 #include "Renderer/RendererSettings.hpp"
+#include "Threads/IO.hpp"
 #include "Threads/InputThread.hpp"
 #include "Util/LogUtils.hpp"
 
@@ -56,6 +52,10 @@ namespace kc {
         warmupRemaining_ = WARMUP_FRAMES;
         frameCount_ = 0;
         active_.store(true, std::memory_order_release);
+
+        LogUtils::info(ThreadName::GameLogic,
+            "Profiler", "Capture started (" + std::to_string(static_cast<int>(CAPTURE_DURATION)) +
+            "s, " + std::to_string(WARMUP_FRAMES) + "-frame warmup)");
     }
 
     void ProfilingCapture::tick(double) {
@@ -388,16 +388,14 @@ namespace kc {
         const std::string report(buf, static_cast<size_t>(pos));
 
         // Always persist: the Wayland clipboard can silently drop the selection.
-        const char* home = std::getenv("HOME");
-        const std::string path =
-            std::string(home ? home : ".") + "/kingscraft-profile.txt";
-        {
-            std::ofstream out(path, std::ios::trunc);
-            if (out) out << report;
+        auto& profiler = IO::Get().getBuiltinTemplates().getProfilerTemplate();
+        const std::string path = profiler.latestPath();
+        if (!profiler.saveReport(report)) {
+            LogUtils::warn(ThreadName::GameLogic, "Profiler", "Capture failed to write " + path);
         }
-        LogUtils::info(ThreadName::GameLogic,
-            "profile capture done (" + std::to_string(frameCount_) +
-            " frames, " + std::to_string(static_cast<int>(wallSec)) + "s) -> " + path);
+
+        LogUtils::info(ThreadName::GameLogic, "Profiler", "Capture done (" + std::to_string(frameCount_) + " frames, " +
+            std::to_string(static_cast<int>(wallSec)) + "s)");
 
         MessageBus::Get().send(ThreadName::Input, [report]() {
             Runtime::get().inputThread->setClipBoard(report);

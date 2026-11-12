@@ -5,7 +5,6 @@
 
 // std headers
 #include <cstring>
-#include <iostream>
 #include <set>
 #include <unordered_set>
 
@@ -26,36 +25,27 @@ namespace kc {
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData) {
 
-        std::string prefix;
-
-        if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT)
-            prefix += "[General] ";
+        std::string category = "Vulkan General";
 
         if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
-            prefix += "[Validation] ";
+            category = "Vulkan Validation";
+        else if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
+            category = "Vulkan Performance";
 
-        if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
-            prefix += "[Performance] ";
-
-        std::string line = StringUtils::build(
-            prefix,
-            "Validation Layer: ",
-            pCallbackData->pMessage
-        );
-
-        ThreadName sender = ThreadName::Renderer;
+        const std::string line = pCallbackData->pMessage;
+        const ThreadName sender = ThreadName::Renderer;
 
         if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-            LogUtils::error(sender, line);
+            LogUtils::error(sender, category, line);
         }
         else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-            LogUtils::warn(sender, line);
+            LogUtils::warn(sender, category, line);
         }
         else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-            LogUtils::info(sender, line);
+            LogUtils::info(sender, category, line);
         }
         else {
-            LogUtils::debug(sender, line);
+            LogUtils::debug(sender, category, line);
         }
 
         return VK_FALSE;
@@ -204,7 +194,7 @@ namespace kc {
         if (deviceCount == 0) {
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
         }
-        LogUtils::info(ThreadName::Renderer, StringUtils::build("Device Count: ", deviceCount));
+        LogUtils::info(ThreadName::Renderer, "Vulkan", StringUtils::build("Device Count: ", deviceCount));
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
@@ -252,20 +242,20 @@ namespace kc {
         uint32_t patch = VK_API_VERSION_PATCH(properties.apiVersion);
 
         LogUtils::info(ThreadName::Renderer,
-            StringUtils::build("Selected GPU: ", deviceName));
+            "Vulkan", StringUtils::build("Selected GPU: ", deviceName));
 
         LogUtils::info(ThreadName::Renderer,
-            StringUtils::build("Vulkan API: ", major, ".", minor, ".", patch));
+            "Vulkan", StringUtils::build("API version: ", major, ".", minor, ".", patch));
 
         LogUtils::info(ThreadName::Renderer,
-            StringUtils::build("Driver: ", driverProperties.driverName,
+            "Vulkan", StringUtils::build("Driver: ", driverProperties.driverName,
                 " (", driverProperties.driverInfo, ")"));
 
         LogUtils::info(ThreadName::Renderer,
-            StringUtils::build("Driver Type: ", driverIdToString(driverProperties.driverID)));
+            "Vulkan", StringUtils::build("Driver Type: ", driverIdToString(driverProperties.driverID)));
 
         LogUtils::info(ThreadName::Renderer,
-            StringUtils::build("Conformance: ",
+            "Vulkan", StringUtils::build("Conformance: ",
                     static_cast<int>(driverProperties.conformanceVersion.major), ".",
                     static_cast<int>(driverProperties.conformanceVersion.minor), ".",
                     static_cast<int>(driverProperties.conformanceVersion.subminor), ".",
@@ -564,10 +554,10 @@ namespace kc {
 
         // Print summary
         LogUtils::info(ThreadName::Renderer,
-            StringUtils::build("Available Instance Extensions: ", extensionCount));
+            "Vulkan", StringUtils::build("Available Instance Extensions: ", extensionCount));
 
         LogUtils::info(ThreadName::Renderer,
-            StringUtils::build("Required Instance Extensions: ", requiredExtensions.size()));
+            "Vulkan", StringUtils::build("Required Instance Extensions: ", requiredExtensions.size()));
 
         // Validation check
         for (const auto& required : requiredExtensions) {
@@ -596,9 +586,9 @@ namespace kc {
 
         if (requiredExtensions.empty()) {
             LogUtils::info(ThreadName::Renderer,
-                StringUtils::build("Available Device Extensions: ", extensionCount));
+                "Vulkan", StringUtils::build("Available Device Extensions: ", extensionCount));
             LogUtils::info(ThreadName::Renderer,
-                StringUtils::build("Required Device Extensions: ", deviceExtensions.size()));
+                "Vulkan", StringUtils::build("Required Device Extensions: ", deviceExtensions.size()));
         }
 
         return requiredExtensions.empty();

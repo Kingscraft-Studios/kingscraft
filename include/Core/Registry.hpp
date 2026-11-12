@@ -13,8 +13,14 @@
 
 namespace kc {
 
+class IRegistryBase {
+public:
+    virtual ~IRegistryBase() = default;
+    virtual void clear() = 0;
+};
+
 template<typename T>
-class Registry {
+class Registry : public IRegistryBase {
     struct Entry {
         std::shared_ptr<T> entry;
         std::string identifier;
@@ -22,13 +28,15 @@ class Registry {
 
     std::unordered_map<uint64_t, Entry> entries_;
     mutable std::shared_mutex entriesMutex_;
-    inline static Registry<T> instance_{};
     Registry() = default;
 public:
     Registry(const Registry&) = delete;
     Registry& operator=(const Registry&) = delete;
 
-    static Registry<T>& getRegistry() { return instance_; }
+    static Registry<T>& getRegistry() {
+        static Registry<T> instance;
+        return instance;
+    }
 
     // Builds a stable handle from an identifier. Does not register the entry
     // itself; the static RegistryKey pattern relies on that (keys exist before
@@ -48,7 +56,7 @@ public:
     bool remove(const ResourceLocation& location) { return remove(location.encoded); }
     bool remove(uint64_t encoded);
 
-    void clear();
+    void clear() override;
 
     T* get(uint64_t encoded) const {
         std::shared_lock<std::shared_mutex> lock(entriesMutex_);

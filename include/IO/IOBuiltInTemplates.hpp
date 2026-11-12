@@ -3,6 +3,7 @@
 #include "Templates/FontTemplate.hpp"
 #include "Templates/GenericCacheTemplate.hpp"
 #include "Templates/ModelTemplate.hpp"
+#include "Templates/ProfilerTemplate.hpp"
 #include "Templates/RegionTemplate.hpp"
 #include "Templates/ShaderTemplate.hpp"
 #include "Templates/TextureTemplate.hpp"
@@ -18,7 +19,7 @@ namespace kc {
             : chunkTemplate(disk), regionTemplate(disk, chunkTemplate),
               worldMetadataTemplate(disk), textureTemplate(disk),
               modelTemplate(disk, textureTemplate), cacheTemplate(disk),
-              shaderTemplate(disk), fontTemplate(disk) {}
+              shaderTemplate(disk), fontTemplate(disk), profilerTemplate(disk) {}
 
         ChunkTemplate& getChunkTemplate() { return chunkTemplate; }
         RegionTemplate& getRegionTemplate() { return regionTemplate; }
@@ -32,6 +33,8 @@ namespace kc {
 
         ShaderTemplate& getShaderTemplate() { return shaderTemplate; }
         FontTemplate& getFontTemplate() { return fontTemplate; }
+
+        ProfilerTemplate& getProfilerTemplate() { return profilerTemplate; }
 
         // Persist every staged template (regions + world metadata) in one pass.
         bool flush() {
@@ -52,5 +55,7 @@ namespace kc {
 
         ShaderTemplate shaderTemplate;
         FontTemplate fontTemplate;
+
+        ProfilerTemplate profilerTemplate;
     };
 }

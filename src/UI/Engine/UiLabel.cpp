@@ -52,7 +52,7 @@ namespace kc {
                 if (!clipReported_) {
                     clipReported_ = true;
                     LogUtils::warn(ThreadName::Renderer,
-                        StringUtils::build("Label clipped: text \"", text, "\" overflows element bounds"));
+                        "UI", StringUtils::build("Label clipped: text \"", text, "\" overflows element bounds"));
                 }
                 break;
             }

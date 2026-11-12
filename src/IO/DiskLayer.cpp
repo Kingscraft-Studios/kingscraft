@@ -17,12 +17,35 @@ namespace kc {
         std::filesystem::create_directories(directory);
     }
 
+    bool DiskLayer::rename(const std::string& from, const std::string& to) {
+        std::error_code ec;
+        std::filesystem::rename(from, to, ec);
+        return !ec;
+    }
+
+    std::optional<std::chrono::system_clock::time_point> DiskLayer::lastWriteTime(const std::string& path) const {
+        std::error_code ec;
+        const auto fileTime = std::filesystem::last_write_time(path, ec);
+        if (ec) return std::nullopt;
+        return std::chrono::clock_cast<std::chrono::system_clock>(fileTime);
+    }
+
+    std::string DiskLayer::executableDirectory() {
+        std::error_code ec;
+        const auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+        if (!ec && !exe.empty())
+            return exe.parent_path().string();
+
+        const auto cwd = std::filesystem::current_path(ec);
+        return ec ? std::string(".") : cwd.string();
+    }
+
     std::optional<std::vector<char>> DiskLayer::read(const std::string& path, MissingFile missing) {
         // A read must never create anything on disk (no directory, no empty file).
         if (!std::filesystem::exists(path)) {
             if (missing == MissingFile::Warn)
                 LogUtils::warn(ThreadName::Engine,
-                    "Unable to Read File: File Doesn't Exist (" + path + ")");
+                    "IO", "Unable to Read File: File Doesn't Exist (" + path + ")");
             return std::nullopt;
         }
 
@@ -44,7 +67,7 @@ namespace kc {
         if (!std::filesystem::exists(path)) {
             if (missing == MissingFile::Warn)
                 LogUtils::warn(ThreadName::Engine,
-                    "Unable to Read File: File Doesn't Exist (" + path + ")");
+                    "IO", "Unable to Read File: File Doesn't Exist (" + path + ")");
             return false;
         }
 
@@ -57,7 +80,7 @@ namespace kc {
         if (!std::filesystem::exists(path)) {
             if (missing == MissingFile::Warn)
                 LogUtils::warn(ThreadName::Engine,
-                    "Unable to Read File: File Doesn't Exist (" + path + ")");
+                    "IO", "Unable to Read File: File Doesn't Exist (" + path + ")");
 
             return std::nullopt;
         }
@@ -71,7 +94,7 @@ namespace kc {
         if (!std::filesystem::exists(path)) {
             if (missing == MissingFile::Warn)
                 LogUtils::warn(ThreadName::Engine,
-                    "Unable to Read File: File Doesn't Exist (" + path + ")");
+                    "IO", "Unable to Read File: File Doesn't Exist (" + path + ")");
             return std::nullopt;
         }
 

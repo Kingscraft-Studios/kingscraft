@@ -107,7 +107,7 @@ namespace kc {
                 static bool warned = false;
                 if (!warned) {
                     warned = true;
-                    Logger::Get().log(LogLevel::WARN, ThreadName::Renderer,
+                    Logger::Get().log(LogLevel::WARN, ThreadName::Renderer, "UI",
                         "UI style pool exhausted (UiRenderer::MAX_STYLES); style not registered");
                 }
                 return INVALID_STYLE_SLOT;

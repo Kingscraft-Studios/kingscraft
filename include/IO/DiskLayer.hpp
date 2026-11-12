@@ -1,6 +1,7 @@
 #pragma once
 #include "IO/DiskOperations.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <ios>
 #include <mutex>
@@ -33,6 +34,9 @@ namespace kc {
         // Misc
         bool exists(const std::string& path) const;
         void createDirectories(const std::string& directory);
+        bool rename(const std::string& from, const std::string& to);
+        std::optional<std::chrono::system_clock::time_point> lastWriteTime(const std::string& path) const;
+        static std::string executableDirectory();
         // List Files under directory, if recursive is true it will output files under subdirectories too
         std::vector<std::string> list(const std::string& directory, bool recursive = true) const;
 

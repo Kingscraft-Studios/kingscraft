@@ -6,6 +6,7 @@
 
 namespace kc {
     void WorkerPool::start() {
+        LogUtils::info(ThreadName::Engine, "Worker Pool", "Worker pool starting");
         running = true;
         mailbox = std::make_shared<Mailbox>();
         MessageBus::Get().subscribe(ThreadName::WorkerPool, mailbox);
@@ -45,12 +46,14 @@ namespace kc {
 
         if (mailboxThread.joinable())
             mailboxThread.join();
+
+        LogUtils::info(ThreadName::Engine, "Worker Pool", "Worker pool stopped");
     }
 
     void WorkerPool::stopPersistentWorker(Workers worker) {
         auto it = persistentThread.find(worker);
         if (it == persistentThread.end()) {
-            LogUtils::warn(ThreadName::WorkerPool, "Thread isn't Present!");
+            LogUtils::warn(ThreadName::WorkerPool, "Worker Pool", "Thread isn't present");
             return;
         }
 
@@ -83,13 +86,13 @@ namespace kc {
 
         transientWorkers.emplace_back(TransientWorker{
             std::thread([task = std::move(task), p = std::move(p)]() mutable {
-                detail::setCurrentThread(ThreadName::WorkerPool);
+                detail::setCurrentThread(ThreadName::Worker);
                 try {
                     task();
                 } catch (const std::exception& e) {
-                    LogUtils::error(ThreadName::WorkerPool, "Worker task threw: " + std::string(e.what()));
+                    LogUtils::error(ThreadName::Worker, "Worker Pool", "Worker task threw: " + std::string(e.what()));
                 } catch (...) {
-                    LogUtils::error(ThreadName::WorkerPool, "Worker task threw an unknown exception");
+                    LogUtils::error(ThreadName::Worker, "Worker Pool", "Worker task threw an unknown exception");
                 }
                 p.set_value();
             }),
