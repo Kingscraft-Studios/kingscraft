@@ -2,16 +2,12 @@
 #include "Core/World/ChunkKey.hpp"
 #include "Core/World/World.hpp"
 #include "Core/Frustum.hpp"
-#include "Vulkan/TextureCache.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Util/TimeUtil.hpp"
-#include <string>
-#include "../../../include/Core/Bootstrapper.hpp"
 #include "Core/World/Chunk.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <stdexcept>
 
 namespace kc {
 

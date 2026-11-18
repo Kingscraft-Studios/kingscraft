@@ -8,8 +8,13 @@ set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-s ${CMAKE_EXE_LINKER_FLAGS}")
 
 add_definitions(-DGLFW_STATIC)
 
-# Project Include
-include_directories(include)
+
+# Engine
+include_directories(include/Engine)
+# Watchdog
+include_directories(include/Watchdog)
+
+# Rest of the Project Libraries Includes
 include_directories(libs/glfw/include)
 include_directories(libs/glm)
 include_directories(libs/vulkan/include)
