@@ -1,37 +1,43 @@
-#include "Bus/MessageBus.hpp"
-#include "Core/WorkerPool.hpp"
-#include "Threads/Engine.hpp"
-#include "Threads/IO.hpp"
-#include "Threads/Logger.hpp"
-#include "Util/LogUtils.hpp"
+#include <iostream>
+#include <string>
+#include <string_view>
 
-int main() {
-    kc::TimeUtil::Init();
+#include "GameEngineMain.hpp"
+#include "WatchdogMain.hpp"
 
-    kc::MessageBus::Init();
-
-    // Starts Logger
-    kc::Logger::Get();
-    kc::IO::Init();
-
-    kc::LogUtils::info(kc::ThreadName::Engine, "Core", "Kingscraft Engine starting");
-
-    kc::WorkerPool::get().start();
-
-    kc::Engine::Get().Init();
-    kc::Engine::Get().run();
-    kc::Engine::Get().Shutdown();
-
-    kc::WorkerPool::get().stop();
-
-    kc::IO::Shutdown();
-    // Logger Stops at Last so before Stopping we one last time Process all Messages Left in Engine Threads if Any
-    kc::Message msg;
-    while (kc::Engine::Get().mailbox_->try_pop(msg)) {
-        if (msg.payload)
-            msg.payload();
+int main(int argc, char* argv[]) {
+    if (argc == 1) {
+        return kc::WatchdogMain::initialize();
     }
-    kc::LogUtils::info(kc::ThreadName::Engine, "Core", "Kingscraft Engine stopped");
-    kc::MessageBus::Shutdown();
-    return 0;
+
+    constexpr std::string_view engineFlag = "--gamengine";
+    constexpr std::string_view ipcPrefix = "--ipcfile=";
+
+    bool runGameEngine = false;
+    std::string ipcFilePath;
+
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view arg = argv[i];
+
+        if (arg == engineFlag) {
+            runGameEngine = true;
+        } else if (arg.starts_with(ipcPrefix)) {
+            ipcFilePath = arg.substr(ipcPrefix.size());
+        } else {
+            std::cerr << "Unknown argument: " << arg << '\n';
+            return 2;
+        }
+    }
+
+    if (!runGameEngine) {
+        std::cerr << "Use --gamengine to start the game engine.\n";
+        return 2;
+    }
+
+    if (ipcFilePath.empty()) {
+        std::cerr << "--gamengine requires --ipcfile=<path/to/file.sock>\n";
+        return 2;
+    }
+
+    return kc::GameEngineMain::initialize(ipcFilePath);
 }

@@ -54,6 +54,8 @@ add_subdirectory(libs/shaderc EXCLUDE_FROM_ALL)
 # Build/emit a single shared library named libshaderc.so (no ABI version suffix)
 set_target_properties(shaderc_shared PROPERTIES OUTPUT_NAME shaderc)
 
+add_subdirectory(libs/KCLink)
+
 # Project Sources. CONFIGURE_DEPENDS re-runs the glob when files are added or
 # removed, so a new .cpp is picked up by the next build without a manual
 # `cmake -B ...` reconfigure.
@@ -71,6 +73,7 @@ target_link_libraries(kingscraft
         PRIVATE glfw
         PRIVATE vulkan
         PRIVATE shaderc_shared
+        PRIVATE KCLink
         PRIVATE pthread
         PRIVATE dl
 )
@@ -92,6 +95,13 @@ add_custom_command(TARGET kingscraft POST_BUILD
 add_custom_command(TARGET kingscraft POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:glfw>
+        $<TARGET_FILE_DIR:kingscraft>
+)
+
+# Ship libKCLink.so next to the executable
+add_custom_command(TARGET kingscraft POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:KCLink>
         $<TARGET_FILE_DIR:kingscraft>
 )
 
