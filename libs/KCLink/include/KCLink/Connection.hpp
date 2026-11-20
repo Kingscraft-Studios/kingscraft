@@ -2,6 +2,9 @@
 
 #include <KCLink/Message.hpp>
 
+#include <chrono>
+#include <sys/types.h>
+
 namespace kc::link {
 
     // A blocking, framed stream. A Connection is movable but not copyable.
@@ -17,6 +20,8 @@ namespace kc::link {
         Connection& operator=(Connection&& other) noexcept;
 
         bool isOpen() const noexcept;
+        pid_t peerProcessId() const;
+        void setReceiveTimeout(std::chrono::milliseconds timeout);
         void send(const Message& message);
 
         // Returns false when the peer has cleanly disconnected before a new

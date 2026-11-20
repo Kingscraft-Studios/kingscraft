@@ -2,6 +2,7 @@
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -68,6 +69,27 @@ namespace kc::link {
     }
 
     bool Connection::isOpen() const noexcept { return socket >= 0; }
+
+    pid_t Connection::peerProcessId() const {
+        if (!isOpen()) throw std::logic_error("KCLink: peer query on a closed connection");
+
+        ucred credentials{};
+        socklen_t size = sizeof(credentials);
+        if (::getsockopt(socket, SOL_SOCKET, SO_PEERCRED, &credentials, &size) < 0)
+            throwSocketError("getsockopt(SO_PEERCRED)");
+        return credentials.pid;
+    }
+
+    void Connection::setReceiveTimeout(std::chrono::milliseconds timeout) {
+        if (!isOpen()) throw std::logic_error("KCLink: timeout set on a closed connection");
+        if (timeout.count() < 0) throw std::invalid_argument("KCLink: receive timeout cannot be negative");
+
+        timeval value{};
+        value.tv_sec = static_cast<time_t>(timeout.count() / 1000);
+        value.tv_usec = static_cast<suseconds_t>((timeout.count() % 1000) * 1000);
+        if (::setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &value, sizeof(value)) < 0)
+            throwSocketError("setsockopt(SO_RCVTIMEO)");
+    }
 
     void Connection::send(const Message& message) {
         if (!isOpen()) throw std::logic_error("KCLink: send on a closed connection");
