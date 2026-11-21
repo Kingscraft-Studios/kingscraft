@@ -1,19 +1,24 @@
 #pragma once
 
-#include <KCLink/Connection.hpp>
+#include <KCLink/Export.hpp>
 
-#include <optional>
+#include <cstdint>
+#include <memory>
 #include <string>
 
 namespace kc::link {
 
+    namespace detail {
+        struct ServerCore;
+    }
+
     class EventLoop;
 
-    // A Unix-domain listening socket. Lifecycle (start/stop) is public; the
-    // accept operation is driven by EventLoop.
-    class Server {
+    // A listening endpoint. Lifecycle is public; accepting and dispatching
+    // connections is driven by EventLoop.
+    class KCLINK_API Server {
     public:
-        Server() noexcept = default;
+        Server() noexcept;
         ~Server();
 
         Server(const Server&) = delete;
@@ -24,13 +29,10 @@ namespace kc::link {
         void stop() noexcept;
 
     private:
-        std::optional<Connection> tryAccept();
-        int nativeHandle() const noexcept;
+        detail::ServerCore& core() noexcept;
+        const detail::ServerCore& core() const noexcept;
 
-        int socket = -1;
-        std::string connectionPath;
-        unsigned long long pathDevice = 0;
-        unsigned long long pathInode = 0;
+        std::unique_ptr<detail::ServerCore> core_;
 
         friend class EventLoop;
     };

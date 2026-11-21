@@ -20,7 +20,7 @@ namespace kc {
 
         // Handshake before the heavy setup starts; the Watchdog is already
         // dispatching messages and the Connection buffers any early reply.
-        connection_->send(link::Message::fromText("Ping"));
+        connection_->sendMessage(link::Message::fromText("Ping"));
 
         // Engine Specific Init
         mailbox_ = std::make_shared<Mailbox>();

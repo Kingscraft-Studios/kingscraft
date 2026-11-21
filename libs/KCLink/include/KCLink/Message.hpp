@@ -1,5 +1,7 @@
 #pragma once
 
+#include <KCLink/Export.hpp>
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -9,7 +11,7 @@ namespace kc::link {
 
     // KCLink transports opaque bytes; applications define what they mean.
     // fromText/asText are conveniences for the common string payload case.
-    class Message {
+    class KCLINK_API Message {
     public:
         Message() = default;
         explicit Message(std::vector<std::uint8_t> payload);

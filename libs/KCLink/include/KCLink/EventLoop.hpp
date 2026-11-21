@@ -1,5 +1,6 @@
 #pragma once
 
+#include <KCLink/Export.hpp>
 #include <KCLink/Message.hpp>
 
 #include <functional>
@@ -11,15 +12,18 @@ namespace kc::link {
     class Server;
     class ProcessWatcher;
 
+    namespace detail {
+        struct EventLoopCore;
+    }
+
     enum class DisconnectReason {
         Graceful,
         PeerLost
     };
 
-    // epoll-based dispatcher. run() blocks until quit() is called or the
-    // watched objects are gone; no polling or timeouts are involved.
-    // Watched objects must outlive the EventLoop.
-    class EventLoop {
+    // Platform event dispatcher. run() blocks until quit() is called or no
+    // watched objects remain active. Watched objects must outlive the loop.
+    class KCLINK_API EventLoop {
     public:
         using MessageHandler = std::function<void(Connection&, const Message&)>;
         using DisconnectHandler = std::function<void(Connection&, DisconnectReason)>;
@@ -41,8 +45,7 @@ namespace kc::link {
         void quit();
 
     private:
-        struct Impl;
-        std::unique_ptr<Impl> impl;
+        std::unique_ptr<detail::EventLoopCore> impl;
     };
 
 }

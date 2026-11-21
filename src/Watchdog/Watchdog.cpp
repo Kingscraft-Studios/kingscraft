@@ -55,12 +55,12 @@ namespace kc {
                                         pid_t expectedProcess) {
         if (context.connectionAccepted) {
             std::cerr << "[Watchdog] Rejected a second IPC connection.\n";
-            connection.close();
+            connection.abort();
             return;
         }
         if (connection.peerProcessId() != expectedProcess) {
             std::cerr << "[Watchdog] Rejected an IPC connection from another process.\n";
-            connection.close();
+            connection.abort();
             return;
         }
 
@@ -83,7 +83,7 @@ namespace kc {
         }
 
         if (context.connection)
-            context.connection->send(link::Message::fromText("Pong"));
+            context.connection->sendMessage(link::Message::fromText("Pong"));
         std::cout << "[Watchdog] Received Ping and sent Pong." << std::endl;
     }
 

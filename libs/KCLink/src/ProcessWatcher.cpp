@@ -1,32 +1,31 @@
 #include <KCLink/ProcessWatcher.hpp>
 
-#include <fcntl.h>
-#include <sys/syscall.h>
-#include <unistd.h>
+#include "internal/ProcessCore.hpp"
 
+#include <memory>
 #include <stdexcept>
-#include <system_error>
 
 namespace kc::link {
+    namespace {
 
-    ProcessWatcher::ProcessWatcher(pid_t process) : process(process) {
-#ifndef SYS_pidfd_open
-        throw std::runtime_error("KCLink: pidfd_open is not available on this system");
-#else
-        handle = static_cast<int>(::syscall(SYS_pidfd_open, process, 0));
-        if (handle < 0)
-            throw std::system_error(errno, std::generic_category(), "pidfd_open");
-        const int flags = ::fcntl(handle, F_GETFD, 0);
-        if (flags >= 0) ::fcntl(handle, F_SETFD, flags | FD_CLOEXEC);
-#endif
+        detail::ProcessCore& requireCore(const std::unique_ptr<detail::ProcessCore>& core) {
+            if (!core) throw std::logic_error("KCLink: operation on an empty process watcher");
+            return *core;
+        }
+
     }
 
-    ProcessWatcher::~ProcessWatcher() {
-        if (handle >= 0) ::close(handle);
+    ProcessWatcher::ProcessWatcher(pid_t process)
+        : core_(std::make_unique<detail::ProcessCore>(process)) {}
+
+    ProcessWatcher::~ProcessWatcher() = default;
+
+    pid_t ProcessWatcher::processId() const noexcept {
+        return core_ ? core_->processId() : -1;
     }
 
-    pid_t ProcessWatcher::processId() const noexcept { return process; }
+    detail::ProcessCore& ProcessWatcher::core() noexcept { return requireCore(core_); }
 
-    int ProcessWatcher::nativeHandle() const noexcept { return handle; }
+    const detail::ProcessCore& ProcessWatcher::core() const noexcept { return requireCore(core_); }
 
 }
