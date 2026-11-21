@@ -1,15 +1,13 @@
 #include <KCLink/Server.hpp>
 
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include <poll.h>
 
-#include <algorithm>
 #include <cerrno>
 #include <cstring>
-#include <limits>
 #include <stdexcept>
 #include <system_error>
 
@@ -104,43 +102,32 @@ namespace kc::link {
             throw std::system_error(error, std::generic_category(), "listen");
         }
 
+        const int flags = ::fcntl(descriptor, F_GETFL, 0);
+        if (flags >= 0) ::fcntl(descriptor, F_SETFL, flags | O_NONBLOCK);
+
         socket = descriptor;
         connectionPath = socketPath;
         pathDevice = device;
         pathInode = inode;
     }
 
-    Connection Server::accept() {
-        if (!isRunning()) throw std::logic_error("KCLink: accept on a stopped server");
+    std::optional<Connection> Server::tryAccept() {
+        if (!isRunning()) return std::nullopt;
 
         int descriptor;
         do {
             descriptor = ::accept(socket, nullptr, nullptr);
         } while (descriptor < 0 && errno == EINTR);
 
-        if (descriptor < 0) throw std::system_error(errno, std::generic_category(), "accept");
+        if (descriptor < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ECONNABORTED)
+                return std::nullopt;
+            throw std::system_error(errno, std::generic_category(), "accept");
+        }
         return Connection(descriptor);
     }
 
-    std::optional<Connection> Server::acceptFor(std::chrono::milliseconds timeout) {
-        if (!isRunning()) throw std::logic_error("KCLink: accept on a stopped server");
-
-        const auto count = std::clamp<long long>(timeout.count(), 0, std::numeric_limits<int>::max());
-        pollfd event{socket, POLLIN, 0};
-        int ready;
-        do {
-            ready = ::poll(&event, 1, static_cast<int>(count));
-        } while (ready < 0 && errno == EINTR);
-        if (ready < 0) throw std::system_error(errno, std::generic_category(), "poll");
-        if (ready == 0) return std::nullopt;
-
-        int descriptor;
-        do {
-            descriptor = ::accept(socket, nullptr, nullptr);
-        } while (descriptor < 0 && errno == EINTR);
-        if (descriptor < 0) throw std::system_error(errno, std::generic_category(), "accept");
-        return Connection(descriptor);
-    }
+    int Server::nativeHandle() const noexcept { return socket; }
 
     bool Server::isRunning() const noexcept { return socket >= 0; }
 

@@ -1,15 +1,21 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace kc::link {
 
     // KCLink transports opaque bytes; applications define what they mean.
+    // fromText/asText are conveniences for the common string payload case.
     class Message {
     public:
         Message() = default;
         explicit Message(std::vector<std::uint8_t> payload);
+
+        static Message fromText(std::string_view text);
+        std::string asText() const;
 
         const std::vector<std::uint8_t>& payload() const noexcept;
         std::vector<std::uint8_t>& payload() noexcept;

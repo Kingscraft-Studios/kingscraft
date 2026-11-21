@@ -8,11 +8,9 @@
 #include "Threads/Logger.hpp"
 #include "Util/LogUtils.hpp"
 
-#include <chrono>
 #include <exception>
-#include <iostream>
+#include <stdexcept>
 #include <string>
-#include <vector>
 
 namespace kc {
     int GameEngineMain::initialize(const std::string& ipcPath) {
@@ -20,26 +18,9 @@ namespace kc {
         try {
             link::Client client;
             connection = client.connect(ipcPath);
-
-            const std::string ping = "Ping";
-            connection.send(link::Message(std::vector<std::uint8_t>(ping.begin(), ping.end())));
-
-            connection.setReceiveTimeout(std::chrono::seconds(10));
-            link::Message incoming;
-            if (!connection.receive(incoming)) {
-                std::cerr << "[Game Engine] Watchdog disconnected before replying.\n";
-                return 1;
-            }
-
-            const std::string response(incoming.payload().begin(), incoming.payload().end());
-            if (response != "Pong") {
-                std::cerr << "[Game Engine] Unexpected response from Watchdog: " << response << std::endl;
-                return 1;
-            }
-            std::cout << "[Game Engine] Received Pong from Watchdog." << std::endl;
         } catch (const std::exception& error) {
-            std::cerr << "[Game Engine] KCLink handshake failed: " << error.what() << std::endl;
-            return 1;
+            throw std::runtime_error(
+                std::string("[Game Engine] KCLink connect failed: ") + error.what());
         }
 
         TimeUtil::Init();
@@ -54,7 +35,7 @@ namespace kc {
 
         WorkerPool::get().start();
 
-        Engine::Get().Init();
+        Engine::Get().Init(connection);
         Engine::Get().run();
         Engine::Get().Shutdown();
 
@@ -69,7 +50,8 @@ namespace kc {
         }
         LogUtils::info(ThreadName::Engine, "Core", "Kingscraft Engine stopped");
         MessageBus::Shutdown();
-        connection.close();
+
+        connection.disconnect();
         return 0;
     }
 }
